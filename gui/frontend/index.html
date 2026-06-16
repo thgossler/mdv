@@ -11,9 +11,11 @@
   </head>
   <body class="theme-system">
     <div id="app">
-      <!-- Thin no-drag strips along the top edge and top corners. Without them
-           the draggable title bar swallows the native macOS resize handles,
-           making the window jump when resized from the top/top-left. -->
+      <!-- Thin no-drag strips along the top edge and top corners keep the JS
+           `--wails-draggable` toolbar from grabbing those few pixels, so the
+           native window frame owns them for resizing. The primary fix lives in
+           gui/main.go (InvisibleTitleBarHeight: 0); these are a belt-and-braces
+           guard for the JS drag path. -->
       <div class="resize-edge resize-edge-top" aria-hidden="true"></div>
       <div class="resize-edge resize-edge-top-left" aria-hidden="true"></div>
       <div class="resize-edge resize-edge-top-right" aria-hidden="true"></div>

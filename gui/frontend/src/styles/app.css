@@ -28,10 +28,12 @@ body {
 }
 
 /* Native window-resize handles -------------------------------------------- */
-/* The draggable title bar (--wails-draggable: drag) would otherwise capture the
-   macOS resize handles along the top edge and top corners, causing the window
-   to move/jump instead of resize. These thin no-drag strips sit above the
-   toolbar and hand those few pixels back to the native window frame. */
+/* Secondary guard for the JS drag path: the `--wails-draggable: drag` toolbar
+   would otherwise let a mousemove starting in the top few pixels move the window
+   instead of resizing it. These thin no-drag strips reserve those pixels for the
+   native window frame. The primary fix is gui/main.go's InvisibleTitleBarHeight: 0,
+   which disables Wails' native immediate-on-mousedown drag that used to preempt
+   top-edge / top-corner resizing. */
 .resize-edge {
   position: fixed;
   top: 0;

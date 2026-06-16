@@ -56,7 +56,17 @@ func runGUI() error {
 		BackgroundColour: application.NewRGB(255, 255, 255),
 		URL:              "/",
 		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 38,
+			// Keep this 0. A non-zero InvisibleTitleBarHeight makes Wails install a
+			// native left-mouse monitor that calls performWindowDragWithEvent
+			// immediately on mousedown across the whole top band (it only spares the
+			// left/right 5px, never the top edge). That immediate native drag
+			// preempts the native top-edge / top-corner resize, so the window jumps
+			// instead of resizing. With it disabled, dragging is driven solely by the
+			// CSS `--wails-draggable: drag` toolbar, which fires on mousemove and lets
+			// the native frame win the top edge just like every other edge. That JS
+			// path still routes through performWindowDragWithEvent, so dragging a
+			// zoomed window restores it to the pre-zoom size (standard OS behaviour).
+			InvisibleTitleBarHeight: 0,
 			TitleBar:                application.MacTitleBarHiddenInset,
 			Backdrop:                application.MacBackdropNormal,
 		},
