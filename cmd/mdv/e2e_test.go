@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -75,8 +76,8 @@ func TestE2EVersion(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("--version exit code = %d, want 0 (output: %s)", code, out)
 	}
-	if !strings.Contains(out, "mdv") {
-		t.Errorf("--version output missing app name: %q", out)
+	if !regexp.MustCompile(`^\d+\.\d+\.\d+`).MatchString(strings.TrimSpace(out)) {
+		t.Errorf("--version output should be a bare SemVer: %q", out)
 	}
 }
 

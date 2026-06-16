@@ -11,6 +11,12 @@
   </head>
   <body class="theme-system">
     <div id="app">
+      <!-- Thin no-drag strips along the top edge and top corners. Without them
+           the draggable title bar swallows the native macOS resize handles,
+           making the window jump when resized from the top/top-left. -->
+      <div class="resize-edge resize-edge-top" aria-hidden="true"></div>
+      <div class="resize-edge resize-edge-top-left" aria-hidden="true"></div>
+      <div class="resize-edge resize-edge-top-right" aria-hidden="true"></div>
       <!-- Toolbar sits in the same row as the native window controls. -->
       <header id="toolbar" class="toolbar">
         <div class="toolbar-left">
@@ -22,6 +28,7 @@
         <div id="doc-title" class="doc-title"></div>
         <div class="toolbar-right">
           <button id="btn-mono" class="tb-btn" title="Toggle monospace">M</button>
+          <button id="btn-width" class="tb-btn" title="Toggle full width">↔</button>
           <button id="btn-toc" class="tb-btn" title="Toggle table of contents">⊟</button>
           <button id="btn-theme" class="tb-btn" title="Toggle theme (Cmd/Ctrl+J)">◐</button>
         </div>
@@ -31,7 +38,7 @@
         <aside id="sidebar" class="sidebar">
           <div class="sidebar-head">
             <input id="nav-filter" class="nav-filter" type="text" placeholder="Filter documents…" />
-            <button id="btn-labels" class="tb-btn" title="Toggle filename/title (Cmd/Ctrl+T)">Aa</button>
+            <button id="btn-labels" class="tb-btn" title="Toggle filename/title (Cmd/Ctrl+T)">#</button>
           </div>
           <nav id="nav-list" class="nav-list"></nav>
         </aside>
@@ -59,6 +66,7 @@
         <span id="status-left" class="status-left"></span>
         <span id="status-mid" class="status-mid"></span>
         <span id="status-right" class="status-right"></span>
+        <button id="btn-zoom-reset" class="status-btn" title="Reset zoom to 100%">Reset</button>
       </footer>
 
       <div id="context-menu" class="context-menu hidden"></div>

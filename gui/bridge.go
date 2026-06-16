@@ -2,8 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"mime"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/thgossler/mdv/internal/core"
@@ -104,6 +109,51 @@ func (b *Bridge) ReadDocument(path string) DocumentDTO {
 		Name:     filepath.Base(path),
 		Markdown: string(data),
 	}
+}
+
+// maxInlineAssetBytes caps the size of a local asset that ResolveAsset will
+// inline as a data URI, to avoid embedding pathologically large files.
+const maxInlineAssetBytes = 32 << 20 // 32 MiB
+
+// ResolveAsset resolves a local image/media reference (e.g. "images/icon.png")
+// against the directory of the current document and returns it as a data URI so
+// the webview can display it. The embedded asset server only serves the
+// compiled frontend, so relative filesystem paths must be inlined here.
+//
+// Absolute URLs (http(s), data:, etc.) and unreadable/oversized files return
+// an empty string, leaving the original reference untouched.
+func (b *Bridge) ResolveAsset(src, currentDir string) string {
+	src = strings.TrimSpace(src)
+	if src == "" || strings.HasPrefix(src, "#") {
+		return ""
+	}
+	// Leave anything with a real URL scheme (http, https, data, file, ...)
+	// untouched. A single-letter scheme is treated as a Windows drive letter
+	// (e.g. "C:\\img.png") and resolved as a local path.
+	if u, err := url.Parse(src); err == nil && len(u.Scheme) > 1 {
+		return ""
+	}
+
+	path := src
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(currentDir, filepath.FromSlash(src))
+	}
+	path = filepath.Clean(path)
+
+	fi, err := os.Stat(path)
+	if err != nil || fi.IsDir() || fi.Size() > maxInlineAssetBytes {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+
+	mimeType := mime.TypeByExtension(filepath.Ext(path))
+	if mimeType == "" {
+		mimeType = http.DetectContentType(data)
+	}
+	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
 }
 
 // LinkTargetDTO is the resolved classification of a link.

@@ -70,6 +70,7 @@ async function boot(): Promise<void> {
     step: info.config.zoomStep || 0.1,
     onChange: (pct) => (els.statusRight.textContent = `${pct}%`),
   });
+  $("btn-zoom-reset").addEventListener("click", () => zoomReset());
 
   initSearch({
     bar: els.searchBar,
@@ -148,6 +149,7 @@ async function renderInto(markdown: string, name: string, path: string): Promise
 async function postProcess(headings: { level: number; text: string; slug: string }[]): Promise<void> {
   injectHeadingAnchors();
   resolveWikilinks();
+  void resolveAssets();
   fillAdoTocPlaceholders(headings);
   wireCodeCopy();
   await renderMermaid(els.content, isDark());
@@ -196,6 +198,31 @@ async function resolveWikilinks(): Promise<void> {
       a.title = res.display;
     }
   }
+}
+
+// resolveAssets rewrites local/relative media references (images, <source>,
+// video posters) to data URIs served by the Go bridge. The embedded webview
+// asset server only serves the compiled frontend, so relative filesystem paths
+// would otherwise fail to load. Absolute URLs (http(s), data:) are left as-is.
+async function resolveAssets(): Promise<void> {
+  const nodes = Array.from(
+    els.content.querySelectorAll<HTMLElement>("img[src], source[src], video[poster]")
+  );
+  await Promise.all(
+    nodes.map(async (el) => {
+      const attr = el.tagName === "VIDEO" ? "poster" : "src";
+      const ref = el.getAttribute(attr) || "";
+      if (!ref || /^[a-z][a-z0-9+.-]+:/i.test(ref) || ref.startsWith("//") || ref.startsWith("#")) {
+        return; // absolute URL, data URI or empty — nothing to resolve
+      }
+      try {
+        const dataUri = await api.resolveAsset(ref, currentDir);
+        if (dataUri) el.setAttribute(attr, dataUri);
+      } catch {
+        /* leave the original reference in place on failure */
+      }
+    })
+  );
 }
 
 function fillAdoTocPlaceholders(headings: { level: number; text: string; slug: string }[]): void {
@@ -406,6 +433,7 @@ function wireToolbar(): void {
   $("btn-theme").addEventListener("click", () => toggleTheme());
   $("btn-labels").addEventListener("click", toggleLabels);
   $("btn-mono").addEventListener("click", () => document.body.classList.toggle("mono"));
+  $("btn-width").addEventListener("click", toggleContentWidth);
 
   // Double-clicking the title-bar area performs the OS window action (zoom on
   // macOS, maximise/restore elsewhere), matching native window behaviour.
@@ -432,6 +460,15 @@ async function titleBarAction(): Promise<void> {
 function toggleLabels(): void {
   labelMode = labelMode === "title" ? "filename" : "title";
   renderNav(currentFilter());
+}
+
+// toggleContentWidth switches between the readable, width-limited layout and a
+// full-window-width layout. The active state is reflected on the toolbar button.
+function toggleContentWidth(): void {
+  const full = document.body.classList.toggle("full-width");
+  const btn = $("btn-width");
+  btn.classList.toggle("active", full);
+  btn.title = full ? "Limit content width" : "Toggle full width";
 }
 
 function currentFilter(): DocFileDTO[] {

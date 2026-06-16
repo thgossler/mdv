@@ -13,7 +13,12 @@ $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
 if ([string]::IsNullOrEmpty($Version)) {
-    try { $Version = (git describe --tags --always --dirty) } catch { $Version = "v0.0.0-dev" }
+    $versionFile = Join-Path (Get-Location) "VERSION"
+    if (Test-Path $versionFile) {
+        $Version = "v" + ((Get-Content -Raw $versionFile).Trim())
+    } else {
+        try { $Version = (git describe --tags --always --dirty) } catch { $Version = "v0.0.0-dev" }
+    }
 }
 $LdFlags = "-s -w -X github.com/thgossler/mdv/internal/core.Version=$Version"
 

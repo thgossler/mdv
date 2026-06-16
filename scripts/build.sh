@@ -17,7 +17,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
-VERSION="${1:-$(git describe --tags --always --dirty 2>/dev/null || echo v0.0.0-dev)}"
+# Version precedence: explicit arg > VERSION file (canonical SemVer) > fallback.
+if [ "${1:-}" != "" ]; then
+  VERSION="$1"
+elif [ -f "$ROOT/VERSION" ]; then
+  VERSION="v$(tr -d ' \t\r\n' < "$ROOT/VERSION")"
+else
+  VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo v0.0.0-dev)"
+fi
 LDFLAGS="-s -w -X github.com/thgossler/mdv/internal/core.Version=${VERSION}"
 
 GOOS="$(go env GOOS)"

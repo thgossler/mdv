@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/thgossler/mdv/internal/console"
@@ -36,7 +37,7 @@ func run() int {
 	flag.Parse()
 
 	if *flagVersion {
-		fmt.Printf("%s %s — %s\n", core.AppName, core.Version, core.AppTagline)
+		fmt.Println(strings.TrimPrefix(core.Version, "v"))
 		return 0
 	}
 

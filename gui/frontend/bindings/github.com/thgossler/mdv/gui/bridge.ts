@@ -58,6 +58,19 @@ export function ReadDocument(path: string): $CancellablePromise<$models.Document
 }
 
 /**
+ * ResolveAsset resolves a local image/media reference (e.g. "images/icon.png")
+ * against the directory of the current document and returns it as a data URI so
+ * the webview can display it. The embedded asset server only serves the
+ * compiled frontend, so relative filesystem paths must be inlined here.
+ * 
+ * Absolute URLs (http(s), data:, etc.) and unreadable/oversized files return
+ * an empty string, leaving the original reference untouched.
+ */
+export function ResolveAsset(src: string, currentDir: string): $CancellablePromise<string> {
+    return $Call.ByID(1869993087, src, currentDir);
+}
+
+/**
  * ResolveLink classifies a raw href against the directory of the current doc.
  */
 export function ResolveLink(raw: string, currentDir: string): $CancellablePromise<$models.LinkTargetDTO> {

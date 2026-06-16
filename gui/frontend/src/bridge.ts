@@ -16,6 +16,7 @@ export const api = {
   init: (): Promise<InitInfo> => Bridge.Init(),
   read: (path: string): Promise<DocumentDTO> => Bridge.ReadDocument(path),
   resolveLink: (raw: string, dir: string): Promise<LinkTargetDTO> => Bridge.ResolveLink(raw, dir),
+  resolveAsset: (src: string, dir: string): Promise<string> => Bridge.ResolveAsset(src, dir),
   openExternal: (target: string): Promise<string> => Bridge.OpenExternal(target),
   openNewWindow: (path: string, fragment = ""): Promise<string> =>
     Bridge.OpenInNewWindow(path, fragment),

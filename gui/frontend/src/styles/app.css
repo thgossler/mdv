@@ -27,6 +27,34 @@ body {
   overflow: hidden;
 }
 
+/* Native window-resize handles -------------------------------------------- */
+/* The draggable title bar (--wails-draggable: drag) would otherwise capture the
+   macOS resize handles along the top edge and top corners, causing the window
+   to move/jump instead of resize. These thin no-drag strips sit above the
+   toolbar and hand those few pixels back to the native window frame. */
+.resize-edge {
+  position: fixed;
+  top: 0;
+  z-index: 9999;
+  --wails-draggable: no-drag;
+}
+.resize-edge-top {
+  left: 0;
+  right: 0;
+  height: 5px;
+}
+.resize-edge-top-left,
+.resize-edge-top-right {
+  width: 5px;
+  height: 12px;
+}
+.resize-edge-top-left {
+  left: 0;
+}
+.resize-edge-top-right {
+  right: 0;
+}
+
 /* Toolbar ------------------------------------------------------------------ */
 .toolbar {
   display: flex;
@@ -80,6 +108,16 @@ body {
 .tb-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+.tb-btn.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* Full-width content layout: removes the readable max-width limit so the
+   document fills the available window width. Driven by the toolbar button. */
+body.full-width {
+  --content-width: none;
 }
 
 /* Body layout -------------------------------------------------------------- */
@@ -282,6 +320,22 @@ body.mono .markdown-body {
 }
 .status-right {
   flex: none;
+}
+.status-btn {
+  flex: none;
+  padding: 0 8px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.status-btn:hover {
+  background: var(--hover);
+  color: var(--fg);
 }
 
 /* Search bar --------------------------------------------------------------- */

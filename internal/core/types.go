@@ -9,9 +9,12 @@ const AppName = "mdv"
 // AppTagline is shown in help output.
 const AppTagline = "Markdown Document Viewer"
 
-// Version is the current build version. Overridden at build time via -ldflags
-// "-X github.com/thgossler/mdv/internal/core.Version=vX.Y.Z".
-var Version = "v0.0.0-dev"
+// Version is the current build version (SemVer, "v"-prefixed). The canonical
+// value lives in the repository-root VERSION file and is injected at build time
+// via -ldflags "-X github.com/thgossler/mdv/internal/core.Version=vX.Y.Z". This
+// default is kept in sync with VERSION (by scripts/bump-version.*) so `go run`
+// and unstamped builds still report the real SemVer instead of a commit hash.
+var Version = "v0.7.1"
 
 // LinkKind classifies a resolved markdown link target.
 type LinkKind int
