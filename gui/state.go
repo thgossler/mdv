@@ -10,12 +10,12 @@ import (
 
 // WindowState is the persisted window geometry restored across runs.
 type WindowState struct {
-	X       int  `json:"x"`
-	Y       int  `json:"y"`
-	Width   int  `json:"width"`
-	Height  int  `json:"height"`
+	X         int  `json:"x"`
+	Y         int  `json:"y"`
+	Width     int  `json:"width"`
+	Height    int  `json:"height"`
 	Maximized bool `json:"maximized"`
-	Valid   bool `json:"valid"`
+	Valid     bool `json:"valid"`
 }
 
 func windowStatePath() (string, error) {

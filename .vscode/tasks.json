@@ -36,13 +36,60 @@
     },
     {
       "label": "test",
-      "detail": "Run all Go tests.",
+      "detail": "Run all Go unit + end-to-end tests.",
       "type": "shell",
       "command": "go",
       "args": ["test", "./..."],
       "options": { "cwd": "${workspaceFolder}" },
       "group": { "kind": "test", "isDefault": true },
       "problemMatcher": ["$go"]
+    },
+    {
+      "label": "test (verbose)",
+      "detail": "Run all Go tests with verbose per-test output.",
+      "type": "shell",
+      "command": "go",
+      "args": ["test", "-v", "./..."],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "test (race + coverage)",
+      "detail": "Quality-gate run: race detector + coverage (mirrors CI).",
+      "type": "shell",
+      "command": "go",
+      "args": [
+        "test",
+        "-race",
+        "-coverprofile=coverage.out",
+        "-covermode=atomic",
+        "./..."
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "test (unit only, fast)",
+      "detail": "Run unit tests only, skipping the slower end-to-end build test.",
+      "type": "shell",
+      "command": "go",
+      "args": ["test", "-short", "./..."],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "coverage report",
+      "detail": "Open the HTML coverage report from the last race+coverage run.",
+      "type": "shell",
+      "command": "go",
+      "args": ["tool", "cover", "-html=coverage.out"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": [],
+      "dependsOn": "test (race + coverage)"
     },
     {
       "label": "typecheck-frontend",

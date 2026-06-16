@@ -37,15 +37,15 @@ type DocFileDTO struct {
 
 // InitInfo is returned on startup to bootstrap the UI.
 type InitInfo struct {
-	Kind         string         `json:"kind"` // "file" | "folder"
-	Path         string         `json:"path"`
-	Dir          string         `json:"dir"`
-	Fragment     string         `json:"fragment"`
-	AppName      string         `json:"appName"`
-	Version      string         `json:"version"`
-	Config       core.Defaults  `json:"config"`
-	Workspace    []DocFileDTO   `json:"workspace"`
-	Update       UpdateDTO      `json:"update"`
+	Kind      string        `json:"kind"` // "file" | "folder"
+	Path      string        `json:"path"`
+	Dir       string        `json:"dir"`
+	Fragment  string        `json:"fragment"`
+	AppName   string        `json:"appName"`
+	Version   string        `json:"version"`
+	Config    core.Defaults `json:"config"`
+	Workspace []DocFileDTO  `json:"workspace"`
+	Update    UpdateDTO     `json:"update"`
 }
 
 // UpdateDTO carries version-check results to the status bar.

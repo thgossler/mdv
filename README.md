@@ -1,7 +1,28 @@
-# mdv — Markdown Document Viewer
+<br />
+<div align="center">
+  <a href="https://github.com/thgossler/mdv">
+    <img src="images/icon.png" alt="Icon" width="80" height="80">
+  </a>
 
-A minimal, fast, self-contained markdown viewer for reading documentation with
-seamless navigation. One small executable, no installation, no dependencies.
+  <h1 align="center">mdv</h1>
+
+  <p align="center">
+    A minimal, fast, self-contained markdown viewer for reading documentation anywhere with seamless navigation. One small executable, no installation, no dependencies.
+    <br />
+
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-informational?label=Platforms)](https://github.com/thgossler/mdv/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/thgossler/mdv/ci.yml?branch=main&logo=github&label=CI)](https://github.com/thgossler/mdv/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/thgossler/mdv/release.yml?logo=github&label=Release)](https://github.com/thgossler/mdv/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/thgossler/mdv?logo=github&label=Latest%20release&sort=semver)](https://github.com/thgossler/mdv/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/thgossler/mdv/total?logo=github&label=Downloads)](https://github.com/thgossler/mdv/releases)
+[![Open issues](https://img.shields.io/github/issues/thgossler/mdv?logo=github&label=Issues)](https://github.com/thgossler/mdv/issues)
+[![Contributors](https://img.shields.io/github/contributors/thgossler/mdv?label=Contributors)](https://github.com/thgossler/mdv/graphs/contributors)
+[![Stars](https://img.shields.io/github/stars/thgossler/mdv?style=flat&logo=github&label=Stars)](https://github.com/thgossler/mdv/stargazers)
+[![License](https://img.shields.io/github/license/thgossler/mdv?color=blue&label=License)](LICENSE.md)
+[![Sponsor](https://img.shields.io/github/sponsors/thgossler?logo=githubsponsors&color=ea4aaa&label=Sponsors)](https://github.com/sponsors/thgossler)
+
+  </p>
+</div>
 
 `mdv` adapts to wherever it runs:
 
@@ -32,15 +53,44 @@ curl -fsSL https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.
 irm https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.ps1 | iex
 ```
 
+The PowerShell installer is cross-platform — with PowerShell 7+ it also works on
+macOS and Linux:
+
+```sh
+pwsh -c "irm https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.ps1 | iex"
+```
+
 Or download a binary directly from the [Releases](https://github.com/thgossler/mdv/releases)
 page:
 
-| Platform           | Asset                        |
-| ------------------ | ---------------------------- |
-| macOS (universal)  | `mdv-darwin-universal.tar.gz` |
-| Windows (x64)      | `mdv-windows-amd64.exe`       |
-| Linux (amd64)      | `mdv-linux-amd64.tar.gz`      |
-| Linux (arm64)      | `mdv-linux-arm64.tar.gz`      |
+| Platform          | Asset                         |
+| ----------------- | ----------------------------- |
+| macOS (universal) | `mdv-darwin-universal.tar.gz` |
+| Windows (x64)     | `mdv-windows-amd64.exe`       |
+| Linux (amd64)     | `mdv-linux-amd64.tar.gz`      |
+| Linux (arm64)     | `mdv-linux-arm64.tar.gz`      |
+
+### Where it gets installed and how PATH is handled
+
+| Platform      | Default location                                                                        | PATH handling                                                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows       | `%LOCALAPPDATA%\Programs\mdv\mdv.exe`                                                   | Added to your **user** `Path` (persisted for new terminals) and prepended to the current session.                                                      |
+| macOS / Linux | `/usr/local/bin/mdv` if it is on your `PATH` and writable, otherwise `~/.local/bin/mdv` | If the chosen directory isn't already on `PATH`, the installer appends it to your shell profile (`.zshrc`, `.bashrc`, `.bash_profile`, or `.profile`). |
+
+Set the `MDV_INSTALL` environment variable to install somewhere else (e.g.
+`MDV_INSTALL=$HOME/bin`), and `MDV_VERSION` to pin a specific release tag.
+
+Both installers make `mdv` usable in the **same shell**, with no restart or
+manual `source` needed:
+
+- The PowerShell installer, when run with the `irm … | iex` one-liner, executes
+  in your current session and prepends the install directory to `$env:PATH`
+  immediately.
+- The POSIX installer prefers a directory that is already on your `PATH`, so the
+  binary is found right away. If it has to fall back to `~/.local/bin`, it
+  updates your profile for future shells and prints the one-line `export` to
+  enable it in the current one (or run it sourced — `. install.sh` — to have the
+  `PATH` update applied directly to your shell).
 
 ## Usage
 
@@ -53,14 +103,14 @@ mdv --version
 mdv --init-config      # write a default settings.jsonc
 ```
 
-| Flag            | Description                                      |
-| --------------- | ------------------------------------------------ |
-| `--tui`         | Force the interactive terminal UI                |
-| `--gui`         | Force the graphical UI                           |
-| `--console`, `-c` | Render to stdout and exit                       |
-| `--no-color`    | Disable ANSI colors in console output            |
-| `--version`     | Print version and exit                           |
-| `--init-config` | Write a default settings file and exit           |
+| Flag              | Description                            |
+| ----------------- | -------------------------------------- |
+| `--tui`           | Force the interactive terminal UI      |
+| `--gui`           | Force the graphical UI                 |
+| `--console`, `-c` | Render to stdout and exit              |
+| `--no-color`      | Disable ANSI colors in console output  |
+| `--version`       | Print version and exit                 |
+| `--init-config`   | Write a default settings file and exit |
 
 ## Features
 
@@ -78,7 +128,8 @@ mdv --init-config      # write a default settings.jsonc
 - In-document search (Cmd/Ctrl+F), live reload, drag-and-drop
 - Zoom (Cmd/Ctrl + wheel / +/-), light/dark/system themes, configurable fonts
 - History navigation, link target preview in the status bar
-- "Open in new window", automatic update checks
+- "Open in new window"
+- Automatic update checks
 
 ## Configuration
 
@@ -132,6 +183,81 @@ per-version cache directory on first GUI launch, then runs it detached. Because
 the launcher itself links no native UI libraries, it starts cleanly in any
 environment and degrades gracefully to TUI or console.
 
+### Running the tests
+
+The Go test suite covers both unit logic (config parsing, link/wikilink
+resolution, slugging, backlinks, folder listing, version comparison) and
+end-to-end CLI behavior (the built binary's `--version`, `--console`,
+`--init-config`, and no-arg usage paths). It is the automated quality gate for
+every pull request.
+
+```sh
+go test ./...                 # unit + end-to-end tests
+go test -short ./...          # skip the slower e2e build test
+go test -race -coverprofile=coverage.out ./...   # what CI runs
+go tool cover -html=coverage.out                 # browse coverage
+```
+
+In VS Code, press <kbd>Cmd/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> →
+**Tasks: Run Test Task**, or pick any of the `test*` / `coverage report` tasks
+from the Command Palette.
+
+## Contributing
+
+Pull requests are warmly welcome — whether it's a one-character typo fix or a
+whole new rendering feature. `mdv` is a small codebase on purpose, so it's an
+approachable place to make your first open-source contribution. 🌱
+
+**The quick path:**
+
+1. **Fork** the repo and create a branch: `git checkout -b feature/amazing-thing`.
+2. **Hack** away. Keep the launcher webview-free — that headless-safety guarantee
+   is the whole point of the project, so anything touching native UI belongs in
+   `gui/`, never in `cmd/mdv` or `internal/launcher`.
+3. **Test** your change: `go test ./...` must stay green, and please add a test
+   for anything you fix or add. The CI quality gate runs `go vet`, `gofmt`, the
+   race detector, and the full suite — running them locally first saves a round
+   trip.
+4. **Format**: `gofmt -w .` for Go and `npx tsc --noEmit` in `gui/frontend` for
+   the TypeScript side.
+5. **Open a PR** with a clear description of the _why_, not just the _what_.
+   Screenshots or a short clip for UI changes earn you bonus goodwill. ✨
+
+**Good first issues:** new syntax-highlight themes, additional markdown
+extensions, emoji shortcode coverage, TUI keybindings, and documentation polish
+are all great starting points. Look for the
+[`good first issue`](https://github.com/thgossler/mdv/labels/good%20first%20issue)
+label.
+
+**House rules:** be kind, assume good intent, and remember there's a human on
+the other side of every review. By participating you agree to uphold a
+welcoming, harassment-free environment for everyone.
+
+## Sponsor
+
+`mdv` is free, MIT-licensed, and built in spare evenings fueled by curiosity
+(and a non-trivial amount of coffee ☕). If it saves you a few clicks every day,
+consider giving a little back:
+
+- ⭐ **Star the repo** — it's free, it takes two seconds, and it genuinely helps
+  others discover the project.
+- 💬 **Spread the word** — blog about it, tell a colleague, or drop it in your
+  team's tooling channel.
+- 🐛 **Report bugs and ideas** — high-signal issues are worth their weight in gold.
+- 💖 **Back it financially** via 
+  - [GitHub Sponsors](https://github.com/sponsors/thgossler) or 
+  - [PayPal](https://www.paypal.com/donate/?hosted_button_id=JVG7PFJ8DMW7J).
+  
+  — every tier, down to "buy the maintainer a coffee," keeps the lights on and
+  the commits coming.
+
+Sponsorships directly fund maintenance time, code-signing certificates, and the
+occasional release-day pizza. Thank you for keeping independent open source
+alive. 🙏
+
 ## License
 
-MIT
+Released under the [MIT License](LICENSE.md) — do what you like, just keep the
+copyright notice. 
+
+Copyright © 2026 Thomas Gossler

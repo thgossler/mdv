@@ -88,7 +88,7 @@ func buildMenu(app *application.App) *application.Menu {
 
 	// Help menu.
 	helpMenu := menu.AddSubmenu("Help")
-	helpMenu.Add(core.AppName+" on GitHub").OnClick(func(*application.Context) {
+	helpMenu.Add(core.AppName + " on GitHub").OnClick(func(*application.Context) {
 		_ = core.OpenInOS("https://github.com/" + core.DefaultSettings().UpdateRepo)
 	})
 

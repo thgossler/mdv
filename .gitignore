@@ -13,3 +13,7 @@ internal/launcher/assets/*.gz
 # OS / editor
 .DS_Store
 *.log
+
+# Test / coverage output
+coverage.out
+coverage.html
