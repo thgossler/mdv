@@ -441,20 +441,145 @@ function wireToolbar(): void {
     if ((e.target as HTMLElement).closest("button, input, a, .history-menu")) return;
     void titleBarAction();
   });
+
+  // macOS only: emulate the standard "drag a maximized window to restore it"
+  // gesture. The native window drag (performWindowDragWithEvent) keeps the
+  // maximized size, so we take over dragging while maximized.
+  els.toolbar.addEventListener("mousedown", onTitleBarMouseDown);
 }
 
-// titleBarAction mirrors the platform's title-bar double-click: macOS uses the
-// native zoom, other platforms toggle maximise.
+// titleBarAction mirrors the platform's title-bar double-click: it toggles the
+// window between maximized and its previous size.
 async function titleBarAction(): Promise<void> {
   try {
-    if (navigator.userAgent.includes("Macintosh")) {
-      await Window.Zoom();
-    } else {
+    if (!isMac) {
       await Window.ToggleMaximise();
+      return;
     }
+    if (winMaximized) await restoreWindow();
+    else await maximizeWindow();
   } catch {
     /* window control unavailable; ignore */
   }
+}
+
+// --- maximize state + drag-to-restore (macOS) ------------------------------
+// On macOS the native title-bar drag does not restore a maximized window, so we
+// track the maximized state ourselves and, when the user starts dragging a
+// maximized window, shrink it back to its previous size under the cursor and
+// then follow the pointer — matching standard OS behaviour.
+const isMac = navigator.userAgent.includes("Macintosh");
+let winMaximized = false;
+let preMaxBounds: { x: number; y: number; w: number; h: number } | null = null;
+let dragGrab: { offX: number; offY: number } | null = null;
+let dragRAF = 0;
+let dragNext: { x: number; y: number } | null = null;
+
+async function readBounds(): Promise<{ x: number; y: number; w: number; h: number }> {
+  const [p, s] = await Promise.all([Window.Position(), Window.Size()]);
+  return { x: p.x, y: p.y, w: s.width, h: s.height };
+}
+
+// reflectDragRegion enables the native Wails drag region only while the window
+// is not maximized; when maximized we drive dragging manually so the native
+// drag does not fight our restore logic.
+function reflectDragRegion(): void {
+  if (winMaximized) els.toolbar.style.setProperty("--wails-draggable", "no-drag");
+  else els.toolbar.style.removeProperty("--wails-draggable");
+}
+
+async function maximizeWindow(): Promise<void> {
+  preMaxBounds = await readBounds();
+  await Window.Maximise();
+  winMaximized = true;
+  reflectDragRegion();
+}
+
+async function restoreWindow(): Promise<void> {
+  if (preMaxBounds) {
+    await Window.SetSize(preMaxBounds.w, preMaxBounds.h);
+    await Window.SetPosition(preMaxBounds.x, preMaxBounds.y);
+  } else {
+    await Window.UnMaximise();
+  }
+  winMaximized = false;
+  reflectDragRegion();
+}
+
+// onTitleBarMouseDown starts watching for a drag gesture on a maximized window.
+// It only restores once the pointer actually moves, so a plain click or the
+// first click of a double-click still toggles via titleBarAction.
+function onTitleBarMouseDown(e: MouseEvent): void {
+  if (!isMac || !winMaximized || e.button !== 0) return;
+  if ((e.target as HTMLElement).closest("button, input, a, .history-menu")) return;
+
+  const start = { cx: e.clientX, cy: e.clientY, sx: e.screenX, sy: e.screenY };
+  let armed = true;
+  const cleanup = () => {
+    armed = false;
+    window.removeEventListener("mousemove", move, true);
+    window.removeEventListener("mouseup", up, true);
+  };
+  const move = (me: MouseEvent) => {
+    if (!armed) return;
+    if (Math.abs(me.screenX - start.sx) < 4 && Math.abs(me.screenY - start.sy) < 4) return;
+    cleanup();
+    void beginRestoreDrag(start, me);
+  };
+  const up = () => cleanup();
+  window.addEventListener("mousemove", move, true);
+  window.addEventListener("mouseup", up, true);
+}
+
+// beginRestoreDrag shrinks the maximized window back to its previous size,
+// repositioned so the cursor stays at the same relative spot on the title bar,
+// then follows the pointer until the mouse button is released.
+async function beginRestoreDrag(
+  start: { cx: number; cy: number; sx: number; sy: number },
+  me: MouseEvent,
+): Promise<void> {
+  const maxW = window.innerWidth || 1;
+  const target = preMaxBounds ?? { x: 0, y: 0, w: 1100, h: 780 };
+  const fracX = Math.min(Math.max(start.cx / maxW, 0), 1);
+  const offX = Math.round(fracX * target.w);
+  const offY = Math.min(start.cy, Math.max(target.h - 1, 0));
+
+  await Window.SetSize(target.w, target.h);
+  const px = Math.round(me.screenX - offX);
+  const py = Math.round(me.screenY - offY);
+  await Window.SetPosition(px, py);
+  winMaximized = false;
+  reflectDragRegion();
+
+  dragGrab = { offX, offY };
+  dragNext = { x: px, y: py };
+  window.addEventListener("mousemove", onDragMove, true);
+  window.addEventListener("mouseup", onDragUp, true);
+}
+
+function onDragMove(e: MouseEvent): void {
+  if (!dragGrab) return;
+  dragNext = { x: Math.round(e.screenX - dragGrab.offX), y: Math.round(e.screenY - dragGrab.offY) };
+  if (!dragRAF) {
+    dragRAF = requestAnimationFrame(() => {
+      dragRAF = 0;
+      if (dragNext) void Window.SetPosition(dragNext.x, dragNext.y);
+    });
+  }
+}
+
+function onDragUp(): void {
+  window.removeEventListener("mousemove", onDragMove, true);
+  window.removeEventListener("mouseup", onDragUp, true);
+  if (dragRAF) {
+    cancelAnimationFrame(dragRAF);
+    dragRAF = 0;
+  }
+  if (dragNext) {
+    void Window.SetPosition(dragNext.x, dragNext.y);
+    dragNext = null;
+  }
+  dragGrab = null;
 }
 
 function toggleLabels(): void {
