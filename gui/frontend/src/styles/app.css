@@ -144,6 +144,45 @@ body.full-width {
   margin-left: 0;
   border-right: none;
 }
+
+/* Pane resizers ------------------------------------------------------------ */
+/* Thin draggable splitters between the navigation/content/contents panes.
+   Positions are not persisted — every launch starts at the default widths. */
+.pane-resizer {
+  flex: none;
+  width: 6px;
+  margin: 0 -3px;
+  z-index: 5;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+}
+.pane-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.pane-resizer:hover::after,
+.pane-resizer.dragging::after {
+  background: var(--accent);
+}
+/* Hide a splitter when its adjacent pane is not visible. */
+.sidebar.collapsed + #sidebar-resizer {
+  display: none;
+}
+.pane-resizer.hidden {
+  display: none;
+}
+/* Suppress pane width animations while actively dragging for a 1:1 feel. */
+body.pane-resizing .sidebar {
+  transition: none;
+}
+body.pane-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
 .sidebar-head {
   display: flex;
   align-items: center;

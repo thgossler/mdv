@@ -245,7 +245,7 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "b", "backspace", "left", "alt+left":
 		m.goBack()
 		return *m, nil
-	case "enter", "o":
+	case "enter", "l":
 		m.openLinkPicker()
 		return *m, nil
 	case "t":
@@ -601,9 +601,9 @@ func (m Model) statusBar() string {
 		pct = int(m.viewport.ScrollPercent() * 100)
 	}
 
-	hints := "b:back  o:links  t:labels  /:find  q:quit"
+	hints := "b:back  l:links  /:find  q:quit"
 	if m.showList {
-		hints = "tab:switch  enter:open  " + hints
+		hints = "tab:switch  enter:open  t:titles  " + hints
 	}
 
 	status := m.statusMsg

@@ -83,6 +83,7 @@ async function boot(): Promise<void> {
 
   buildSidebar();
   wireToolbar();
+  wireResizers();
   wireMenuEvents();
   wireContextMenu();
   wireLiveReload();
@@ -429,7 +430,10 @@ function wireToolbar(): void {
   els.btnBack.addEventListener("click", goBack);
   els.btnHistory.addEventListener("click", toggleHistoryMenu);
   $("btn-sidebar").addEventListener("click", () => els.sidebar.classList.toggle("collapsed"));
-  $("btn-toc").addEventListener("click", () => els.toc.classList.toggle("hidden"));
+  $("btn-toc").addEventListener("click", () => {
+    const hidden = els.toc.classList.toggle("hidden");
+    $("toc-resizer").classList.toggle("hidden", hidden);
+  });
   $("btn-theme").addEventListener("click", () => toggleTheme());
   $("btn-labels").addEventListener("click", toggleLabels);
   $("btn-mono").addEventListener("click", () => document.body.classList.toggle("mono"));
@@ -446,6 +450,77 @@ function wireToolbar(): void {
   // gesture. The native window drag (performWindowDragWithEvent) keeps the
   // maximized size, so we take over dragging while maximized.
   els.toolbar.addEventListener("mousedown", onTitleBarMouseDown);
+}
+
+// wireResizers makes the navigation (left) and contents (right) panes
+// drag-resizable so long filenames, document titles or section headers stay
+// readable. The widths drive the `--sidebar-width` / `--toc-width` CSS custom
+// properties and are intentionally NOT persisted: every launch restores the
+// stylesheet defaults. Double-clicking a splitter resets that pane.
+function wireResizers(): void {
+  const root = document.documentElement;
+  // Capture the stylesheet defaults once so a double-click can restore them.
+  const defaults = getComputedStyle(root);
+  const defaultSidebar = defaults.getPropertyValue("--sidebar-width").trim() || "260px";
+  const defaultToc = defaults.getPropertyValue("--toc-width").trim() || "260px";
+
+  const MIN = 150;
+  const MAX = 600;
+  const clamp = (px: number) => Math.max(MIN, Math.min(MAX, px));
+
+  const setup = (
+    resizerId: string,
+    cssVar: string,
+    measure: (el: HTMLElement) => number,
+    delta: (startWidth: number, dx: number) => number,
+    reset: string,
+  ): void => {
+    const resizer = $(resizerId);
+    const pane = resizer === $("sidebar-resizer") ? els.sidebar : els.toc;
+
+    resizer.addEventListener("pointerdown", (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = measure(pane);
+      resizer.setPointerCapture(e.pointerId);
+      resizer.classList.add("dragging");
+      document.body.classList.add("pane-resizing");
+
+      const onMove = (ev: PointerEvent) => {
+        root.style.setProperty(cssVar, `${clamp(delta(startWidth, ev.clientX - startX))}px`);
+      };
+      const onUp = (ev: PointerEvent) => {
+        resizer.releasePointerCapture(ev.pointerId);
+        resizer.classList.remove("dragging");
+        document.body.classList.remove("pane-resizing");
+        resizer.removeEventListener("pointermove", onMove);
+        resizer.removeEventListener("pointerup", onUp);
+      };
+      resizer.addEventListener("pointermove", onMove);
+      resizer.addEventListener("pointerup", onUp);
+    });
+
+    // Double-click restores this pane to its default width.
+    resizer.addEventListener("dblclick", () => root.style.setProperty(cssVar, reset));
+  };
+
+  // Sidebar splitter sits to the right of the pane: dragging right widens it.
+  setup(
+    "sidebar-resizer",
+    "--sidebar-width",
+    (el) => el.getBoundingClientRect().width,
+    (start, dx) => start + dx,
+    defaultSidebar,
+  );
+  // Contents splitter sits to the left of the pane: dragging left widens it.
+  setup(
+    "toc-resizer",
+    "--toc-width",
+    (el) => el.getBoundingClientRect().width,
+    (start, dx) => start - dx,
+    defaultToc,
+  );
 }
 
 // titleBarAction mirrors the platform's title-bar double-click: it toggles the
