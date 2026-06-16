@@ -71,6 +71,25 @@ func runMDV(t *testing.T, env []string, args ...string) (string, int) {
 	return string(out), code
 }
 
+// runMDVStdin executes the built binary with stdin fed from the given string,
+// returning stdout+stderr and the exit code.
+func runMDVStdin(t *testing.T, stdin string, env []string, args ...string) (string, int) {
+	t.Helper()
+	cmd := exec.Command(mdvBinary(t), args...)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Stdin = strings.NewReader(stdin)
+	out, err := cmd.CombinedOutput()
+	code := 0
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else {
+			t.Fatalf("running mdv %v: %v", args, err)
+		}
+	}
+	return string(out), code
+}
+
 func TestE2EVersion(t *testing.T) {
 	out, code := runMDV(t, nil, "--version")
 	if code != 0 {
@@ -88,6 +107,30 @@ func TestE2ENoArgShowsUsageWithExit2(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(out), "usage") {
 		t.Errorf("no-arg output should contain usage: %q", out)
+	}
+}
+
+func TestE2EStdinConsoleRender(t *testing.T) {
+	md := "# Piped Heading\n\nRendered from **stdin**.\n"
+	out, code := runMDVStdin(t, md, []string{"NO_COLOR=1"}, "--console")
+	if code != 0 {
+		t.Fatalf("stdin --console exit code = %d, want 0 (output: %s)", code, out)
+	}
+	if !strings.Contains(out, "Piped Heading") {
+		t.Errorf("stdin console output missing heading: %q", out)
+	}
+	if !strings.Contains(out, "Rendered from") {
+		t.Errorf("stdin console output missing body: %q", out)
+	}
+}
+
+func TestE2EStdinEmptyShowsUsage(t *testing.T) {
+	out, code := runMDVStdin(t, "   \n", nil, "--console")
+	if code != 2 {
+		t.Fatalf("empty stdin exit code = %d, want 2 (output: %s)", code, out)
+	}
+	if !strings.Contains(strings.ToLower(out), "usage") {
+		t.Errorf("empty stdin output should contain usage: %q", out)
 	}
 }
 

@@ -98,6 +98,9 @@ const (
 	InputFile
 	// InputFolder means a directory to browse.
 	InputFolder
+	// InputStdin means markdown content was piped in on standard input and is
+	// held in memory rather than read from a path.
+	InputStdin
 )
 
 // Input is the resolved CLI input.
@@ -111,4 +114,7 @@ type Input struct {
 	// Fragment is an optional in-page anchor (slug, without the leading '#') to
 	// scroll to once the document is opened.
 	Fragment string
+	// Data holds the in-memory markdown content for InputStdin. It is empty for
+	// file and folder inputs.
+	Data []byte
 }

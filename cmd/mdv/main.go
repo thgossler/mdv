@@ -60,17 +60,28 @@ func run() int {
 		return 0
 	}
 
-	// Resolve input (positional arg). With no argument, show usage and exit.
+	// Resolve input. A positional argument names a file or folder; with no
+	// argument but markdown piped on stdin, read that content into memory.
+	// Otherwise show usage and exit.
+	var in core.Input
+	var err error
 	arg := flag.Arg(0)
-	if arg == "" {
+	switch {
+	case arg != "":
+		in, err = core.ResolveInput(arg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot open %q: %v\n", arg, err)
+			return 1
+		}
+	case !console.StdinIsTTY():
+		in, err = core.ReadStdin(os.Stdin)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: reading stdin: %v\n", err)
+			return 1
+		}
+	default:
 		usage()
 		return 2
-	}
-
-	in, err := core.ResolveInput(arg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: cannot open %q: %v\n", arg, err)
-		return 1
 	}
 	if in.Kind == core.InputNone {
 		usage()
@@ -89,7 +100,7 @@ func run() int {
 
 	switch mode {
 	case launcher.ModeGUI:
-		if err := launcher.SpawnGUI(in.Path); err != nil {
+		if err := spawnGUIForInput(in); err != nil {
 			// GUI unavailable in this build/environment: fall back.
 			return runFallback(cfg, in, updCh, *flagNoColor)
 		}
@@ -106,6 +117,27 @@ func run() int {
 	default: // ModeConsole
 		return runConsole(cfg, in, updCh, *flagNoColor)
 	}
+}
+
+// spawnGUIForInput launches the GUI helper for the resolved input. Stdin
+// content is materialised into a temporary file (the GUI is a separate process
+// that loads documents by path) and the helper is told via MDV_STDIN_TEMP to
+// delete that file when its window closes.
+func spawnGUIForInput(in core.Input) error {
+	if in.Kind == core.InputStdin {
+		tmp, err := core.WriteStdinTempFile(in.Data)
+		if err != nil {
+			return err
+		}
+		// SpawnDetached inherits the environment, so the child sees this var.
+		os.Setenv("MDV_STDIN_TEMP", tmp)
+		if err := launcher.SpawnGUI(tmp); err != nil {
+			os.Remove(tmp)
+			return err
+		}
+		return nil
+	}
+	return launcher.SpawnGUI(in.Path)
 }
 
 // runFallback chooses TUI when a terminal is attached, otherwise console.
@@ -128,6 +160,11 @@ func runConsole(cfg core.Defaults, in core.Input, updCh <-chan core.UpdateInfo, 
 	}
 
 	switch in.Kind {
+	case core.InputStdin:
+		if err := console.Render(os.Stdout, string(in.Data), "", console.Options{Style: style}); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return 1
+		}
 	case core.InputFile:
 		if err := console.RenderFile(os.Stdout, in.Path, console.Options{Style: style, ShowHeader: true}); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -201,7 +238,8 @@ func usage() {
 	fmt.Fprintf(w, "%s %s — %s\n\n", core.AppName, core.Version, core.AppTagline)
 	fmt.Fprintf(w, "Usage:\n")
 	fmt.Fprintf(w, "  %s [flags] <file.md | folder>\n", core.AppName)
-	fmt.Fprintf(w, "  %s .          open the current directory as a folder\n\n", core.AppName)
+	fmt.Fprintf(w, "  %s .          open the current directory as a folder\n", core.AppName)
+	fmt.Fprintf(w, "  ... | %s      read markdown piped on stdin\n\n", core.AppName)
 	fmt.Fprintf(w, "Flags:\n")
 	fmt.Fprintf(w, "  --tui          force the interactive terminal UI\n")
 	fmt.Fprintf(w, "  --gui          force the graphical UI\n")

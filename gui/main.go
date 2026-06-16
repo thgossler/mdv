@@ -28,6 +28,12 @@ func runGUI() error {
 
 	in := resolveInput(cfg)
 
+	// A stdin temp file is owned by this process: remove it once the window
+	// closes so piped content leaves nothing behind on disk.
+	if tmp := os.Getenv("MDV_STDIN_TEMP"); tmp != "" {
+		defer os.Remove(tmp)
+	}
+
 	app := application.New(application.Options{
 		Name:        core.AppName,
 		Description: core.AppTagline,
@@ -117,6 +123,14 @@ func resolveInput(cfg core.Defaults) core.Input {
 	if err != nil || in.Kind == core.InputNone {
 		if wd, err := os.Getwd(); err == nil {
 			in = core.Input{Kind: core.InputFolder, Path: wd, Dir: wd}
+		}
+	}
+	// When the launcher piped stdin into a temporary file, resolve relative
+	// links and images against the working directory mdv was launched from
+	// rather than the (throwaway) temp directory.
+	if os.Getenv("MDV_STDIN_TEMP") == in.Path && in.Path != "" {
+		if wd, err := os.Getwd(); err == nil {
+			in.Dir = wd
 		}
 	}
 	in.Fragment = fragment

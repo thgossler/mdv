@@ -2,6 +2,7 @@ package core
 
 import (
 	"bufio"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -39,6 +40,46 @@ func ResolveInput(arg string) (Input, error) {
 		return Input{Kind: InputFolder, Path: abs, Dir: abs}, nil
 	}
 	return Input{Kind: InputFile, Path: abs, Dir: filepath.Dir(abs)}, nil
+}
+
+// ReadStdin reads all markdown content from r (typically os.Stdin) into memory
+// and returns an InputStdin. The workspace directory is the current working
+// directory so relative links and images resolve against where mdv was run.
+// An empty stream yields InputNone so the caller can fall back to usage.
+func ReadStdin(r io.Reader) (Input, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return Input{}, err
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return Input{Kind: InputNone}, nil
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		dir = ""
+	}
+	return Input{Kind: InputStdin, Dir: dir, Data: data}, nil
+}
+
+// WriteStdinTempFile materialises piped stdin content into a temporary markdown
+// file and returns its path. It is used for the GUI, which runs as a separate
+// process that loads documents by path. The caller (or the spawned process) is
+// responsible for deleting the file when it is no longer needed.
+func WriteStdinTempFile(data []byte) (string, error) {
+	f, err := os.CreateTemp("", "mdv-stdin-*.md")
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 // expandHome expands a leading ~ to the user's home directory.

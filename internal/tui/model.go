@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -16,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/mdfmt"
+	"golang.org/x/term"
 )
 
 type focus int
@@ -45,6 +47,7 @@ type Model struct {
 	currentPath string
 	currentDir  string
 	rawMarkdown string
+	stdin       bool // content was piped in; there is no backing file path
 
 	history   []histEntry
 	focus     focus
@@ -109,6 +112,14 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 		m.workspace = files
 		m.currentPath = in.Path
 		m.currentDir = in.Dir
+	} else if in.Kind == core.InputStdin {
+		// Markdown piped in: render the in-memory buffer. Use the working
+		// directory as the workspace so relative links and images resolve.
+		files, _ := core.ListMarkdownFiles(in.Dir, cfg)
+		m.workspace = files
+		m.currentDir = in.Dir
+		m.rawMarkdown = string(in.Data)
+		m.stdin = true
 	}
 
 	fileList := list.New(docItemsFrom(m.workspace, m.labelMode), list.NewDefaultDelegate(), 0, 0)
@@ -139,9 +150,29 @@ func (m Model) Init() tea.Cmd { return nil }
 // Run starts the program and blocks until the user quits.
 func Run(cfg core.Defaults, in core.Input, upd core.UpdateInfo) error {
 	m := New(cfg, in, upd)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion()}
+	// When markdown is piped on stdin, os.Stdin carries the document, not the
+	// keyboard. Reopen the controlling terminal so the TUI still receives key
+	// and mouse input.
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		if tty, err := openControllingTerminal(); err == nil {
+			opts = append(opts, tea.WithInput(tty))
+			defer tty.Close()
+		}
+	}
+	p := tea.NewProgram(m, opts...)
 	_, err := p.Run()
 	return err
+}
+
+// openControllingTerminal opens the process's controlling terminal for reading,
+// used to source keyboard input when stdin is a pipe.
+func openControllingTerminal() (*os.File, error) {
+	name := "/dev/tty"
+	if runtime.GOOS == "windows" {
+		name = "CONIN$"
+	}
+	return os.OpenFile(name, os.O_RDWR, 0)
 }
 
 const sidebarWidth = 34
@@ -157,6 +188,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ready = true
 			if m.currentPath != "" {
 				m.openPath(m.currentPath, true)
+			} else if m.stdin {
+				m.rerender()
+				m.viewport.GotoTop()
 			}
 		} else {
 			m.rerender()
@@ -545,6 +579,8 @@ func (m Model) header() string {
 	name := "(no document)"
 	if m.currentPath != "" {
 		name = filepath.Base(m.currentPath)
+	} else if m.stdin {
+		name = "(stdin)"
 	}
 	left := lipgloss.NewStyle().Bold(true).Render(" " + core.AppName + " ")
 	mid := lipgloss.NewStyle().Faint(true).Render(name)
