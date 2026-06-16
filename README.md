@@ -1,7 +1,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/thgossler/mdv">
-    <img src="images/icon.png" alt="Icon" width="80" height="80">
+    <img src="images/image.png" alt="Icon" width="800" />
   </a>
 
   <h1 align="center">mdv</h1>
