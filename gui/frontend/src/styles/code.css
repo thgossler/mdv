@@ -1,0 +1,196 @@
+/* code.css — fenced code block chrome and highlight.js token colours.
+   Token colours are driven by CSS variables so the active palette can switch
+   with the chosen code theme (config `codeTheme`) and light/dark mode. */
+
+.code-block {
+  position: relative;
+  margin: 0 0 16px;
+  background: var(--code-bg);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+}
+.code-block pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+}
+.code-block .code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+.code-block:hover .code-copy {
+  opacity: 1;
+}
+.code-block .code-copy:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+
+/* ---- highlight.js token mapping ----------------------------------------- */
+.hljs {
+  color: var(--hl-fg, var(--code-fg));
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-name,
+.hljs-tag {
+  color: var(--hl-keyword);
+}
+.hljs-string,
+.hljs-title,
+.hljs-section,
+.hljs-attribute,
+.hljs-literal,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-addition {
+  color: var(--hl-string);
+}
+.hljs-title.function_,
+.hljs-title.class_ {
+  color: var(--hl-function);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-meta,
+.hljs-link {
+  color: var(--hl-number);
+}
+.hljs-variable,
+.hljs-attr,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--hl-variable);
+}
+.hljs-regexp,
+.hljs-deletion {
+  color: var(--hl-regexp);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* ---- Default palette: GitHub (light) ------------------------------------ */
+body.theme-light {
+  --hl-fg: #1f2328;
+  --hl-comment: #6e7781;
+  --hl-keyword: #cf222e;
+  --hl-string: #0a3069;
+  --hl-function: #8250df;
+  --hl-number: #0550ae;
+  --hl-variable: #953800;
+  --hl-regexp: #116329;
+}
+/* GitHub (dark) */
+body.theme-dark {
+  --hl-fg: #e6edf3;
+  --hl-comment: #8b949e;
+  --hl-keyword: #ff7b72;
+  --hl-string: #a5d6ff;
+  --hl-function: #d2a8ff;
+  --hl-number: #79c0ff;
+  --hl-variable: #ffa657;
+  --hl-regexp: #7ee787;
+}
+
+/* ---- Monokai ------------------------------------------------------------ */
+body[data-code-theme="monokai"] {
+  --code-bg: #272822;
+  --code-fg: #f8f8f2;
+  --hl-fg: #f8f8f2;
+  --hl-comment: #75715e;
+  --hl-keyword: #f92672;
+  --hl-string: #e6db74;
+  --hl-function: #a6e22e;
+  --hl-number: #ae81ff;
+  --hl-variable: #fd971f;
+  --hl-regexp: #a6e22e;
+}
+
+/* ---- Nord --------------------------------------------------------------- */
+body[data-code-theme="nord"] {
+  --code-bg: #2e3440;
+  --code-fg: #d8dee9;
+  --hl-fg: #d8dee9;
+  --hl-comment: #4c566a;
+  --hl-keyword: #81a1c1;
+  --hl-string: #a3be8c;
+  --hl-function: #88c0d0;
+  --hl-number: #b48ead;
+  --hl-variable: #d08770;
+  --hl-regexp: #ebcb8b;
+}
+
+/* ---- Solarized Light ---------------------------------------------------- */
+body[data-code-theme="solarized-light"] {
+  --code-bg: #fdf6e3;
+  --code-fg: #657b83;
+  --hl-fg: #657b83;
+  --hl-comment: #93a1a1;
+  --hl-keyword: #859900;
+  --hl-string: #2aa198;
+  --hl-function: #268bd2;
+  --hl-number: #d33682;
+  --hl-variable: #cb4b16;
+  --hl-regexp: #dc322f;
+}
+
+/* ---- Solarized Dark ----------------------------------------------------- */
+body[data-code-theme="solarized-dark"] {
+  --code-bg: #002b36;
+  --code-fg: #93a1a1;
+  --hl-fg: #93a1a1;
+  --hl-comment: #586e75;
+  --hl-keyword: #859900;
+  --hl-string: #2aa198;
+  --hl-function: #268bd2;
+  --hl-number: #d33682;
+  --hl-variable: #cb4b16;
+  --hl-regexp: #dc322f;
+}
+
+/* ---- Glyph (bespoke high-contrast) -------------------------------------- */
+body[data-code-theme="glyph"].theme-dark {
+  --code-bg: #11141b;
+  --hl-fg: #e8eaf0;
+  --hl-comment: #6b7280;
+  --hl-keyword: #c792ea;
+  --hl-string: #c3e88d;
+  --hl-function: #82aaff;
+  --hl-number: #f78c6c;
+  --hl-variable: #f07178;
+  --hl-regexp: #89ddff;
+}
+body[data-code-theme="glyph"].theme-light {
+  --code-bg: #fbfbfd;
+  --hl-fg: #24292f;
+  --hl-comment: #8a919b;
+  --hl-keyword: #9a25c9;
+  --hl-string: #2f8f4e;
+  --hl-function: #1f6feb;
+  --hl-number: #c4500a;
+  --hl-variable: #d1242f;
+  --hl-regexp: #0a8aa8;
+}

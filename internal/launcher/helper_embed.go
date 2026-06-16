@@ -1,3 +1,5 @@
+//go:build !gui_bundled
+
 package launcher
 
 // This file provides the default (no bundled GUI) implementation. When the

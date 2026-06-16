@@ -1,0 +1,61 @@
+/* themes.css — design tokens for light and dark appearance.
+   Colours are exposed as CSS custom properties consumed by the rest of the UI.
+   The active scheme is selected by the `theme-light` / `theme-dark` body class. */
+
+:root {
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
+    "Fira Code", Menlo, Consolas, monospace;
+  --font-size: 16px;
+  --line-height: 1.6;
+  --content-width: 860px;
+  --zoom: 1;
+
+  --radius: 6px;
+  --tb-height: 40px;
+  --sidebar-width: 260px;
+  --toc-width: 260px;
+}
+
+/* Light theme */
+body.theme-light {
+  --bg: #ffffff;
+  --bg-elevated: #f6f8fa;
+  --bg-inset: #f6f8fa;
+  --fg: #1f2328;
+  --fg-muted: #59636e;
+  --fg-subtle: #818b98;
+  --border: #d1d9e0;
+  --border-muted: #e4e8ec;
+  --accent: #0969da;
+  --accent-fg: #ffffff;
+  --hover: #eef1f4;
+  --selection: #b6dafc;
+  --mark: #fff3a3;
+  --mark-current: #ffb454;
+  --code-bg: #f6f8fa;
+  --code-fg: #1f2328;
+  --shadow: 0 6px 24px rgba(31, 35, 40, 0.12);
+}
+
+/* Dark theme */
+body.theme-dark {
+  --bg: #0d1117;
+  --bg-elevated: #161b22;
+  --bg-inset: #010409;
+  --fg: #e6edf3;
+  --fg-muted: #9198a1;
+  --fg-subtle: #6e7681;
+  --border: #30363d;
+  --border-muted: #21262d;
+  --accent: #4493f8;
+  --accent-fg: #ffffff;
+  --hover: #1c2128;
+  --selection: #264f78;
+  --mark: #bb8009;
+  --mark-current: #e3a008;
+  --code-bg: #161b22;
+  --code-fg: #e6edf3;
+  --shadow: 0 6px 24px rgba(1, 4, 9, 0.5);
+}

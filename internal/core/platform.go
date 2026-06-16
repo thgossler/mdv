@@ -41,3 +41,15 @@ func OpenInOS(target string) error {
 	go func() { _ = cmd.Wait() }()
 	return nil
 }
+
+// SpawnDetached launches exe with the given arguments as an independent
+// process, not tied to the lifetime of the caller. It is used to open a
+// document in a new window (a separate mdv instance).
+func SpawnDetached(exe string, args ...string) error {
+	cmd := exec.Command(exe, args...)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("spawning %q: %w", exe, err)
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}

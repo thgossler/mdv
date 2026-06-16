@@ -12,7 +12,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/thomasgossler/mdv/internal/console"
+	"github.com/thgossler/mdv/internal/console"
 )
 
 // Mode is a chosen presentation mode.

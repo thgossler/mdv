@@ -10,7 +10,7 @@ const AppName = "mdv"
 const AppTagline = "Markdown Document Viewer"
 
 // Version is the current build version. Overridden at build time via -ldflags
-// "-X github.com/thomasgossler/mdv/internal/core.Version=vX.Y.Z".
+// "-X github.com/thgossler/mdv/internal/core.Version=vX.Y.Z".
 var Version = "v0.0.0-dev"
 
 // LinkKind classifies a resolved markdown link target.

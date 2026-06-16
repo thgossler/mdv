@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' 'unsafe-inline' data: blob:; img-src 'self' data: blob: file: http: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+    />
+    <title>mdv</title>
+  </head>
+  <body class="theme-system">
+    <div id="app">
+      <!-- Toolbar sits in the same row as the native window controls. -->
+      <header id="toolbar" class="toolbar">
+        <div class="toolbar-left">
+          <button id="btn-back" class="tb-btn" title="Back (Cmd/Ctrl+Left)" disabled>‹</button>
+          <div id="history-menu" class="history-menu hidden"></div>
+          <button id="btn-history" class="tb-btn" title="History" disabled>▾</button>
+          <button id="btn-sidebar" class="tb-btn" title="Toggle sidebar (Cmd/Ctrl+B)">☰</button>
+        </div>
+        <div id="doc-title" class="doc-title"></div>
+        <div class="toolbar-right">
+          <button id="btn-labels" class="tb-btn" title="Toggle filename/title (Cmd/Ctrl+T)">Aa</button>
+          <button id="btn-mono" class="tb-btn" title="Toggle monospace">M</button>
+          <button id="btn-toc" class="tb-btn" title="Toggle table of contents">⊟</button>
+          <button id="btn-theme" class="tb-btn" title="Toggle theme (Cmd/Ctrl+J)">◐</button>
+        </div>
+      </header>
+
+      <div id="body" class="body">
+        <aside id="sidebar" class="sidebar">
+          <div class="sidebar-head">
+            <input id="nav-filter" class="nav-filter" type="text" placeholder="Filter documents…" />
+          </div>
+          <nav id="nav-list" class="nav-list"></nav>
+        </aside>
+
+        <main id="content-wrap" class="content-wrap">
+          <div id="search-bar" class="search-bar hidden">
+            <input id="search-input" type="text" placeholder="Find in document…" />
+            <span id="search-count" class="search-count"></span>
+            <button id="search-prev" class="tb-btn" title="Previous">↑</button>
+            <button id="search-next" class="tb-btn" title="Next">↓</button>
+            <button id="search-close" class="tb-btn" title="Close">✕</button>
+          </div>
+          <article id="content" class="markdown-body"></article>
+        </main>
+
+        <aside id="toc" class="toc hidden">
+          <div class="panel-head">Contents</div>
+          <nav id="toc-list" class="toc-list"></nav>
+          <div id="backlinks-head" class="panel-head">Backlinks</div>
+          <div id="backlinks-list" class="backlinks-list"></div>
+        </aside>
+      </div>
+
+      <footer id="statusbar" class="statusbar">
+        <span id="status-left" class="status-left"></span>
+        <span id="status-mid" class="status-mid"></span>
+        <span id="status-right" class="status-right"></span>
+      </footer>
+
+      <div id="context-menu" class="context-menu hidden"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

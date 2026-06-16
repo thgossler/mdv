@@ -182,7 +182,7 @@ func removeTrailingCommas(s string) []byte {
 
 const defaultConfigTemplate = `// mdv — Markdown Document Viewer — user settings (JSONC).
 // Delete any key to fall back to the built-in default. Comments and trailing
-// commas are allowed. Docs: https://github.com/thomasgossler/mdv
+// commas are allowed. Docs: https://github.com/thgossler/mdv
 {
   // "system" | "light" | "dark"
   "theme": "system",

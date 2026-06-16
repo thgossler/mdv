@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thomasgossler/mdv/internal/console"
-	"github.com/thomasgossler/mdv/internal/core"
-	"github.com/thomasgossler/mdv/internal/launcher"
-	"github.com/thomasgossler/mdv/internal/tui"
+	"github.com/thgossler/mdv/internal/console"
+	"github.com/thgossler/mdv/internal/core"
+	"github.com/thgossler/mdv/internal/launcher"
+	"github.com/thgossler/mdv/internal/tui"
 )
 
 func main() {

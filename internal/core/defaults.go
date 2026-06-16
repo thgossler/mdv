@@ -61,7 +61,7 @@ func DefaultSettings() Defaults {
 		MaxZoom:        3.0,
 
 		CheckForUpdates:  true,
-		UpdateRepo:       "thomasgossler/mdv",
+		UpdateRepo:       "thgossler/mdv",
 		UpdateCheckHours: 24,
 
 		EnableMath:        true,
