@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -34,6 +35,14 @@ type histEntry struct {
 	yOffset int
 }
 
+// matchPos identifies a single search hit: a 0-based line index in the rendered
+// (ANSI-stripped) content and the visible-column offset of the match start on
+// that line. Multiple hits on the same line are tracked independently.
+type matchPos struct {
+	line int
+	col  int
+}
+
 // Model is the Bubble Tea model for the terminal viewer.
 type Model struct {
 	cfg          core.Defaults
@@ -49,14 +58,22 @@ type Model struct {
 	rawMarkdown string
 	stdin       bool // content was piped in; there is no backing file path
 
+	// renderCache holds the glamour-rendered markdown for renderCacheKey so
+	// that re-rendering for search highlighting (a frequent operation) does not
+	// re-invoke glamour. Re-invoking glamour with the "auto" style re-queries
+	// the terminal background colour, and that response leaks into key input.
+	renderCache    string
+	renderCacheKey string
+
 	history   []histEntry
 	focus     focus
 	showList  bool
 	labelMode string // "filename" | "title"
 
 	searchInput string
-	matches     []int
+	matches     []matchPos
 	matchIdx    int
+	searchQuery string // term currently highlighted (empty when not searching)
 
 	statusMsg string
 	update    core.UpdateInfo
@@ -256,12 +273,6 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchInput = ""
 		m.statusMsg = ""
 		return *m, nil
-	case "n":
-		m.jumpMatch(1)
-		return *m, nil
-	case "N":
-		m.jumpMatch(-1)
-		return *m, nil
 	case "g", "home":
 		m.viewport.GotoTop()
 		return *m, nil
@@ -314,12 +325,36 @@ func (m *Model) handleLinksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.focus = focusContent
-		m.searchInput = ""
+		m.exitSearch()
 		return *m, nil
 	case "enter":
-		m.runSearch(m.searchInput)
-		m.focus = focusContent
+		if strings.TrimSpace(m.searchInput) == "" {
+			m.exitSearch()
+			return *m, nil
+		}
+		// First Enter on a new query runs the search and jumps to the first
+		// match; pressing Enter again cycles through the matches (wrapping
+		// around) without leaving search mode.
+		if m.searchInput != m.searchQuery {
+			m.runSearch(m.searchInput)
+		} else {
+			m.jumpMatch(1)
+		}
+		return *m, nil
+	case "down":
+		// ↓ steps forward through matches (same as Enter). Arrow keys are used
+		// for prev/next because Shift+Enter and modifier+Enter are not reported
+		// reliably by terminals, and letter shortcuts would collide with typing
+		// the query.
+		if m.searchInput == m.searchQuery && m.searchQuery != "" {
+			m.jumpMatch(1)
+		}
+		return *m, nil
+	case "up":
+		// ↑ steps backward through matches (wrapping around).
+		if m.searchInput == m.searchQuery && m.searchQuery != "" {
+			m.jumpMatch(-1)
+		}
 		return *m, nil
 	case "backspace":
 		if len(m.searchInput) > 0 {
@@ -327,10 +362,31 @@ func (m *Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return *m, nil
 	default:
-		if len(msg.Runes) > 0 {
-			m.searchInput += string(msg.Runes)
+		// Only accept real typed text. Guarding on KeyRunes (and dropping any
+		// control characters) prevents stray terminal responses — such as the
+		// OSC background-colour reply — from leaking into the query.
+		if msg.Type == tea.KeyRunes {
+			for _, r := range msg.Runes {
+				if unicode.IsControl(r) {
+					continue
+				}
+				m.searchInput += string(r)
+			}
 		}
 		return *m, nil
+	}
+}
+
+// exitSearch leaves search mode and removes the match highlighting.
+func (m *Model) exitSearch() {
+	m.focus = focusContent
+	m.searchInput = ""
+	m.statusMsg = ""
+	if m.searchQuery != "" || len(m.matches) > 0 {
+		m.searchQuery = ""
+		m.matches = nil
+		m.matchIdx = 0
+		m.rerender()
 	}
 }
 
@@ -386,8 +442,10 @@ func (m *Model) openPath(path string, pushHistory bool) {
 	m.currentPath = path
 	m.currentDir = filepath.Dir(path)
 	m.rawMarkdown = string(data)
+	m.renderCache = ""
 	m.matches = nil
 	m.matchIdx = 0
+	m.searchQuery = ""
 	m.rerender()
 	m.viewport.GotoTop()
 	m.syncListSelection()
@@ -458,21 +516,33 @@ func (m *Model) scrollToHeading(slug string) {
 func (m *Model) runSearch(q string) {
 	m.matches = nil
 	m.matchIdx = 0
+	m.searchQuery = ""
 	if strings.TrimSpace(q) == "" {
+		m.rerender()
 		return
 	}
 	rendered := strings.Split(stripANSI(m.renderedRaw()), "\n")
 	ql := strings.ToLower(q)
 	for i, line := range rendered {
-		if strings.Contains(strings.ToLower(line), ql) {
-			m.matches = append(m.matches, i)
+		ll := strings.ToLower(line)
+		for from := 0; ; {
+			idx := strings.Index(ll[from:], ql)
+			if idx < 0 {
+				break
+			}
+			col := from + idx
+			m.matches = append(m.matches, matchPos{line: i, col: col})
+			from = col + len(ql)
 		}
 	}
 	if len(m.matches) == 0 {
+		m.rerender()
 		m.statusMsg = "No matches for: " + q
 		return
 	}
-	m.viewport.SetYOffset(m.matches[0])
+	m.searchQuery = q
+	m.rerender()
+	m.viewport.SetYOffset(m.matches[0].line)
 	m.statusMsg = fmt.Sprintf("Match 1/%d for %q", len(m.matches), q)
 }
 
@@ -481,7 +551,10 @@ func (m *Model) jumpMatch(dir int) {
 		return
 	}
 	m.matchIdx = (m.matchIdx + dir + len(m.matches)) % len(m.matches)
-	m.viewport.SetYOffset(m.matches[m.matchIdx])
+	if m.searchQuery != "" {
+		m.rerender() // move the green current-match highlight
+	}
+	m.viewport.SetYOffset(m.matches[m.matchIdx].line)
 	m.statusMsg = fmt.Sprintf("Match %d/%d", m.matchIdx+1, len(m.matches))
 }
 
@@ -521,15 +594,31 @@ func (m *Model) layout() {
 }
 
 func (m *Model) renderedRaw() string {
-	out, err := renderMarkdown(m.rawMarkdown, m.contentWidth()-2, m.cfg.Theme)
-	if err != nil {
-		return m.rawMarkdown
+	w := m.contentWidth()
+	key := fmt.Sprintf("%d|%s|%d", w, m.cfg.Theme, len(m.rawMarkdown))
+	if m.renderCache != "" && m.renderCacheKey == key {
+		return m.renderCache
 	}
+	out, err := renderMarkdown(m.rawMarkdown, w-2, m.cfg.Theme)
+	if err != nil {
+		out = m.rawMarkdown
+	}
+	m.renderCache = out
+	m.renderCacheKey = key
 	return out
 }
 
 func (m *Model) rerender() {
-	m.viewport.SetContent(m.renderedRaw())
+	content := m.renderedRaw()
+	if m.searchQuery != "" {
+		curLine, curCol := -1, -1
+		if len(m.matches) > 0 {
+			curLine = m.matches[m.matchIdx].line
+			curCol = m.matches[m.matchIdx].col
+		}
+		content = highlightTerm(content, m.searchQuery, curLine, curCol)
+	}
+	m.viewport.SetContent(content)
 }
 
 func renderMarkdown(md string, width int, theme string) (string, error) {
@@ -592,8 +681,16 @@ func (m Model) header() string {
 
 func (m Model) statusBar() string {
 	if m.focus == focusSearch {
+		hint := "Enter: search, Esc: cancel"
+		if m.searchInput == m.searchQuery && m.searchQuery != "" {
+			if len(m.matches) > 0 {
+				hint = fmt.Sprintf("%d/%d  Enter/↓: next, ↑: prev, Esc: done", m.matchIdx+1, len(m.matches))
+			} else {
+				hint = "no matches, Esc: cancel"
+			}
+		}
 		return lipgloss.NewStyle().Width(m.width).Reverse(true).
-			Render(" /" + m.searchInput + "▏ (Enter to search, Esc to cancel) ")
+			Render(" /" + m.searchInput + "▏ (" + hint + ") ")
 	}
 
 	pct := 0
@@ -644,6 +741,104 @@ func collectHeadings(md string) []Heading {
 var reANSI = regexpMustCompileANSI()
 
 func stripANSI(s string) string { return reANSI.ReplaceAllString(s, "") }
+
+// highlightTerm wraps every case-insensitive occurrence of term in the ANSI
+// styled text so matches stand out while searching. The single occurrence at
+// (currentLine, currentCol) — both 0-based, with currentCol the visible-column
+// offset of the match start — gets a green background; every other occurrence
+// gets a yellow background. Pass currentLine = -1 for no current match.
+// Matching is performed on the visible characters only; embedded escape
+// sequences are skipped. Each line is processed independently.
+func highlightTerm(styled, term string, currentLine, currentCol int) string {
+	if term == "" {
+		return styled
+	}
+	lowerTerm := strings.ToLower(term)
+	lines := strings.Split(styled, "\n")
+	for i, line := range lines {
+		cc := -1
+		if i == currentLine {
+			cc = currentCol
+		}
+		lines[i] = highlightLine(line, lowerTerm, cc)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// highlightLine highlights every occurrence of lowerTerm (already lowercased)
+// within a single ANSI-styled line. The occurrence whose visible start column
+// equals currentCol is rendered with a green background; all others yellow.
+// Pass currentCol = -1 when no occurrence on this line is the current match.
+func highlightLine(line, lowerTerm string, currentCol int) string {
+	// Decompose into visible bytes plus a map back to their byte offset in the
+	// original line, skipping ANSI escape sequences.
+	var vis []byte
+	var off []int
+	for i := 0; i < len(line); {
+		if loc := reANSI.FindStringIndex(line[i:]); loc != nil && loc[0] == 0 {
+			i += loc[1]
+			continue
+		}
+		vis = append(vis, line[i])
+		off = append(off, i)
+		i++
+	}
+	visLower := strings.ToLower(string(vis))
+	// Case folding that changes byte length would break the offset map; skip
+	// highlighting such (rare, non-ASCII) lines rather than corrupt them.
+	if len(visLower) != len(vis) {
+		return line
+	}
+
+	starts := map[int]bool{}
+	current := map[int]bool{} // start byte offsets that are the current match
+	ends := map[int]bool{}
+	found := false
+	for from := 0; ; {
+		idx := strings.Index(visLower[from:], lowerTerm)
+		if idx < 0 {
+			break
+		}
+		s := from + idx
+		e := s + len(lowerTerm)
+		startByte := off[s]
+		endByte := len(line)
+		if e < len(off) {
+			endByte = off[e]
+		}
+		starts[startByte] = true
+		if s == currentCol {
+			current[startByte] = true
+		}
+		ends[endByte] = true
+		found = true
+		from = e
+	}
+	if !found {
+		return line
+	}
+
+	const yellow = "\x1b[30;43m" // black foreground, yellow background
+	const green = "\x1b[30;42m"  // black foreground, green background
+	const off2 = "\x1b[39;49m"   // restore default foreground and background
+	var b strings.Builder
+	for i := 0; i <= len(line); i++ {
+		if ends[i] {
+			b.WriteString(off2)
+		}
+		if starts[i] {
+			if current[i] {
+				b.WriteString(green)
+			} else {
+				b.WriteString(yellow)
+			}
+		}
+		if i < len(line) {
+			b.WriteByte(line[i])
+		}
+	}
+	return b.String()
+}
 
 func normalize(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(s), " "))
