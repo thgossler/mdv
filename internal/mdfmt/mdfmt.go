@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Sentinels marking the start and end of a hyperlink's visible text. They are
@@ -94,6 +95,7 @@ func Render(markdown string, width int, style string, hyperlinks bool) (string, 
 	if hyperlinks {
 		out = applyHyperlinks(out, urls)
 	}
+	out = compactTables(out)
 	return out, nil
 }
 
@@ -257,4 +259,188 @@ func applyHyperlinks(rendered string, urls []string) string {
 	})
 	// Remove any stray sentinels that were not matched as a pair.
 	return strings.NewReplacer(linkStart, "", linkEnd, "").Replace(out)
+}
+
+// compactTables narrows tables that glamour has stretched to the full wrap
+// width. glamour (v0.10) sizes every table to the render width, so a table with
+// short cells gets padded with large runs of spaces, which is hard to read in
+// wide terminals. This walks the rendered output, finds table blocks (a header
+// rule plus the data rows around it) and re-pads each column to the natural
+// width of its widest cell, collapsing the excess inter-column padding while
+// keeping the columns aligned.
+//
+// Only left-aligned padding (the glamour default) is compacted; right- and
+// centre-aligned columns are left untouched so nothing is mis-rendered. Any
+// block that does not look like a well-formed table is returned verbatim.
+func compactTables(s string) string {
+	if !strings.Contains(s, "│") && !strings.Contains(s, "|") {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); {
+		if !isTableLine(lines[i]) {
+			out = append(out, lines[i])
+			i++
+			continue
+		}
+		j := i
+		for j < len(lines) && isTableLine(lines[j]) {
+			j++
+		}
+		out = append(out, compactBlock(lines[i:j])...)
+		i = j
+	}
+	return strings.Join(out, "\n")
+}
+
+// isTableLine reports whether a rendered line might be part of a table: it
+// contains a column separator or is a horizontal header rule.
+func isTableLine(line string) bool {
+	p := ansi.Strip(line)
+	return strings.ContainsRune(p, '│') || strings.ContainsRune(p, '|') || isRuleRow(p)
+}
+
+// isRuleRow reports whether an ANSI-stripped line is a table header rule, i.e.
+// it consists solely of horizontal/joint glyphs (and spaces) with enough dashes
+// to be a rule rather than incidental punctuation.
+func isRuleRow(p string) bool {
+	t := strings.TrimSpace(p)
+	if t == "" {
+		return false
+	}
+	dashes := 0
+	for _, r := range t {
+		switch r {
+		case '─', '-':
+			dashes++
+		case '┼', '┬', '┴', '├', '┤', '│', '|', '+', ' ':
+		default:
+			return false
+		}
+	}
+	return dashes >= 3
+}
+
+// compactBlock re-pads a run of candidate table lines. If the run is not a
+// well-formed table (a header rule plus data rows that all share the same
+// column count) it is returned unchanged.
+func compactBlock(block []string) []string {
+	styled := false
+	for _, l := range block {
+		p := ansi.Strip(l)
+		if strings.ContainsRune(p, '│') || strings.ContainsRune(p, '─') || strings.ContainsRune(p, '┼') {
+			styled = true
+			break
+		}
+	}
+	bar, horiz, joint := "|", "-", "|"
+	if styled {
+		bar, horiz, joint = "│", "─", "┼"
+	}
+
+	// Common left indentation (table margin) across the block.
+	indent := -1
+	for _, l := range block {
+		p := ansi.Strip(l)
+		n := len(p) - len(strings.TrimLeft(p, " "))
+		if indent < 0 || n < indent {
+			indent = n
+		}
+	}
+	if indent < 0 {
+		indent = 0
+	}
+
+	var dataIdx, ruleIdx []int
+	barCount := -1
+	for k, l := range block {
+		p := ansi.Strip(l)
+		switch {
+		case isRuleRow(p):
+			ruleIdx = append(ruleIdx, k)
+		case strings.Contains(p, bar):
+			c := strings.Count(p, bar)
+			if barCount < 0 {
+				barCount = c
+			} else if c != barCount {
+				return block
+			}
+			dataIdx = append(dataIdx, k)
+		default:
+			return block
+		}
+	}
+	if len(ruleIdx) == 0 || len(dataIdx) == 0 || barCount < 1 {
+		return block
+	}
+	ncol := barCount + 1
+
+	// Split each data row into column segments and measure the widest cell.
+	segRows := make([][]string, len(dataIdx))
+	maxC := make([]int, ncol)
+	for ri, k := range dataIdx {
+		segs := strings.Split(dropLeadingSpaces(block[k], indent), bar)
+		if len(segs) != ncol {
+			return block
+		}
+		segRows[ri] = segs
+		for c := 0; c < ncol; c++ {
+			if w := cellWidth(segs[c]); w > maxC[c] {
+				maxC[c] = w
+			}
+		}
+	}
+
+	res := make([]string, len(block))
+	copy(res, block)
+	indentStr := strings.Repeat(" ", indent)
+
+	for ri, k := range dataIdx {
+		var b strings.Builder
+		b.WriteString(indentStr)
+		for c, seg := range segRows[ri] {
+			t := cellWidth(seg)
+			b.WriteString(ansi.Truncate(seg, t, ""))
+			if styled {
+				b.WriteString("\x1b[0m")
+			}
+			if c < ncol-1 {
+				b.WriteString(strings.Repeat(" ", maxC[c]-t))
+				b.WriteString(" ")
+				b.WriteString(bar)
+			}
+		}
+		res[k] = strings.TrimRight(b.String(), " ")
+	}
+
+	for _, k := range ruleIdx {
+		var b strings.Builder
+		b.WriteString(indentStr)
+		for c := 0; c < ncol; c++ {
+			b.WriteString(strings.Repeat(horiz, maxC[c]+1))
+			if c < ncol-1 {
+				b.WriteString(joint)
+			}
+		}
+		res[k] = b.String()
+	}
+	return res
+}
+
+// cellWidth returns the display width of a column segment with trailing padding
+// removed, i.e. the width its content actually needs.
+func cellWidth(seg string) int {
+	return ansi.StringWidth(strings.TrimRight(ansi.Strip(seg), " "))
+}
+
+// dropLeadingSpaces removes up to n leading ASCII spaces from s. Rendered table
+// lines begin with plain (unstyled) margin spaces, so this trims the shared
+// indent without disturbing any escape sequences.
+func dropLeadingSpaces(s string, n int) string {
+	i := 0
+	for i < len(s) && i < n && s[i] == ' ' {
+		i++
+	}
+	return s[i:]
 }

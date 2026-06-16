@@ -17,6 +17,8 @@ type Options struct {
 	// Width is the wrap width in columns. Zero means auto-detect (falling back
 	// to 80 when stdout is not a terminal).
 	Width int
+	// MaxWidth caps the wrap width in columns. Zero means no cap.
+	MaxWidth int
 	// Style is "auto", "dark", "light" or "notty". Empty means auto.
 	Style string
 	// ShowHeader prints the document path above the rendered content.
@@ -38,6 +40,9 @@ func Render(w io.Writer, markdown, path string, opt Options) error {
 	width := opt.Width
 	if width <= 0 {
 		width = detectWidth()
+	}
+	if opt.MaxWidth > 0 && width > opt.MaxWidth {
+		width = opt.MaxWidth
 	}
 
 	style := opt.Style

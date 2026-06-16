@@ -198,6 +198,9 @@ const defaultConfigTemplate = `// mdv — Markdown Document Viewer — user sett
   "contentWidthPx": 860,
   "monospace": false,
 
+  // Cap the console/terminal-UI render width (columns). 0 = use full width.
+  "maxWidth": 0,
+
   // Folder navigation label: "filename" | "title"
   "navLabelMode": "filename",
 

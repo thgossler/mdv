@@ -135,3 +135,40 @@ func TestProtectRestoreCodeRoundTrip(t *testing.T) {
 		t.Errorf("round trip mismatch:\n got %q\nwant %q", got, in)
 	}
 }
+
+func TestCompactTablesNarrowsColumns(t *testing.T) {
+	md := "| Flag | Description |\n| --- | --- |\n| x | Force the interactive terminal UI |\n| y | Force the graphical UI |\n"
+	out, err := Render(md, 120, "notty", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	maxW := 0
+	for _, l := range strings.Split(out, "\n") {
+		if w := len([]rune(strings.TrimRight(l, " "))); w > maxW {
+			maxW = w
+		}
+	}
+	// Natural width is well under the 120-column wrap width; without
+	// compaction the table would stretch close to 120.
+	if maxW > 60 {
+		t.Errorf("table not compacted: widest line = %d cols\n%s", maxW, out)
+	}
+	// Column structure is preserved.
+	if !strings.Contains(out, "Force the interactive terminal UI") {
+		t.Errorf("cell content lost: %q", out)
+	}
+	if !strings.Contains(out, "|") {
+		t.Errorf("column separator lost: %q", out)
+	}
+}
+
+func TestCompactTablesLeavesProseUntouched(t *testing.T) {
+	md := "Just a paragraph with a | pipe in it, no table here.\n"
+	out, err := Render(md, 120, "notty", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "| pipe in it") {
+		t.Errorf("prose pipe was altered: %q", out)
+	}
+}

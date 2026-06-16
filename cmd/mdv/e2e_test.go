@@ -184,3 +184,33 @@ func TestE2EInitConfig(t *testing.T) {
 		t.Errorf("--init-config did not write %s: %v", written, err)
 	}
 }
+
+func TestReorderArgsMaxWidthValue(t *testing.T) {
+	// --max-width takes a value; reorderArgs must keep the value adjacent to
+	// the flag even when the input path sits between them.
+	got := reorderArgs([]string{"file.md", "--max-width", "80", "--console"})
+	want := []string{"--max-width", "80", "--console", "file.md"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("reorderArgs = %v, want %v", got, want)
+	}
+	// --max-width=80 form stays a single token.
+	got = reorderArgs([]string{"file.md", "--max-width=80"})
+	want = []string{"--max-width=80", "file.md"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("reorderArgs(=form) = %v, want %v", got, want)
+	}
+}
+
+func TestE2EMaxWidthCapsOutput(t *testing.T) {
+	body := "# Heading\n\nThis is a reasonably long paragraph that would otherwise wrap to the full terminal width when rendered by mdv in console mode.\n"
+	// Pipe via stdin so there is no file-path header line to skew the check.
+	out, code := runMDVStdin(t, body, []string{"NO_COLOR=1"}, "--console", "--max-width", "40")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out)
+	}
+	for _, l := range strings.Split(out, "\n") {
+		if w := len([]rune(strings.TrimRight(l, " "))); w > 40 {
+			t.Errorf("line exceeds max-width 40 (%d cols): %q", w, l)
+		}
+	}
+}

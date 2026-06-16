@@ -95,12 +95,12 @@ manual `source` needed:
 ## Usage
 
 ```sh
-mdv README.md          # open a single document
-mdv ./docs             # open a folder (sidebar lists all markdown files)
-mdv --tui README.md    # force the terminal UI
+mdv README.md            # open a single document
+mdv ./docs               # open a folder (sidebar lists all markdown files)
+mdv --tui README.md      # force the terminal UI
 mdv --console README.md  # render to stdout and exit
-mdv --version
-mdv --init-config      # write a default settings.jsonc
+mdv --version            # show current SemVer version number
+mdv --init-config        # write a default settings.jsonc
 ```
 
 | Flag              | Description                            |
@@ -109,6 +109,7 @@ mdv --init-config      # write a default settings.jsonc
 | `--gui`           | Force the graphical UI                 |
 | `--console`, `-c` | Render to stdout and exit              |
 | `--no-color`      | Disable ANSI colors in console output  |
+| `--max-width N`   | Cap the render width to N columns      |
 | `--version`       | Print version and exit                 |
 | `--init-config`   | Write a default settings file and exit |
 

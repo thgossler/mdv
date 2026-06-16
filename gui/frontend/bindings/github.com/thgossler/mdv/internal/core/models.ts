@@ -77,6 +77,11 @@ export interface Defaults {
     "monospace": boolean;
 
     /**
+     * console/TUI wrap cap in columns (0 = no cap)
+     */
+    "maxWidth": number;
+
+    /**
      * Behaviour.
      * "filename" | "title"
      */

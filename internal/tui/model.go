@@ -492,6 +492,9 @@ func (m *Model) contentWidth() int {
 	if m.showList {
 		w -= sidebarWidth
 	}
+	if m.cfg.MaxWidth > 0 && w > m.cfg.MaxWidth {
+		w = m.cfg.MaxWidth
+	}
 	if w < 20 {
 		w = 20
 	}

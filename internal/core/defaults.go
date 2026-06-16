@@ -15,6 +15,7 @@ type Defaults struct {
 	LineHeight     float64 `json:"lineHeight"`     // unit-less line-height multiplier
 	ContentWidthPx int     `json:"contentWidthPx"` // max readable column width
 	Monospace      bool    `json:"monospace"`      // use a monospaced content font
+	MaxWidth       int     `json:"maxWidth"`       // console/TUI wrap cap in columns (0 = no cap)
 
 	// Behaviour.
 	NavLabelMode   string  `json:"navLabelMode"`   // "filename" | "title"
@@ -52,6 +53,7 @@ func DefaultSettings() Defaults {
 		LineHeight:     1.6,
 		ContentWidthPx: 860,
 		Monospace:      false,
+		MaxWidth:       0,
 
 		NavLabelMode:   "filename",
 		FollowExternal: true,

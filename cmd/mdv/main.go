@@ -25,13 +25,14 @@ func main() {
 
 func run() int {
 	var (
-		flagTUI     = flag.Bool("tui", false, "force the interactive terminal UI")
-		flagGUI     = flag.Bool("gui", false, "force the graphical UI")
-		flagConsole = flag.Bool("console", false, "render to stdout and exit (no UI)")
-		flagC       = flag.Bool("c", false, "alias for --console")
-		flagVersion = flag.Bool("version", false, "print version and exit")
-		flagInit    = flag.Bool("init-config", false, "write a default settings.jsonc and exit")
-		flagNoColor = flag.Bool("no-color", false, "disable ANSI colors in console output")
+		flagTUI      = flag.Bool("tui", false, "force the interactive terminal UI")
+		flagGUI      = flag.Bool("gui", false, "force the graphical UI")
+		flagConsole  = flag.Bool("console", false, "render to stdout and exit (no UI)")
+		flagC        = flag.Bool("c", false, "alias for --console")
+		flagVersion  = flag.Bool("version", false, "print version and exit")
+		flagInit     = flag.Bool("init-config", false, "write a default settings.jsonc and exit")
+		flagNoColor  = flag.Bool("no-color", false, "disable ANSI colors in console output")
+		flagMaxWidth = flag.Int("max-width", 0, "cap the render width in columns (0 = full width)")
 	)
 	flag.Usage = usage
 	// Accept flags on either side of the positional input argument. Go's flag
@@ -48,6 +49,11 @@ func run() int {
 	cfg, cfgErr := core.LoadConfig()
 	if cfgErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", cfgErr)
+	}
+
+	// A --max-width on the command line overrides the configured cap.
+	if *flagMaxWidth > 0 {
+		cfg.MaxWidth = *flagMaxWidth
 	}
 
 	if *flagInit {
@@ -161,12 +167,12 @@ func runConsole(cfg core.Defaults, in core.Input, updCh <-chan core.UpdateInfo, 
 
 	switch in.Kind {
 	case core.InputStdin:
-		if err := console.Render(os.Stdout, string(in.Data), "", console.Options{Style: style}); err != nil {
+		if err := console.Render(os.Stdout, string(in.Data), "", console.Options{Style: style, MaxWidth: cfg.MaxWidth}); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			return 1
 		}
 	case core.InputFile:
-		if err := console.RenderFile(os.Stdout, in.Path, console.Options{Style: style, ShowHeader: true}); err != nil {
+		if err := console.RenderFile(os.Stdout, in.Path, console.Options{Style: style, MaxWidth: cfg.MaxWidth, ShowHeader: true}); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			return 1
 		}
@@ -214,11 +220,14 @@ func waitUpdate(ch <-chan core.UpdateInfo, d time.Duration) core.UpdateInfo {
 // reorderArgs returns args with all flag tokens (starting with "-") moved ahead
 // of positional arguments so flags are accepted on either side of the input
 // path. Everything after a literal "--" terminator is treated as positional.
-// All mdv flags are booleans, so no token consumes a following value.
+// Most mdv flags are booleans; flags that take a value (e.g. --max-width) carry
+// their following token along when it is not given in --flag=value form.
 func reorderArgs(args []string) []string {
+	valueFlags := map[string]bool{"-max-width": true, "--max-width": true}
 	var flags, positionals []string
 	terminated := false
-	for _, a := range args {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
 		case terminated:
 			positionals = append(positionals, a)
@@ -226,6 +235,13 @@ func reorderArgs(args []string) []string {
 			terminated = true
 		case len(a) > 1 && strings.HasPrefix(a, "-"):
 			flags = append(flags, a)
+			name := a
+			if eq := strings.IndexByte(a, '='); eq >= 0 {
+				name = a[:eq]
+			} else if valueFlags[name] && i+1 < len(args) {
+				i++
+				flags = append(flags, args[i])
+			}
 		default:
 			positionals = append(positionals, a)
 		}
@@ -245,6 +261,7 @@ func usage() {
 	fmt.Fprintf(w, "  --gui          force the graphical UI\n")
 	fmt.Fprintf(w, "  -c, --console  render to stdout and exit (headless-friendly)\n")
 	fmt.Fprintf(w, "  --no-color     disable ANSI colors in console output\n")
+	fmt.Fprintf(w, "  --max-width N  cap the render width to N columns\n")
 	fmt.Fprintf(w, "  --init-config  write a default settings.jsonc and exit\n")
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")
