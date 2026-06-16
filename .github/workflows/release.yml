@@ -3,16 +3,21 @@ name: release
 # Builds the self-contained `mdv` executable on each native platform (the Wails
 # GUI helper needs the platform's native webview toolchain, so we build per-OS
 # rather than cross-compiling), code-signs/notarizes the macOS binary and
-# AuthentiCode-signs the Windows binary, then attaches the artifacts to the
-# GitHub Release.
+# signs the Windows binary with Azure Artifact Signing, then attaches the
+# artifacts to the GitHub Release.
 #
 # Signing is automatic but optional: each step is skipped when its secrets are
 # absent, so the workflow still produces (unsigned) binaries for forks.
 #
 # Required repository secrets for signing:
-#   macOS  — APPLE_CERTIFICATE_P12_BASE64, APPLE_CERTIFICATE_PASSWORD,
-#            APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
-#   Windows— WINDOWS_CERTIFICATE_PFX_BASE64, WINDOWS_CERTIFICATE_PASSWORD
+#   macOS    — APPLE_CERTIFICATE_P12_BASE64, APPLE_CERTIFICATE_PASSWORD,
+#              APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
+#   Windows  — AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#              (Azure Artifact Signing via OpenID Connect / federated credential)
+# Required repository variables for Windows signing (non-secret config):
+#   AZURE_CODESIGNING_ENDPOINT  e.g. https://weu.codesigning.azure.net/
+#   AZURE_CODESIGNING_ACCOUNT   the Artifact Signing account name
+#   AZURE_CODESIGNING_PROFILE   the certificate profile name
 
 on:
   push:
@@ -22,6 +27,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # required for Azure Artifact Signing OIDC login
 
 jobs:
   build:
@@ -40,7 +46,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
-      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 != '' }}
+      HAS_WINDOWS_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,17 +94,6 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
           rm -f "$CERT"
 
-      # --- Windows signing setup -----------------------------------------------
-      - name: Decode Windows code-signing certificate
-        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
-        shell: pwsh
-        env:
-          CERT_B64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
-        run: |
-          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_B64))
-          "MDV_WINDOWS_SIGN_PFX=$pfx" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
       # --- Build (signs embedded helper + launcher when certs are present) -----
       - name: Build (Unix)
         if: runner.os != 'Windows'
@@ -107,12 +102,50 @@ jobs:
           MDV_MACOS_SIGN_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: scripts/build.sh "${GITHUB_REF_NAME}"
 
-      - name: Build (Windows)
+      # --- Windows build + Azure Artifact Signing ------------------------------
+      # The GUI helper is signed before it is embedded, so the build is split:
+      # build helper -> sign helper -> build launcher -> sign launcher.
+      - name: Build GUI helper (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        env:
-          MDV_WINDOWS_SIGN_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME"
+        run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME" -Stage helper
+
+      - name: Azure login for Artifact Signing (Windows)
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign GUI helper (Windows)
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_CODESIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_CODESIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_CODESIGNING_PROFILE }}
+          files: ${{ github.workspace }}\build\mdv-gui.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Build launcher (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME" -Stage launcher
+
+      - name: Sign launcher (Windows)
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_CODESIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_CODESIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_CODESIGNING_PROFILE }}
+          files: ${{ github.workspace }}\build\mdv.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       # --- macOS notarization --------------------------------------------------
       - name: Notarize (macOS)
