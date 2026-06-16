@@ -40,6 +40,7 @@ type InitInfo struct {
 	Kind         string         `json:"kind"` // "file" | "folder"
 	Path         string         `json:"path"`
 	Dir          string         `json:"dir"`
+	Fragment     string         `json:"fragment"`
 	AppName      string         `json:"appName"`
 	Version      string         `json:"version"`
 	Config       core.Defaults  `json:"config"`
@@ -64,6 +65,7 @@ func (b *Bridge) Init() InitInfo {
 		Kind:      kind,
 		Path:      b.input.Path,
 		Dir:       b.input.Dir,
+		Fragment:  b.input.Fragment,
 		AppName:   core.AppName,
 		Version:   core.Version,
 		Config:    b.cfg,
@@ -145,13 +147,19 @@ func (b *Bridge) Backlinks(path string) []core.Backlink {
 	return core.FindBacklinks(path, b.cfg, b.workspace)
 }
 
-// OpenInNewWindow launches a separate mdv process for the given path.
-func (b *Bridge) OpenInNewWindow(path string) string {
+// OpenInNewWindow launches a separate mdv process for the given path. An
+// optional fragment (anchor slug, without '#') makes the new window scroll to a
+// specific section after loading.
+func (b *Bridge) OpenInNewWindow(path string, fragment string) string {
 	exe, err := os.Executable()
 	if err != nil {
 		return err.Error()
 	}
-	if err := core.SpawnDetached(exe, path); err != nil {
+	arg := path
+	if fragment != "" {
+		arg = path + "#" + fragment
+	}
+	if err := core.SpawnDetached(exe, arg); err != nil {
 		return err.Error()
 	}
 	return ""

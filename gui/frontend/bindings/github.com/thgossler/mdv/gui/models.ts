@@ -36,6 +36,7 @@ export interface InitInfo {
     "kind": string;
     "path": string;
     "dir": string;
+    "fragment": string;
     "appName": string;
     "version": string;
     "config": core$0.Defaults;

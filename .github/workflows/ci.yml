@@ -1,0 +1,84 @@
+name: ci
+
+# Continuous integration: build the self-contained `mdv` executable on every
+# supported platform and run the test suite. Runs on pushes and pull requests so
+# breakages are caught before a release tag is cut. No signing or publishing
+# happens here — see release.yml for signed, notarized release artifacts.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: darwin-universal
+          - os: windows-latest
+            target: windows-amd64
+          - os: ubuntu-latest
+            target: linux-amd64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: gui/frontend/package-lock.json
+
+      - name: Install Wails v3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+
+      - name: Install Linux WebKitGTK (build-time only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+
+      - name: Go test
+        shell: bash
+        run: go test ./...
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: scripts/build.sh "${GITHUB_REF_NAME}"
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdv-${{ matrix.target }}
+          path: |
+            build/mdv
+            build/mdv.exe
+          if-no-files-found: error
+          retention-days: 7

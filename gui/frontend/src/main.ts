@@ -96,6 +96,7 @@ async function boot(): Promise<void> {
 
   if (info.kind === "file") {
     await openDocument(info.path, false);
+    if (info.fragment) scrollToSlug(info.fragment);
   } else {
     showFolderWelcome();
   }
@@ -152,6 +153,7 @@ async function postProcess(headings: { level: number; text: string; slug: string
   await renderMermaid(els.content, isDark());
 
   buildTOC(els.tocList, headings, (slug) => scrollToSlug(slug, true));
+  wireTocContextMenus();
   detachScrollSpy?.();
   detachScrollSpy = trackActiveHeading(els.contentWrap, els.tocList);
 
@@ -334,7 +336,12 @@ function renderNav(items: DocFileDTO[]): void {
       e.preventDefault();
       void openDocument(d.path, true);
     });
-    a.addEventListener("contextmenu", (e) => showContextMenu(e, d.path, true));
+    a.addEventListener("contextmenu", (e) =>
+      openMenu(e, [
+        { label: "Copy", fn: () => copyText(a.textContent || "") },
+        { label: "Open in New Window", fn: () => api.openNewWindow(d.path) },
+      ])
+    );
     els.navList.appendChild(a);
   }
   highlightActiveNav();
@@ -476,40 +483,94 @@ function wireMenuEvents(): void {
 function wireContextMenu(): void {
   els.content.addEventListener("contextmenu", (e) => {
     const a = (e.target as HTMLElement).closest("a") as HTMLAnchorElement | null;
-    let mdPath = "";
-    if (a) {
-      if (a.dataset.resolvedKind === "markdown" || a.dataset.resolvedKind === "wikilink") {
-        mdPath = a.dataset.resolved || "";
-      }
+    const reload = {
+      label: "Reload page",
+      fn: () => {
+        if (currentPath) void openDocument(currentPath, false);
+      },
+    };
+    if (a && isExternalLink(a)) {
+      const text = (a.textContent || "").trim();
+      const url = externalHref(a);
+      openMenu(e, [
+        { label: "Copy", fn: () => copyText(text) },
+        { label: "Copy hyperlink", fn: () => copyText(url) },
+        {
+          label: "Open in New Window",
+          fn: () => currentPath && api.openNewWindow(currentPath),
+        },
+        reload,
+      ]);
+      return;
     }
-    showContextMenu(e, mdPath, !!mdPath);
+    const sel = window.getSelection()?.toString() || "";
+    openMenu(e, [{ label: "Copy", fn: () => copyText(sel) }, reload]);
   });
   document.addEventListener("click", () => els.contextMenu.classList.add("hidden"));
 }
 
-function showContextMenu(e: MouseEvent, mdPath: string, canOpenWindow: boolean): void {
+// wireTocContextMenus attaches a custom context menu to each in-page nav entry,
+// replacing the default OS menu shown on the underlying anchors.
+function wireTocContextMenus(): void {
+  for (const a of Array.from(els.tocList.querySelectorAll<HTMLAnchorElement>(".toc-item"))) {
+    a.addEventListener("contextmenu", (e) =>
+      openMenu(e, [
+        { label: "Copy", fn: () => copyText(a.textContent || "") },
+        {
+          label: "Open in New Window",
+          fn: () => currentPath && api.openNewWindow(currentPath, a.dataset.slug || ""),
+        },
+      ])
+    );
+  }
+}
+
+interface MenuItem {
+  label: string;
+  fn: () => void;
+}
+
+// openMenu renders a custom context menu from the supplied items at the cursor.
+function openMenu(e: MouseEvent, items: MenuItem[]): void {
   e.preventDefault();
   const menu = els.contextMenu;
   menu.innerHTML = "";
-  const add = (label: string, fn: () => void) => {
-    const item = document.createElement("div");
-    item.className = "ctx-item";
-    item.textContent = label;
-    item.addEventListener("click", () => {
-      fn();
+  if (items.length === 0) return;
+  for (const it of items) {
+    const el = document.createElement("div");
+    el.className = "ctx-item";
+    el.textContent = it.label;
+    el.addEventListener("click", () => {
+      it.fn();
       menu.classList.add("hidden");
     });
-    menu.appendChild(item);
-  };
-
-  const sel = window.getSelection()?.toString();
-  if (sel) add("Copy", () => navigator.clipboard.writeText(sel));
-  if (canOpenWindow && mdPath) add("Open in New Window", () => api.openNewWindow(mdPath));
-  add("Reload", () => currentPath && openDocument(currentPath, false));
-
+    menu.appendChild(el);
+  }
   menu.style.left = `${e.clientX}px`;
   menu.style.top = `${e.clientY}px`;
   menu.classList.remove("hidden");
+}
+
+function copyText(text: string): void {
+  if (text) void navigator.clipboard.writeText(text);
+}
+
+// isExternalLink reports whether an anchor points outside the workspace (web,
+// mail or external file), as opposed to an internal markdown/anchor link.
+function isExternalLink(a: HTMLAnchorElement): boolean {
+  const kind = a.dataset.resolvedKind;
+  if (kind === "http" || kind === "mailto" || kind === "file") return true;
+  const href = a.getAttribute("href") || "";
+  return /^(https?:|mailto:|ftp:|file:)/i.test(href);
+}
+
+// externalHref returns the actual URL behind an external anchor.
+function externalHref(a: HTMLAnchorElement): string {
+  const kind = a.dataset.resolvedKind;
+  if (a.dataset.resolved && (kind === "http" || kind === "mailto" || kind === "file")) {
+    return a.dataset.resolved;
+  }
+  return a.getAttribute("href") || "";
 }
 
 function wireCodeCopy(): void {

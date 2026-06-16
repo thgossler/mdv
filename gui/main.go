@@ -8,6 +8,7 @@ import (
 	"embed"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -94,11 +95,20 @@ func resolveInput(cfg core.Defaults) core.Input {
 			arg = wd
 		}
 	}
+	// Split off an optional "#fragment" so a new window can open at a section.
+	fragment := ""
+	if i := strings.LastIndex(arg, "#"); i > 0 {
+		if _, err := os.Stat(arg[:i]); err == nil {
+			fragment = arg[i+1:]
+			arg = arg[:i]
+		}
+	}
 	in, err := core.ResolveInput(arg)
 	if err != nil || in.Kind == core.InputNone {
 		if wd, err := os.Getwd(); err == nil {
 			in = core.Input{Kind: core.InputFolder, Path: wd, Dir: wd}
 		}
 	}
+	in.Fragment = fragment
 	return in
 }

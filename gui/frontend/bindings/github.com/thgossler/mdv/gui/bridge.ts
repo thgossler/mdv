@@ -42,10 +42,12 @@ export function OpenExternal(target: string): $CancellablePromise<string> {
 }
 
 /**
- * OpenInNewWindow launches a separate mdv process for the given path.
+ * OpenInNewWindow launches a separate mdv process for the given path. An
+ * optional fragment (anchor slug, without '#') makes the new window scroll to a
+ * specific section after loading.
  */
-export function OpenInNewWindow(path: string): $CancellablePromise<string> {
-    return $Call.ByID(262853242, path);
+export function OpenInNewWindow(path: string, fragment: string): $CancellablePromise<string> {
+    return $Call.ByID(262853242, path, fragment);
 }
 
 /**

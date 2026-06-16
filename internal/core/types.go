@@ -105,4 +105,7 @@ type Input struct {
 	// Dir is the directory used as the workspace root. For a file input this is
 	// the file's parent directory.
 	Dir string
+	// Fragment is an optional in-page anchor (slug, without the leading '#') to
+	// scroll to once the document is opened.
+	Fragment string
 }

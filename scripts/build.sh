@@ -25,6 +25,22 @@ GOARCH="$(go env GOARCH)"
 HELPER_EXT=""
 [ "$GOOS" = "windows" ] && HELPER_EXT=".exe"
 
+# macos_sign code-signs a Mach-O file with the Developer ID identity in
+# MDV_MACOS_SIGN_IDENTITY (a no-op when that variable is unset, e.g. local dev
+# builds). Both the embedded GUI helper and the final launcher are signed so the
+# hardened runtime and Gatekeeper accept them; the helper must be signed *before*
+# it is gzipped into the launcher.
+MDV_MACOS_ENTITLEMENTS="${MDV_MACOS_ENTITLEMENTS:-$ROOT/scripts/macos-entitlements.plist}"
+macos_sign() {
+  local file="$1"
+  [ "$GOOS" = "darwin" ] || return 0
+  [ -n "${MDV_MACOS_SIGN_IDENTITY:-}" ] || return 0
+  echo "    codesign: $file"
+  codesign --force --options runtime --timestamp \
+    --entitlements "$MDV_MACOS_ENTITLEMENTS" \
+    --sign "$MDV_MACOS_SIGN_IDENTITY" "$file"
+}
+
 mkdir -p build internal/launcher/assets
 
 echo "==> [1/4] Building frontend"
@@ -53,6 +69,7 @@ if [ "$GOOS" = "darwin" ]; then
 else
   go build -tags production -ldflags "$LDFLAGS" -o "build/mdv-gui${HELPER_EXT}" ./gui
 fi
+macos_sign "build/mdv-gui${HELPER_EXT}"
 
 echo "==> [3/4] Compressing GUI helper into launcher assets"
 gzip -9 -c "build/mdv-gui${HELPER_EXT}" > internal/launcher/assets/mdv-gui.gz
@@ -67,6 +84,7 @@ if [ "$GOOS" = "darwin" ]; then
 else
   go build -tags gui_bundled -ldflags "$LDFLAGS" -o "build/mdv${HELPER_EXT}" ./cmd/mdv
 fi
+macos_sign "build/mdv${HELPER_EXT}"
 
 echo
 echo "Done: build/mdv${HELPER_EXT}  (version ${VERSION}, ${GOOS}/${GOARCH})"

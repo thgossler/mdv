@@ -32,6 +32,10 @@ Pop-Location
 $env:CGO_ENABLED = "1"
 go build -tags production -ldflags $LdFlags -o build/mdv-gui.exe ./gui
 
+# AuthentiCode-sign the GUI helper *before* it is embedded (no-op without a
+# configured certificate; see scripts/sign-windows.ps1).
+& (Join-Path $PSScriptRoot "sign-windows.ps1") build/mdv-gui.exe
+
 Write-Host "==> [3/4] Compressing GUI helper into launcher assets"
 $in = [System.IO.File]::OpenRead("build/mdv-gui.exe")
 $out = [System.IO.File]::Create("internal/launcher/assets/mdv-gui.gz")
@@ -43,6 +47,9 @@ Get-Item internal/launcher/assets/mdv-gui.gz | Select-Object Length
 Write-Host "==> [4/4] Compiling self-contained launcher"
 $env:CGO_ENABLED = "0"
 go build -tags gui_bundled -ldflags $LdFlags -o build/mdv.exe ./cmd/mdv
+
+# AuthentiCode-sign the final launcher.
+& (Join-Path $PSScriptRoot "sign-windows.ps1") build/mdv.exe
 
 Write-Host ""
 Write-Host "Done: build/mdv.exe  (version $Version, windows/amd64)"

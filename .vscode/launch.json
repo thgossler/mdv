@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug GUI (Wails webview)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/gui",
+      "cwd": "${workspaceFolder}",
+      "buildFlags": "-tags production",
+      "args": ["${workspaceFolder}/README.md"],
+      "preLaunchTask": "build-frontend"
+    },
+    {
+      "name": "Debug Launcher (cmd/mdv)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/mdv",
+      "cwd": "${workspaceFolder}",
+      "args": ["${workspaceFolder}/README.md"]
+    },
+    {
+      "name": "Debug Console (--console)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/mdv",
+      "cwd": "${workspaceFolder}",
+      "args": ["--console", "${workspaceFolder}/README.md"]
+    },
+    {
+      "name": "Debug TUI (--tui)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/mdv",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--tui", "${workspaceFolder}/README.md"]
+    },
+    {
+      "name": "Attach to mdv process",
+      "type": "go",
+      "request": "attach",
+      "mode": "local",
+      "processId": 0
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Launcher + Attach GUI helper",
+      "configurations": ["Debug Launcher (cmd/mdv)", "Attach to mdv process"],
+      "stopAll": true
+    }
+  ]
+}

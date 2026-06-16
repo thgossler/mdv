@@ -1,0 +1,58 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "detail": "Full self-contained build (frontend + GUI helper + launcher).",
+      "type": "shell",
+      "linux": { "command": "scripts/build.sh" },
+      "osx": { "command": "scripts/build.sh" },
+      "windows": { "command": "pwsh", "args": ["-File", "scripts/build.ps1"] },
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$go"],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "build-frontend",
+      "detail": "Build only the Wails GUI frontend (TypeScript -> static assets).",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "options": { "cwd": "${workspaceFolder}/gui/frontend" },
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "generate-bindings",
+      "detail": "Regenerate the Wails TypeScript bindings from the Go bridge.",
+      "type": "shell",
+      "command": "wails3",
+      "args": ["generate", "bindings", "-ts", "-i", "-clean=true"],
+      "options": { "cwd": "${workspaceFolder}/gui" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "test",
+      "detail": "Run all Go tests.",
+      "type": "shell",
+      "command": "go",
+      "args": ["test", "./..."],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "typecheck-frontend",
+      "detail": "Type-check the frontend without emitting output.",
+      "type": "shell",
+      "command": "npx",
+      "args": ["tsc", "--noEmit"],
+      "options": { "cwd": "${workspaceFolder}/gui/frontend" },
+      "group": "test",
+      "problemMatcher": ["$tsc"]
+    }
+  ]
+}
