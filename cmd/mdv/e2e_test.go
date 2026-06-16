@@ -112,6 +112,24 @@ func TestE2EConsoleRender(t *testing.T) {
 	}
 }
 
+func TestE2EFlagAfterInputArg(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "doc.md")
+	body := "# Trailing Flag\n\nForced console mode via a trailing flag.\n"
+	if err := os.WriteFile(doc, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The flag follows the positional argument; it must still take effect.
+	out, code := runMDV(t, []string{"NO_COLOR=1"}, doc, "--console")
+	if code != 0 {
+		t.Fatalf("trailing --console exit code = %d, want 0 (output: %s)", code, out)
+	}
+	if !strings.Contains(out, "Trailing Flag") {
+		t.Errorf("console output missing heading: %q", out)
+	}
+}
+
 func TestE2EInitConfig(t *testing.T) {
 	cfgRoot := t.TempDir()
 	out, code := runMDV(t, []string{"XDG_CONFIG_HOME=" + cfgRoot}, "--init-config")

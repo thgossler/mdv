@@ -13,9 +13,9 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/thgossler/mdv/internal/core"
+	"github.com/thgossler/mdv/internal/mdfmt"
 )
 
 type focus int
@@ -506,20 +506,10 @@ func renderMarkdown(md string, width int, theme string) (string, error) {
 	case "dark":
 		style = "dark"
 	}
-	opts := []glamour.TermRendererOption{
-		glamour.WithWordWrap(width),
-		glamour.WithEmoji(),
-	}
-	if style == "auto" {
-		opts = append(opts, glamour.WithAutoStyle())
-	} else {
-		opts = append(opts, glamour.WithStandardStyle(style))
-	}
-	r, err := glamour.NewTermRenderer(opts...)
-	if err != nil {
-		return "", err
-	}
-	return r.Render(md)
+	// The TUI always renders to an interactive terminal, so emit OSC 8
+	// hyperlinks (clickable links without visible URLs) unless colors are off.
+	hyperlinks := os.Getenv("NO_COLOR") == ""
+	return mdfmt.Render(md, width, style, hyperlinks)
 }
 
 // View implements tea.Model.

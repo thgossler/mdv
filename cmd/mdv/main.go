@@ -34,7 +34,11 @@ func run() int {
 		flagNoColor = flag.Bool("no-color", false, "disable ANSI colors in console output")
 	)
 	flag.Usage = usage
-	flag.Parse()
+	// Accept flags on either side of the positional input argument. Go's flag
+	// package stops at the first non-flag token, so reorder flags ahead of
+	// positionals before parsing. All mdv flags are booleans, so no flag takes
+	// a separate value; everything after a literal "--" stays positional.
+	_ = flag.CommandLine.Parse(reorderArgs(os.Args[1:]))
 
 	if *flagVersion {
 		fmt.Println(strings.TrimPrefix(core.Version, "v"))
@@ -170,12 +174,34 @@ func waitUpdate(ch <-chan core.UpdateInfo, d time.Duration) core.UpdateInfo {
 	}
 }
 
+// reorderArgs returns args with all flag tokens (starting with "-") moved ahead
+// of positional arguments so flags are accepted on either side of the input
+// path. Everything after a literal "--" terminator is treated as positional.
+// All mdv flags are booleans, so no token consumes a following value.
+func reorderArgs(args []string) []string {
+	var flags, positionals []string
+	terminated := false
+	for _, a := range args {
+		switch {
+		case terminated:
+			positionals = append(positionals, a)
+		case a == "--":
+			terminated = true
+		case len(a) > 1 && strings.HasPrefix(a, "-"):
+			flags = append(flags, a)
+		default:
+			positionals = append(positionals, a)
+		}
+	}
+	return append(flags, positionals...)
+}
+
 func usage() {
 	w := flag.CommandLine.Output()
 	fmt.Fprintf(w, "%s %s — %s\n\n", core.AppName, core.Version, core.AppTagline)
 	fmt.Fprintf(w, "Usage:\n")
 	fmt.Fprintf(w, "  %s [flags] <file.md | folder>\n", core.AppName)
-	fmt.Fprintf(w, "  %s .            open the current directory as a folder\n\n", core.AppName)
+	fmt.Fprintf(w, "  %s .          open the current directory as a folder\n\n", core.AppName)
 	fmt.Fprintf(w, "Flags:\n")
 	fmt.Fprintf(w, "  --tui          force the interactive terminal UI\n")
 	fmt.Fprintf(w, "  --gui          force the graphical UI\n")

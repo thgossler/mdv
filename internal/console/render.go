@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/charmbracelet/glamour"
+	"github.com/thgossler/mdv/internal/mdfmt"
 	"golang.org/x/term"
 )
 
@@ -45,12 +45,12 @@ func Render(w io.Writer, markdown, path string, opt Options) error {
 		style = detectStyle()
 	}
 
-	r, err := newRenderer(style, width)
-	if err != nil {
-		return err
-	}
+	// Emit OSC 8 hyperlinks (clickable links without visible URLs) only on an
+	// interactive terminal with color enabled; piped or NO_COLOR output keeps
+	// the plain text+URL form so no information is lost.
+	hyperlinks := StdoutIsTTY() && os.Getenv("NO_COLOR") == ""
 
-	out, err := r.Render(markdown)
+	out, err := mdfmt.Render(markdown, width, style, hyperlinks)
 	if err != nil {
 		return err
 	}
@@ -60,19 +60,6 @@ func Render(w io.Writer, markdown, path string, opt Options) error {
 	}
 	_, err = io.WriteString(w, out)
 	return err
-}
-
-func newRenderer(style string, width int) (*glamour.TermRenderer, error) {
-	opts := []glamour.TermRendererOption{
-		glamour.WithWordWrap(width),
-		glamour.WithEmoji(),
-	}
-	if style == "auto" || style == "" {
-		opts = append(opts, glamour.WithAutoStyle())
-	} else {
-		opts = append(opts, glamour.WithStandardStyle(style))
-	}
-	return glamour.NewTermRenderer(opts...)
 }
 
 // detectWidth returns the terminal width, clamped to a readable range.
