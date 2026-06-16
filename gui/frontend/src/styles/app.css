@@ -105,11 +105,15 @@ body {
   border-right: none;
 }
 .sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 8px;
   border-bottom: 1px solid var(--border-muted);
 }
 .nav-filter {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -117,6 +121,9 @@ body {
   color: var(--fg);
   font-size: 13px;
   outline: none;
+}
+.sidebar-head .tb-btn {
+  flex: none;
 }
 .nav-filter:focus {
   border-color: var(--accent);

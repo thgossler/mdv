@@ -1,4 +1,4 @@
-import { Events } from "@wailsio/runtime";
+import { Events, Window } from "@wailsio/runtime";
 import "katex/dist/katex.min.css";
 import "./styles/themes.css";
 import "./styles/app.css";
@@ -34,6 +34,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const els = {
   content: $("content"),
   contentWrap: $<HTMLElement>("content-wrap"),
+  toolbar: $<HTMLElement>("toolbar"),
   sidebar: $("sidebar"),
   navList: $("nav-list"),
   navFilter: $<HTMLInputElement>("nav-filter"),
@@ -150,7 +151,7 @@ async function postProcess(headings: { level: number; text: string; slug: string
   wireCodeCopy();
   await renderMermaid(els.content, isDark());
 
-  buildTOC(els.tocList, headings, (slug) => scrollToSlug(slug));
+  buildTOC(els.tocList, headings, (slug) => scrollToSlug(slug, true));
   detachScrollSpy?.();
   detachScrollSpy = trackActiveHeading(els.contentWrap, els.tocList);
 
@@ -227,7 +228,7 @@ els.content.addEventListener("click", async (e) => {
       await openDocument(a.dataset.resolved!, true);
       if (a.dataset.fragment) scrollToSlug(a.dataset.fragment);
     } else if (kind === "anchor") {
-      scrollToSlug((a.dataset.resolved || "").replace(/^#/, ""));
+      scrollToSlug((a.dataset.resolved || "").replace(/^#/, ""), true);
     }
     return;
   }
@@ -236,7 +237,7 @@ els.content.addEventListener("click", async (e) => {
   if (!href) return;
 
   if (href.startsWith("#")) {
-    scrollToSlug(href.slice(1));
+    scrollToSlug(href.slice(1), true);
     return;
   }
 
@@ -247,7 +248,7 @@ els.content.addEventListener("click", async (e) => {
       if (res.fragment) scrollToSlug(res.fragment);
       break;
     case "anchor":
-      scrollToSlug(res.resolved.replace(/^#/, ""));
+      scrollToSlug(res.resolved.replace(/^#/, ""), true);
       break;
     case "http":
     case "mailto":
@@ -277,9 +278,14 @@ els.content.addEventListener("mouseover", async (e) => {
 });
 els.content.addEventListener("mouseout", () => (els.statusLeft.textContent = currentPath));
 
-function scrollToSlug(slug: string): void {
+function scrollToSlug(slug: string, record = false): void {
   const target = els.content.querySelector<HTMLElement>(`[id="${cssEscape(slug)}"]`);
   if (target) {
+    // Record the current position so Back returns to the previous section.
+    if (record && currentPath) {
+      history.push({ path: currentPath, scroll: els.contentWrap.scrollTop });
+      updateChrome();
+    }
     target.scrollIntoView({ behavior: "smooth", block: "start" });
     target.classList.add("anchor-flash");
     setTimeout(() => target.classList.remove("anchor-flash"), 1200);
@@ -291,6 +297,12 @@ function scrollToSlug(slug: string): void {
 function goBack(): void {
   const entry = history.pop();
   if (!entry) return;
+  // Same-document entries (in-page navigation) just restore the scroll position.
+  if (entry.path === currentPath) {
+    els.contentWrap.scrollTo({ top: entry.scroll, behavior: "smooth" });
+    updateChrome();
+    return;
+  }
   void openDocument(entry.path, false).then(() => {
     els.contentWrap.scrollTop = entry.scroll;
   });
@@ -387,6 +399,27 @@ function wireToolbar(): void {
   $("btn-theme").addEventListener("click", () => toggleTheme());
   $("btn-labels").addEventListener("click", toggleLabels);
   $("btn-mono").addEventListener("click", () => document.body.classList.toggle("mono"));
+
+  // Double-clicking the title-bar area performs the OS window action (zoom on
+  // macOS, maximise/restore elsewhere), matching native window behaviour.
+  els.toolbar.addEventListener("dblclick", (e) => {
+    if ((e.target as HTMLElement).closest("button, input, a, .history-menu")) return;
+    void titleBarAction();
+  });
+}
+
+// titleBarAction mirrors the platform's title-bar double-click: macOS uses the
+// native zoom, other platforms toggle maximise.
+async function titleBarAction(): Promise<void> {
+  try {
+    if (navigator.userAgent.includes("Macintosh")) {
+      await Window.Zoom();
+    } else {
+      await Window.ToggleMaximise();
+    }
+  } catch {
+    /* window control unavailable; ignore */
+  }
 }
 
 function toggleLabels(): void {

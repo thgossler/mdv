@@ -6,12 +6,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/thgossler/mdv/internal/console"
@@ -57,15 +55,11 @@ func run() int {
 		return 0
 	}
 
-	// Resolve input (positional arg) — prompt if interactive and none given.
+	// Resolve input (positional arg). With no argument, show usage and exit.
 	arg := flag.Arg(0)
 	if arg == "" {
-		next, ok := promptForInput()
-		if !ok {
-			usage()
-			return 2
-		}
-		arg = next
+		usage()
+		return 2
 	}
 
 	in, err := core.ResolveInput(arg)
@@ -173,25 +167,6 @@ func waitUpdate(ch <-chan core.UpdateInfo, d time.Duration) core.UpdateInfo {
 	case <-time.After(d):
 		return core.UpdateInfo{}
 	}
-}
-
-// promptForInput asks the user for a path when none was supplied and stdin is
-// interactive. It returns (path, true) on success.
-func promptForInput() (string, bool) {
-	if !console.StdinIsTTY() {
-		return "", false
-	}
-	fmt.Printf("%s %s\n\n", core.AppName, core.AppTagline)
-	fmt.Print("Enter a markdown file or folder (blank to cancel): ")
-	sc := bufio.NewScanner(os.Stdin)
-	if !sc.Scan() {
-		return "", false
-	}
-	line := strings.TrimSpace(sc.Text())
-	if line == "" {
-		return "", false
-	}
-	return line, true
 }
 
 func usage() {

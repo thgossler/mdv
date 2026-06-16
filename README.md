@@ -119,12 +119,12 @@ the result is a universal (arm64 + amd64) binary.
 ### Architecture
 
 ```
-cmd/mdv         pure-Go launcher (no webview linkage) — picks GUI/TUI/console
-internal/core   shared logic: config, links, slugs, backlinks, updates
-internal/console glamour-based stdout rendering
-internal/tui    Bubble Tea terminal UI
-internal/launcher environment detection + embedded GUI extraction/spawn
-gui/            Wails v3 GUI helper (Go bridge + TypeScript frontend)
+cmd/mdv             pure-Go launcher (no webview linkage) — picks GUI/TUI/console
+internal/core       shared logic: config, links, slugs, backlinks, updates
+internal/console    glamour-based stdout rendering
+internal/tui        Bubble Tea terminal UI
+internal/launcher   environment detection + embedded GUI extraction/spawn
+gui/                Wails v3 GUI helper (Go bridge + TypeScript frontend)
 ```
 
 The launcher embeds the GUI helper (gzip-compressed) and extracts it to a

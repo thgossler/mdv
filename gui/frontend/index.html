@@ -21,7 +21,6 @@
         </div>
         <div id="doc-title" class="doc-title"></div>
         <div class="toolbar-right">
-          <button id="btn-labels" class="tb-btn" title="Toggle filename/title (Cmd/Ctrl+T)">Aa</button>
           <button id="btn-mono" class="tb-btn" title="Toggle monospace">M</button>
           <button id="btn-toc" class="tb-btn" title="Toggle table of contents">⊟</button>
           <button id="btn-theme" class="tb-btn" title="Toggle theme (Cmd/Ctrl+J)">◐</button>
@@ -32,6 +31,7 @@
         <aside id="sidebar" class="sidebar">
           <div class="sidebar-head">
             <input id="nav-filter" class="nav-filter" type="text" placeholder="Filter documents…" />
+            <button id="btn-labels" class="tb-btn" title="Toggle filename/title (Cmd/Ctrl+T)">Aa</button>
           </div>
           <nav id="nav-list" class="nav-list"></nav>
         </aside>
@@ -47,7 +47,7 @@
           <article id="content" class="markdown-body"></article>
         </main>
 
-        <aside id="toc" class="toc hidden">
+        <aside id="toc" class="toc">
           <div class="panel-head">Contents</div>
           <nav id="toc-list" class="toc-list"></nav>
           <div id="backlinks-head" class="panel-head">Backlinks</div>
