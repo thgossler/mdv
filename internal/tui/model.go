@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/mdfmt"
+	"github.com/thgossler/mdv/internal/termimg"
 	"golang.org/x/term"
 )
 
@@ -609,7 +610,7 @@ func (m *Model) renderedRaw() string {
 	if m.renderCache != "" && m.renderCacheKey == key {
 		return m.renderCache
 	}
-	out, err := renderMarkdown(m.rawMarkdown, w-2, m.cfg.Theme)
+	out, err := renderMarkdown(m.rawMarkdown, w-2, m.cfg.Theme, m.imageRenderer())
 	if err != nil {
 		out = m.rawMarkdown
 	}
@@ -631,7 +632,7 @@ func (m *Model) rerender() {
 	m.viewport.SetContent(content)
 }
 
-func renderMarkdown(md string, width int, theme string) (string, error) {
+func renderMarkdown(md string, width int, theme string, images mdfmt.ImageRenderer) (string, error) {
 	if width < 20 {
 		width = 20
 	}
@@ -645,7 +646,27 @@ func renderMarkdown(md string, width int, theme string) (string, error) {
 	// The TUI always renders to an interactive terminal, so emit OSC 8
 	// hyperlinks (clickable links without visible URLs) unless colors are off.
 	hyperlinks := os.Getenv("NO_COLOR") == ""
-	return mdfmt.Render(md, width, style, hyperlinks)
+	return mdfmt.Render(md, width, style, hyperlinks, images)
+}
+
+// imageRenderer builds the image renderer for the current document. The TUI uses
+// the Unicode half-block renderer rather than a pixel protocol: inline graphics
+// (kitty/iTerm2/sixel) live outside Bubble Tea's cell grid and would be
+// overdrawn or smeared as the viewport scrolls, whereas half-blocks are just
+// colored text the viewport can manage. Returns nil when images are disabled.
+func (m *Model) imageRenderer() mdfmt.ImageRenderer {
+	if termimg.ParseMode(m.cfg.Images) == termimg.ModeOff {
+		return nil
+	}
+	if !termimg.SupportsColor(os.Stdout) {
+		return nil
+	}
+	dir := m.currentDir
+	if dir == "" {
+		dir = "."
+	}
+	r := termimg.NewRenderer(termimg.ProtocolBlocks, dir, m.cfg.ImagesRemote)
+	return r
 }
 
 // View implements tea.Model.

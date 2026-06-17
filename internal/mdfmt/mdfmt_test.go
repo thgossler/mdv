@@ -41,7 +41,7 @@ func TestConvertHTMLLeavesCodeProtectedByCaller(t *testing.T) {
 	// convertHTML itself does not protect code; Render does. Verify Render keeps
 	// HTML inside fenced code blocks intact.
 	in := "Text <h1>Head</h1>\n\n```\n<h1>literal</h1>\n```\n"
-	out, err := Render(in, 80, "notty", false)
+	out, err := Render(in, 80, "notty", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestConvertHTMLLeavesCodeProtectedByCaller(t *testing.T) {
 
 func TestHyperlinksHideURL(t *testing.T) {
 	in := "See [Example](https://example.com/very/long/path) now.\n"
-	out, err := Render(in, 80, "notty", true)
+	out, err := Render(in, 80, "notty", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestHyperlinksHideURL(t *testing.T) {
 
 func TestHyperlinksDisabledKeepsURL(t *testing.T) {
 	in := "See [Example](https://example.com) now.\n"
-	out, err := Render(in, 80, "notty", false)
+	out, err := Render(in, 80, "notty", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestHyperlinksDisabledKeepsURL(t *testing.T) {
 
 func TestHyperlinksImageInLinkUsesAlt(t *testing.T) {
 	in := "[![Platforms](https://img.shields.io/badge.svg)](https://github.com/owner/repo)\n"
-	out, err := Render(in, 80, "notty", true)
+	out, err := Render(in, 80, "notty", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestHyperlinksImageInLinkUsesAlt(t *testing.T) {
 
 func TestHyperlinksOrderPreserved(t *testing.T) {
 	in := "[one](https://a.example) and [two](https://b.example)\n"
-	out, err := Render(in, 80, "notty", true)
+	out, err := Render(in, 80, "notty", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestProtectRestoreCodeRoundTrip(t *testing.T) {
 
 func TestCompactTablesNarrowsColumns(t *testing.T) {
 	md := "| Flag | Description |\n| --- | --- |\n| x | Force the interactive terminal UI |\n| y | Force the graphical UI |\n"
-	out, err := Render(md, 120, "notty", false)
+	out, err := Render(md, 120, "notty", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestCompactTablesNarrowsColumns(t *testing.T) {
 
 func TestCompactTablesLeavesProseUntouched(t *testing.T) {
 	md := "Just a paragraph with a | pipe in it, no table here.\n"
-	out, err := Render(md, 120, "notty", false)
+	out, err := Render(md, 120, "notty", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

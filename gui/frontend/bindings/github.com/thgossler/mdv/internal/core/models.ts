@@ -105,6 +105,22 @@ export interface Defaults {
     "maxZoom": number;
 
     /**
+     * Terminal image rendering (console/TUI):
+     *   "auto"     pick the best method the terminal supports
+     *   "graphics" force a pixel protocol (kitty/iTerm2/sixel)
+     *   "blocks"   force the Unicode half-block renderer
+     *   "off"      show alt text only
+     */
+    "images": string;
+
+    /**
+     * ImagesRemote allows fetching http(s) images in the console/TUI. On by
+     * default; failures (no network, restricted environments) fall back to alt
+     * text. Set to false to disable remote fetches entirely.
+     */
+    "imagesRemote": boolean;
+
+    /**
      * Updates.
      */
     "checkForUpdates": boolean;

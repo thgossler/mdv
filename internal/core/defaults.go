@@ -25,6 +25,17 @@ type Defaults struct {
 	MinZoom        float64 `json:"minZoom"`
 	MaxZoom        float64 `json:"maxZoom"`
 
+	// Terminal image rendering (console/TUI):
+	//   "auto"     pick the best method the terminal supports
+	//   "graphics" force a pixel protocol (kitty/iTerm2/sixel)
+	//   "blocks"   force the Unicode half-block renderer
+	//   "off"      show alt text only
+	Images string `json:"images"`
+	// ImagesRemote allows fetching http(s) images in the console/TUI. On by
+	// default; failures (no network, restricted environments) fall back to alt
+	// text. Set to false to disable remote fetches entirely.
+	ImagesRemote bool `json:"imagesRemote"`
+
 	// Updates.
 	CheckForUpdates  bool   `json:"checkForUpdates"`
 	UpdateRepo       string `json:"updateRepo"`       // "owner/repo" on GitHub
@@ -61,6 +72,9 @@ func DefaultSettings() Defaults {
 		ZoomStep:       0.1,
 		MinZoom:        0.5,
 		MaxZoom:        3.0,
+
+		Images:       "auto",
+		ImagesRemote: true,
 
 		CheckForUpdates:  true,
 		UpdateRepo:       "thgossler/mdv",

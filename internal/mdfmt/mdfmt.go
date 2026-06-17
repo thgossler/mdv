@@ -71,10 +71,20 @@ var (
 // hyperlinks is true, links are emitted as OSC 8 escape sequences so only their
 // text is shown; otherwise glamour renders links in its usual text+URL form.
 //
+// When images is non-nil, standalone images are rendered into terminal cell
+// blocks (graphics or half-blocks) in place; images that cannot be rendered
+// keep their alt text.
+//
 // style is "auto"/"" for automatic light/dark detection, or a glamour standard
 // style name such as "dark", "light" or "notty". width is the wrap column.
-func Render(markdown string, width int, style string, hyperlinks bool) (string, error) {
+func Render(markdown string, width int, style string, hyperlinks bool, images ImageRenderer) (string, error) {
 	src, code := protectCode(markdown)
+
+	var imgSubs map[string]string
+	if images != nil {
+		src, imgSubs = extractImages(src, images, width)
+	}
+
 	src = convertHTML(src)
 
 	var urls []string
@@ -96,6 +106,9 @@ func Render(markdown string, width int, style string, hyperlinks bool) (string, 
 		out = applyHyperlinks(out, urls)
 	}
 	out = compactTables(out)
+	if len(imgSubs) > 0 {
+		out = substituteImages(out, imgSubs)
+	}
 	return out, nil
 }
 

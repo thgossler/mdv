@@ -110,6 +110,7 @@ mdv --init-config        # write a default settings.jsonc
 | `--console`, `-c` | Render to stdout and exit              |
 | `--no-color`      | Disable ANSI colors in console output  |
 | `--max-width N`   | Cap the render width to N columns      |
+| `--images MODE`   | Image rendering: `auto`, `graphics`, `blocks`, `off` |
 | `--version`       | Print version and exit                 |
 | `--init-config`   | Write a default settings file and exit |
 
@@ -120,6 +121,7 @@ mdv --init-config        # write a default settings.jsonc
 - Math via KaTeX (`$inline$` and `$$block$$`)
 - Mermaid diagrams (theme-aware)
 - Syntax highlighting with 6 themes (Glyph, GitHub, Monokai, Nord, Solarized Light/Dark)
+- Inline images in the console and terminal UI
 - Wikilinks `[[doc]]`, `[[doc|alias]]`, `[[doc#heading]]` with a backlinks panel
 - Table-of-contents sidebar with scroll-spy, heading anchors
 - CSV/TSV fenced blocks rendered as tables
@@ -151,6 +153,8 @@ defaults. On Windows/macOS the location follows `XDG_CONFIG_HOME` if set.
   "navLabelMode": "filename", // or "title"
   "liveReload": true,
   "checkForUpdates": true,
+  "images": "auto", // "auto" | "graphics" | "blocks" | "off"
+  "imagesRemote": true, // fetch http(s) images in console/TUI (falls back to alt text)
 }
 ```
 

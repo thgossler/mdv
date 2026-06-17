@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/mdfmt"
+	"github.com/thgossler/mdv/internal/termimg"
 	"golang.org/x/term"
 )
 
@@ -24,6 +26,11 @@ type Options struct {
 	Style string
 	// ShowHeader prints the document path above the rendered content.
 	ShowHeader bool
+	// ImageMode selects how images are drawn ("auto"|"graphics"|"blocks"|"off").
+	// Empty means "auto".
+	ImageMode string
+	// AllowRemoteImages permits fetching http(s) images.
+	AllowRemoteImages bool
 }
 
 // RenderFile reads a markdown file and writes rendered ANSI text to w.
@@ -56,7 +63,19 @@ func Render(w io.Writer, markdown, path string, opt Options) error {
 	// the plain text+URL form so no information is lost.
 	hyperlinks := StdoutIsTTY() && os.Getenv("NO_COLOR") == ""
 
-	out, err := mdfmt.Render(markdown, width, style, hyperlinks)
+	// Build an image renderer for the document's directory so relative image
+	// paths resolve. A ProtocolNone renderer (piped output, unsupported
+	// terminal) renders nothing and images keep their alt text.
+	var imgRenderer mdfmt.ImageRenderer
+	baseDir := "."
+	if path != "" {
+		baseDir = filepath.Dir(path)
+	}
+	if proto := termimg.Resolve(termimg.ParseMode(opt.ImageMode), os.Stdout); proto != termimg.ProtocolNone {
+		imgRenderer = termimg.NewRenderer(proto, baseDir, opt.AllowRemoteImages)
+	}
+
+	out, err := mdfmt.Render(markdown, width, style, hyperlinks, imgRenderer)
 	if err != nil {
 		return err
 	}

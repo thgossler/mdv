@@ -33,6 +33,7 @@ func run() int {
 		flagInit     = flag.Bool("init-config", false, "write a default settings.jsonc and exit")
 		flagNoColor  = flag.Bool("no-color", false, "disable ANSI colors in console output")
 		flagMaxWidth = flag.Int("max-width", 0, "cap the render width in columns (0 = full width)")
+		flagImages   = flag.String("images", "", "image rendering: auto|graphics|blocks|off")
 	)
 	flag.Usage = usage
 	// Accept flags on either side of the positional input argument. Go's flag
@@ -54,6 +55,11 @@ func run() int {
 	// A --max-width on the command line overrides the configured cap.
 	if *flagMaxWidth > 0 {
 		cfg.MaxWidth = *flagMaxWidth
+	}
+
+	// A --images value overrides the configured image rendering mode.
+	if *flagImages != "" {
+		cfg.Images = *flagImages
 	}
 
 	if *flagInit {
@@ -167,12 +173,12 @@ func runConsole(cfg core.Defaults, in core.Input, updCh <-chan core.UpdateInfo, 
 
 	switch in.Kind {
 	case core.InputStdin:
-		if err := console.Render(os.Stdout, string(in.Data), "", console.Options{Style: style, MaxWidth: cfg.MaxWidth}); err != nil {
+		if err := console.Render(os.Stdout, string(in.Data), "", console.Options{Style: style, MaxWidth: cfg.MaxWidth, ImageMode: cfg.Images, AllowRemoteImages: cfg.ImagesRemote}); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			return 1
 		}
 	case core.InputFile:
-		if err := console.RenderFile(os.Stdout, in.Path, console.Options{Style: style, MaxWidth: cfg.MaxWidth, ShowHeader: true}); err != nil {
+		if err := console.RenderFile(os.Stdout, in.Path, console.Options{Style: style, MaxWidth: cfg.MaxWidth, ShowHeader: true, ImageMode: cfg.Images, AllowRemoteImages: cfg.ImagesRemote}); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			return 1
 		}
@@ -223,7 +229,7 @@ func waitUpdate(ch <-chan core.UpdateInfo, d time.Duration) core.UpdateInfo {
 // Most mdv flags are booleans; flags that take a value (e.g. --max-width) carry
 // their following token along when it is not given in --flag=value form.
 func reorderArgs(args []string) []string {
-	valueFlags := map[string]bool{"-max-width": true, "--max-width": true}
+	valueFlags := map[string]bool{"-max-width": true, "--max-width": true, "-images": true, "--images": true}
 	var flags, positionals []string
 	terminated := false
 	for i := 0; i < len(args); i++ {
@@ -262,6 +268,7 @@ func usage() {
 	fmt.Fprintf(w, "  -c, --console  render to stdout and exit (headless-friendly)\n")
 	fmt.Fprintf(w, "  --no-color     disable ANSI colors in console output\n")
 	fmt.Fprintf(w, "  --max-width N  cap the render width to N columns\n")
+	fmt.Fprintf(w, "  --images MODE  image rendering: auto|graphics|blocks|off\n")
 	fmt.Fprintf(w, "  --init-config  write a default settings.jsonc and exit\n")
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")

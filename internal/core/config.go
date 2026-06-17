@@ -201,6 +201,17 @@ const defaultConfigTemplate = `// mdv — Markdown Document Viewer — user sett
   // Cap the console/terminal-UI render width (columns). 0 = use full width.
   "maxWidth": 0,
 
+  // Terminal image rendering (console/TUI):
+  //   "auto"     pick the best the terminal supports (kitty/iTerm2/sixel, else
+  //              low-res Unicode half-blocks, else alt text)
+  //   "graphics" force a pixel protocol (kitty/iTerm2/sixel)
+  //   "blocks"   force low-res Unicode half-blocks
+  //   "off"      show alt text only
+  "images": "auto",
+  // Allow fetching http(s) images in console/TUI (on by default; failures
+  // fall back to alt text). Set to false to disable remote fetches.
+  "imagesRemote": true,
+
   // Folder navigation label: "filename" | "title"
   "navLabelMode": "filename",
 
