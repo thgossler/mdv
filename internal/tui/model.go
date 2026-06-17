@@ -415,7 +415,7 @@ func (m *Model) openLinkPicker() {
 }
 
 func (m *Model) followLink(href string) {
-	target := core.ResolveLink(href, m.currentDir, m.cfg, m.workspace)
+	target := core.ResolveLink(href, m.currentDir, m.workspaceDir, m.cfg, m.workspace)
 	switch target.Kind {
 	case core.LinkMarkdown, core.LinkWikiInternal:
 		m.openPath(target.Resolved, true)

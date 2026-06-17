@@ -22,6 +22,7 @@ func TestFindBacklinks(t *testing.T) {
 	srcInline := write("a.md", "See [the target](target.md) for details.\n")
 	srcWiki := write("b.md", "Refer to [[target]] here.\n")
 	srcFenced := write("c.md", "```\n[fake](target.md)\n```\nno real link\n")
+	srcRooted := write("e.md", "Go to the [index](/target.md) page.\n")
 	_ = write("d.md", "Unrelated [link](https://example.com).\n")
 
 	workspace := []DocFile{
@@ -29,10 +30,11 @@ func TestFindBacklinks(t *testing.T) {
 		{Path: srcInline, Name: "a.md"},
 		{Path: srcWiki, Name: "b.md"},
 		{Path: srcFenced, Name: "c.md"},
+		{Path: srcRooted, Name: "e.md"},
 		{Path: filepath.Join(dir, "d.md"), Name: "d.md"},
 	}
 
-	got := FindBacklinks(target, cfg, workspace)
+	got := FindBacklinks(target, dir, cfg, workspace)
 
 	found := map[string]bool{}
 	for _, b := range got {
@@ -47,6 +49,9 @@ func TestFindBacklinks(t *testing.T) {
 	}
 	if !found["b.md"] {
 		t.Error("wikilink not detected as a backlink")
+	}
+	if !found["e.md"] {
+		t.Error("root-relative link not detected as a backlink")
 	}
 	if found["c.md"] {
 		t.Error("link inside a code fence must not count as a backlink")

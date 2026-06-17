@@ -22,7 +22,10 @@ type Backlink struct {
 
 // FindBacklinks scans every workspace document for links that resolve to
 // targetPath and returns the referencing locations with line snippets.
-func FindBacklinks(targetPath string, cfg Defaults, workspace []DocFile) []Backlink {
+//
+// rootDir is the workspace root, used to resolve root-relative links
+// (e.g. "/index.md") the same way the viewer does.
+func FindBacklinks(targetPath, rootDir string, cfg Defaults, workspace []DocFile) []Backlink {
 	var out []Backlink
 	target := normPath(targetPath)
 	targetStem := strings.ToLower(baseStem(targetPath))
@@ -33,7 +36,7 @@ func FindBacklinks(targetPath string, cfg Defaults, workspace []DocFile) []Backl
 		}
 		links := scanLinks(doc.Path)
 		for _, l := range links {
-			if linkMatchesTarget(l.href, doc.Path, target, targetStem, cfg, workspace) {
+			if linkMatchesTarget(l.href, doc.Path, rootDir, target, targetStem, cfg, workspace) {
 				out = append(out, Backlink{
 					SourcePath:  doc.Path,
 					SourceName:  doc.Name,
@@ -87,8 +90,8 @@ func scanLinks(path string) []scannedLink {
 	return links
 }
 
-func linkMatchesTarget(href, sourcePath, target, targetStem string, cfg Defaults, workspace []DocFile) bool {
-	tgt := ResolveLink(href, dirOf(sourcePath), cfg, workspace)
+func linkMatchesTarget(href, sourcePath, rootDir, target, targetStem string, cfg Defaults, workspace []DocFile) bool {
+	tgt := ResolveLink(href, dirOf(sourcePath), rootDir, cfg, workspace)
 	switch tgt.Kind {
 	case LinkMarkdown, LinkWikiInternal:
 		return normPath(tgt.Resolved) == target

@@ -14,7 +14,7 @@ import (
 // The resolver is deliberately tolerant: it URL-decodes paths, tries adding a
 // markdown extension when a file is missing, and degrades to LinkBroken rather
 // than erroring.
-func ResolveLink(raw, currentDir string, cfg Defaults, workspace []DocFile) LinkTarget {
+func ResolveLink(raw, currentDir, rootDir string, cfg Defaults, workspace []DocFile) LinkTarget {
 	href := strings.TrimSpace(raw)
 	t := LinkTarget{Raw: raw, Display: raw}
 
@@ -51,7 +51,7 @@ func ResolveLink(raw, currentDir string, cfg Defaults, workspace []DocFile) Link
 			t.Display = href
 		case "file":
 			if u, err := url.Parse(href); err == nil {
-				return resolveFilePath(u.Path, "", currentDir, cfg, raw)
+				return resolveFilePath(u.Path, "", currentDir, rootDir, cfg, raw)
 			}
 			t.Kind = LinkUnknown
 		default:
@@ -73,23 +73,22 @@ func ResolveLink(raw, currentDir string, cfg Defaults, workspace []DocFile) Link
 
 	// Local path, possibly with a #fragment.
 	path, frag := splitFragment(href)
-	return resolveFilePath(path, frag, currentDir, cfg, raw)
+	return resolveFilePath(path, frag, currentDir, rootDir, cfg, raw)
 }
 
 // resolveFilePath resolves a (possibly relative) filesystem path to a markdown,
 // external-file, or broken target.
-func resolveFilePath(path, frag, currentDir string, cfg Defaults, raw string) LinkTarget {
+//
+// rootDir is the workspace root. A root-relative link (one starting with "/",
+// as produced by Azure DevOps wiki) is first tried as a literal absolute
+// filesystem path; if nothing is found there, it is resolved relative to the
+// workspace root instead. rootDir may be empty to disable that fallback.
+func resolveFilePath(path, frag, currentDir, rootDir string, cfg Defaults, raw string) LinkTarget {
 	t := LinkTarget{Raw: raw, Fragment: frag, Display: raw}
 
 	decoded := decodePath(path)
 	decoded = expandHome(decoded)
 	decoded = filepath.FromSlash(decoded)
-
-	abs := decoded
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(currentDir, decoded)
-	}
-	abs = filepath.Clean(abs)
 
 	// Anchor-only after splitting (e.g. "#foo" already handled, but "./#foo").
 	if decoded == "" && frag != "" {
@@ -99,7 +98,25 @@ func resolveFilePath(path, frag, currentDir string, cfg Defaults, raw string) Li
 		return t
 	}
 
+	rootRelative := filepath.IsAbs(decoded)
+	abs := decoded
+	if !rootRelative {
+		abs = filepath.Join(currentDir, decoded)
+	}
+	abs = filepath.Clean(abs)
+
 	resolved, isMD, exists := probePath(abs, cfg)
+
+	// Root-relative link that is missing on disk: retry against the workspace
+	// root (Azure DevOps wiki style, e.g. "/index.md").
+	if !exists && rootRelative && rootDir != "" {
+		rel := strings.TrimPrefix(decoded, string(os.PathSeparator))
+		rooted := filepath.Clean(filepath.Join(rootDir, rel))
+		if r2, md2, ex2 := probePath(rooted, cfg); ex2 {
+			resolved, isMD, exists = r2, md2, ex2
+		}
+	}
+
 	t.Resolved = resolved
 	t.Display = resolved
 	if frag != "" {

@@ -36,14 +36,20 @@ func TestResolveLinkKinds(t *testing.T) {
 		{"//cdn.example.com/x", LinkHTTP},
 	}
 	for _, c := range cases {
-		got := ResolveLink(c.raw, dir, cfg, nil)
+		got := ResolveLink(c.raw, dir, dir, cfg, nil)
 		if got.Kind != c.want {
 			t.Errorf("ResolveLink(%q).Kind = %v, want %v", c.raw, got.Kind, c.want)
 		}
 	}
 
+	// Root-relative link ("/other.md") falls back to the workspace root when it
+	// does not exist as a literal absolute filesystem path.
+	if got := ResolveLink("/other.md", dir, dir, cfg, nil); got.Kind != LinkMarkdown || got.Resolved != mdPath {
+		t.Errorf("root-relative link: %+v", got)
+	}
+
 	// Fragment extraction.
-	if got := ResolveLink("other.md#features", dir, cfg, nil); got.Fragment != "features" {
+	if got := ResolveLink("other.md#features", dir, dir, cfg, nil); got.Fragment != "features" {
 		t.Errorf("fragment = %q, want %q", got.Fragment, "features")
 	}
 }

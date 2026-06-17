@@ -443,7 +443,7 @@ async function loadBacklinks(): Promise<void> {
     item.className = "backlink-item";
     item.tabIndex = -1;
     item.innerHTML = `<div class="backlink-name">${escapeHtml(
-      bl.sourceTitle || bl.sourceName
+      labelMode === "title" && bl.sourceTitle ? bl.sourceTitle : bl.sourceName
     )}</div><div class="backlink-snippet">${escapeHtml(bl.snippet)}</div>`;
     item.addEventListener("click", (e) => {
       e.preventDefault();
@@ -695,6 +695,7 @@ function onDragUp(): void {
 function toggleLabels(): void {
   labelMode = labelMode === "title" ? "filename" : "title";
   renderNav(currentFilter());
+  void loadBacklinks();
 }
 
 // toggleContentWidth switches between the readable, width-limited layout and a

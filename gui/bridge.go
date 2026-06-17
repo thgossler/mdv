@@ -168,7 +168,7 @@ type LinkTargetDTO struct {
 
 // ResolveLink classifies a raw href against the directory of the current doc.
 func (b *Bridge) ResolveLink(raw, currentDir string) LinkTargetDTO {
-	t := core.ResolveLink(raw, currentDir, b.cfg, b.workspace)
+	t := core.ResolveLink(raw, currentDir, b.input.Dir, b.cfg, b.workspace)
 	return LinkTargetDTO{
 		Kind:     t.Kind.String(),
 		Resolved: t.Resolved,
@@ -195,7 +195,7 @@ func (b *Bridge) WatchFile(path string) {
 
 // Backlinks returns documents that link to the given file.
 func (b *Bridge) Backlinks(path string) []core.Backlink {
-	return core.FindBacklinks(path, b.cfg, b.workspace)
+	return core.FindBacklinks(path, b.input.Dir, b.cfg, b.workspace)
 }
 
 // OpenInNewWindow launches a separate mdv process for the given path. An
