@@ -67,7 +67,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: Install Wails v3 CLI (Windows only)
         # scripts/build.ps1 calls wails3 directly; scripts/build.sh tolerates a
