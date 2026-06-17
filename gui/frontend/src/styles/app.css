@@ -248,12 +248,18 @@ body.pane-resizing {
   min-width: 0;
 }
 .markdown-body {
-  max-width: var(--content-width);
+  max-width: calc(var(--content-width) * var(--zoom));
   margin: 0 auto;
   padding: 32px 40px 120px;
   font-size: calc(var(--font-size) * var(--zoom));
   line-height: var(--line-height);
   transform-origin: top center;
+}
+/* Full-width mode keeps the column unbounded regardless of zoom. The explicit
+   override also guards against the calc() above (which would be invalid when
+   --content-width is `none`). */
+body.full-width .markdown-body {
+  max-width: none;
 }
 body.mono .markdown-body {
   font-family: var(--font-mono);

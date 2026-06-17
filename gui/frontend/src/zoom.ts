@@ -149,11 +149,14 @@ function syncImages(): void {
     const intrinsicW = intrinsicWidth(img, attrWidth);
     if (intrinsicW <= 0) continue;
 
-    // At 100% the image fits within the content column (downscaled only if its
-    // intrinsic width is wider). Zoom scales that fitted size linearly, and is
-    // allowed to exceed the column when zooming in — pixel images then simply
-    // become pixelated rather than being capped at the column width.
-    const fit = Math.min(1, contentWidth / intrinsicW);
+    // The content column itself scales with zoom (its max-width is
+    // `--content-width * --zoom`), so contentWidth already includes the zoom
+    // factor. Fit each image against the *unzoomed* column width, then re-apply
+    // the zoom once, so images track the column instead of growing twice as
+    // fast. When the window is narrower than the zoomed column, contentWidth is
+    // clamped to the window, which keeps images within view.
+    const baseContentWidth = level > 0 ? contentWidth / level : contentWidth;
+    const fit = Math.min(1, baseContentWidth / intrinsicW);
     const width = intrinsicW * fit * level;
     img.style.width = `${Math.round(width)}px`;
     // Allow the image to exceed the content column when zoomed in; the CSS
@@ -166,6 +169,33 @@ function syncImages(): void {
     } else {
       img.style.height = "auto";
     }
+
+    // Keep an explicitly centered image (inside an `align="center"` block)
+    // visually centered even when zoomed wider than the column. WebKit anchors
+    // an overflowing inline image to the left edge, so re-center it
+    // deterministically once it exceeds the content width.
+    centerOverflowingImage(img, width > contentWidth);
+  }
+}
+
+// centerOverflowingImage centers an image that has grown wider than its content
+// column. It is applied only to images within an `align="center"` container so
+// left-aligned and inline images (e.g. badge rows) are left untouched. When the
+// image fits again, the inline overrides are cleared so normal `text-align`
+// centering resumes.
+function centerOverflowingImage(img: HTMLImageElement, overflowing: boolean): void {
+  if (overflowing && img.closest('[align="center"]')) {
+    // display:block gives a deterministic left-anchored normal position; the
+    // left/transform pair then shifts the image to the column's center.
+    img.style.display = "block";
+    img.style.position = "relative";
+    img.style.left = "50%";
+    img.style.transform = "translateX(-50%)";
+  } else {
+    img.style.display = "";
+    img.style.position = "";
+    img.style.left = "";
+    img.style.transform = "";
   }
 }
 
