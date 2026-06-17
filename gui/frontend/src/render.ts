@@ -16,6 +16,7 @@ import { anchorsPlugin, type HeadingInfo } from "./md/anchors";
 import { csvPlugin } from "./md/csv";
 import { adoPlugin } from "./md/ado";
 import { mathPlugin } from "./md/math";
+import { imgsizePlugin } from "./md/imgsize";
 
 // RenderResult is the output of rendering a markdown document.
 export interface RenderResult {
@@ -49,6 +50,7 @@ function build(): MarkdownIt {
     .use(wikilinkPlugin)
     .use(csvPlugin)
     .use(adoPlugin)
+    .use(imgsizePlugin)
     .use(anchorsPlugin);
 
   return instance;

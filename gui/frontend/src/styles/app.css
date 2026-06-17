@@ -240,6 +240,11 @@ body.pane-resizing {
   flex: 1;
   position: relative;
   overflow-y: auto;
+  /* Clip horizontal overflow symmetrically so a zoomed-in centered image stays
+     visually centered. Leaving this as the default `auto` (implied by
+     overflow-y) would pin the scroll origin to the left and crop only that
+     side, making the image appear shifted. */
+  overflow-x: hidden;
   min-width: 0;
 }
 .markdown-body {

@@ -10,7 +10,7 @@ import { render } from "./render";
 import { extractFrontmatter, renderFrontmatter } from "./frontmatter";
 import { renderMermaid, renderMermaidSource } from "./mermaidRunner";
 import { initTheme, toggleTheme, setTheme, isDark, onThemeChange, type ThemeMode } from "./theme";
-import { initZoom, zoomIn, zoomOut, zoomReset } from "./zoom";
+import { initZoom, zoomIn, zoomOut, zoomReset, refreshZoom } from "./zoom";
 import { initSearch, showSearch, clearSearch } from "./search";
 import { buildTOC, trackActiveHeading } from "./toc";
 
@@ -135,6 +135,7 @@ async function renderInto(markdown: string, name: string, path: string): Promise
   if (/\.mmd$/i.test(path)) {
     await renderMermaidSource(els.content, markdown, isDark());
     els.docTitle.textContent = name;
+    refreshZoom();
     return;
   }
 
@@ -154,6 +155,7 @@ async function postProcess(headings: { level: number; text: string; slug: string
   fillAdoTocPlaceholders(headings);
   wireCodeCopy();
   await renderMermaid(els.content, isDark());
+  refreshZoom();
 
   buildTOC(els.tocList, headings, (slug) => scrollToSlug(slug, true));
   wireTocContextMenus();

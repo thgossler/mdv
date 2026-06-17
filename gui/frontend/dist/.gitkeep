@@ -1,4 +1,0 @@
-Placeholder so `//go:embed all:frontend/dist` in gui/main.go always resolves,
-even on a fresh checkout before `npm run build` has populated this directory.
-The real build artifacts (index.html, assets/) are gitignored and regenerated
-by scripts/build.sh. Do not delete this file.
