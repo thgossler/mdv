@@ -13,6 +13,7 @@ import { initTheme, toggleTheme, setTheme, isDark, onThemeChange, type ThemeMode
 import { initZoom, zoomIn, zoomOut, zoomReset, refreshZoom } from "./zoom";
 import { initSearch, showSearch, clearSearch } from "./search";
 import { buildTOC, trackActiveHeading } from "./toc";
+import { initFocusZones } from "./focuszones";
 
 // --- application state ------------------------------------------------------
 
@@ -84,6 +85,13 @@ async function boot(): Promise<void> {
   buildSidebar();
   wireToolbar();
   wireResizers();
+  initFocusZones({
+    navFilter: els.navFilter,
+    navList: els.navList,
+    contentWrap: els.contentWrap,
+    tocList: els.tocList,
+    backlinksList: els.backlinksList,
+  });
   wireMenuEvents();
   wireContextMenu();
   wireLiveReload();
@@ -106,7 +114,11 @@ async function boot(): Promise<void> {
 
 // --- rendering --------------------------------------------------------------
 
-async function openDocument(path: string, pushHistory: boolean): Promise<void> {
+async function openDocument(
+  path: string,
+  pushHistory: boolean,
+  opts: { focusContent?: boolean } = {}
+): Promise<void> {
   const doc = await api.read(path);
   if (doc.error) {
     els.content.innerHTML = `<div class="error">Cannot open <code>${escapeHtml(path)}</code>: ${escapeHtml(
@@ -124,6 +136,13 @@ async function openDocument(path: string, pushHistory: boolean): Promise<void> {
 
   await renderInto(doc.markdown, doc.name, path);
   els.contentWrap.scrollTop = 0;
+  // Focus the content view so plain navigation keys (Home/End) are delivered to
+  // it right after opening a document, without requiring a click first. Skip
+  // this when the caller wants to keep keyboard focus where it is (e.g. opening
+  // from the document navigator, so the user can keep arrowing through the list).
+  if (opts.focusContent !== false) {
+    els.contentWrap.focus({ preventScroll: true });
+  }
   updateChrome();
   highlightActiveNav();
 }
@@ -359,12 +378,16 @@ function renderNav(items: DocFileDTO[]): void {
   for (const d of items) {
     const a = document.createElement("a");
     a.className = "nav-item";
+    a.tabIndex = -1;
     a.dataset.path = d.path;
     a.textContent = labelMode === "title" && d.title ? d.title : d.name;
     a.title = d.rel || d.path;
     a.addEventListener("click", (e) => {
       e.preventDefault();
-      void openDocument(d.path, true);
+      // Keep keyboard focus on the navigator item so the user can keep arrowing
+      // through the list instead of being pulled into the content view.
+      a.focus();
+      void openDocument(d.path, true, { focusContent: false });
     });
     a.addEventListener("contextmenu", (e) =>
       openMenu(e, [
@@ -409,6 +432,7 @@ async function loadBacklinks(): Promise<void> {
   for (const bl of links) {
     const item = document.createElement("a");
     item.className = "backlink-item";
+    item.tabIndex = -1;
     item.innerHTML = `<div class="backlink-name">${escapeHtml(
       bl.sourceTitle || bl.sourceName
     )}</div><div class="backlink-snippet">${escapeHtml(bl.snippet)}</div>`;
@@ -877,5 +901,22 @@ document.addEventListener("keydown", (e) => {
     els.historyMenu.classList.add("hidden");
   }
 });
+
+// Clicking anywhere in the content view (outside the search field) gives it
+// keyboard focus so the navigation keys above are delivered to it.
+els.contentWrap.addEventListener("pointerdown", (e) => {
+  if (!isTypingTarget(e.target)) {
+    els.contentWrap.focus({ preventScroll: true });
+  }
+});
+
+// isTypingTarget reports whether the event originates from an editable field,
+// where Home/End must keep their normal caret behavior.
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
 
 void boot();

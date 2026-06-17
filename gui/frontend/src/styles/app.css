@@ -208,6 +208,8 @@ body.pane-resizing {
   border-color: var(--accent);
 }
 .nav-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 6px;
   display: flex;
@@ -236,6 +238,24 @@ body.pane-resizing {
 }
 
 /* Content ------------------------------------------------------------------ */
+/* The frame is the non-scrolling flex cell; the content view scrolls inside it.
+   The focus indicator is drawn as an absolutely-positioned overlay on the frame
+   (not an `outline`) because WebKit paints a scroll container's content on top
+   of an ancestor's outline, which would let scrolled text cover the top edge. */
+.content-frame {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  position: relative;
+}
+.content-frame:focus-within::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--accent);
+  pointer-events: none;
+  z-index: 6;
+}
 .content-wrap {
   flex: 1;
   position: relative;
@@ -246,6 +266,43 @@ body.pane-resizing {
      side, making the image appear shifted. */
   overflow-x: hidden;
   min-width: 0;
+}
+/* The content view is programmatically focusable (tabindex=-1) so the WebView
+   delivers plain navigation keys (Home/End) to it; never show its own ring. */
+.content-wrap:focus,
+.content-wrap:focus-visible {
+  outline: none;
+}
+/* Focus-zone indicators for the list areas: a thin accent outline around
+   the area that holds keyboard focus (navigator list, TOC, backlinks). */
+.nav-list:focus-within,
+.toc-list:focus-within,
+.backlinks-list:focus-within {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+}
+/* Suppress the per-item focus ring; the focused item is shown with a
+   background highlight instead, and the area outline marks the active zone. */
+.nav-item:focus,
+.toc-item:focus,
+.backlink-item:focus {
+  outline: none;
+}
+.nav-list:focus-within .nav-item:focus {
+  background: var(--hover);
+  color: var(--fg);
+}
+.nav-list:focus-within .nav-item.active:focus {
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: inset 0 0 0 2px var(--bg-elevated);
+}
+.toc-list:focus-within .toc-item:focus {
+  background: var(--hover);
+  color: var(--fg);
+}
+.backlinks-list:focus-within .backlink-item:focus {
+  background: var(--hover);
 }
 .markdown-body {
   max-width: calc(var(--content-width) * var(--zoom));
@@ -271,7 +328,9 @@ body.mono .markdown-body {
   flex: none;
   border-left: 1px solid var(--border);
   background: var(--bg-elevated);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   padding: 12px;
 }
 .toc.hidden {
@@ -284,8 +343,12 @@ body.mono .markdown-body {
   letter-spacing: 0.05em;
   color: var(--fg-subtle);
   margin: 8px 4px;
+  flex: none;
 }
 .toc-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -317,6 +380,9 @@ body.mono .markdown-body {
   padding: 4px 8px;
 }
 .backlinks-list {
+  flex: none;
+  max-height: 30%;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;

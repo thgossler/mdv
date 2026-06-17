@@ -16,6 +16,7 @@ export function buildTOC(
   for (const h of headings) {
     const a = document.createElement("a");
     a.className = "toc-item";
+    a.tabIndex = -1;
     a.textContent = h.text;
     a.href = `#${h.slug}`;
     a.dataset.slug = h.slug;
