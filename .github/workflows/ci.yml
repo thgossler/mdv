@@ -40,7 +40,10 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: go vet
-        run: go vet ./...
+        # The quality gate has no native webview toolchain, so it covers only the
+        # pure-Go packages. The gui package (Wails + WebKit cgo) is built and
+        # tested in the platform matrix below, which installs the webview deps.
+        run: go vet $(go list ./... | grep -v '/gui$')
 
       - name: Check gofmt
         run: |
@@ -52,7 +55,7 @@ jobs:
           fi
 
       - name: Run unit + e2e tests (race + coverage)
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/gui$')
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
