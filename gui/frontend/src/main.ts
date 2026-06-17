@@ -354,7 +354,7 @@ function goBack(): void {
     updateChrome();
     return;
   }
-  void openDocument(entry.path, false).then(() => {
+  void openDocument(entry.path, false, { focusContent: false }).then(() => {
     els.contentWrap.scrollTop = entry.scroll;
   });
 }
@@ -370,6 +370,15 @@ function buildSidebar(): void {
         (d) => d.name.toLowerCase().includes(q) || (d.title || "").toLowerCase().includes(q)
       )
     );
+  });
+  // Escape clears the filter so the full document list is shown again.
+  els.navFilter.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && els.navFilter.value !== "") {
+      e.preventDefault();
+      e.stopPropagation();
+      els.navFilter.value = "";
+      renderNav(workspace);
+    }
   });
 }
 
@@ -899,6 +908,17 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "Escape") {
     els.contextMenu.classList.add("hidden");
     els.historyMenu.classList.add("hidden");
+  } else if (
+    e.key === "Backspace" &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.altKey &&
+    !isTypingTarget(e.target)
+  ) {
+    // Backspace anywhere (outside editable fields, where it deletes text)
+    // navigates the content view back to the previous history entry.
+    e.preventDefault();
+    goBack();
   }
 });
 
