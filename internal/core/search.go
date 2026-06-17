@@ -231,11 +231,17 @@ func searchInMemory(ctx context.Context, files []DocFile, keywords []string, emi
 		}()
 	}
 
+	// Feed jobs, but stop promptly when the context is cancelled. Selecting on
+	// ctx.Done() during the send guarantees the sender never blocks forever even
+	// if every worker has already exited on cancellation.
 	for _, f := range files {
-		if ctx.Err() != nil {
-			break
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return
+		case jobs <- f:
 		}
-		jobs <- f
 	}
 	close(jobs)
 	wg.Wait()

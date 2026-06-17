@@ -44,6 +44,10 @@ let searchGen = 0;
 let searchKeywords: string[] = [];
 const searchResults = new Map<string, ContentMatch[]>();
 let searchDebounce: number | undefined;
+// Coalesces the (potentially rapid) streamed search results into at most one
+// nav-list rebuild per animation frame so the main thread stays responsive to
+// typing while results pour in.
+let searchRenderRaf: number | undefined;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -427,6 +431,7 @@ function toggleContentSearch(): void {
   searchGen++;
   searchResults.clear();
   searchKeywords = [];
+  cancelSearchRender();
   if (contentSearchMode) {
     onNavFilterInput();
     els.navFilter.focus();
@@ -452,7 +457,7 @@ function splitKeywords(query: string): string[] {
 // scheduleContentSearch debounces input so rapid typing issues a single search.
 function scheduleContentSearch(): void {
   if (searchDebounce !== undefined) clearTimeout(searchDebounce);
-  searchDebounce = window.setTimeout(runContentSearch, 180);
+  searchDebounce = window.setTimeout(runContentSearch, 500);
 }
 
 function runContentSearch(): void {
@@ -460,6 +465,7 @@ function runContentSearch(): void {
   searchKeywords = keywords;
   searchGen++;
   searchResults.clear();
+  cancelSearchRender();
   if (keywords.length === 0) {
     renderSearchNav();
     return;
@@ -475,12 +481,32 @@ function wireContentSearchEvents(): void {
   Events.On("content-search:result", (ev: { data: { gen: number; result: { path: string; matches: ContentMatch[] } } }) => {
     if (!contentSearchMode || ev.data.gen !== searchGen) return;
     searchResults.set(ev.data.result.path, ev.data.result.matches || []);
-    renderSearchNav();
+    scheduleSearchRender();
   });
   Events.On("content-search:done", (ev: { data: { gen: number; count: number } }) => {
     if (!contentSearchMode || ev.data.gen !== searchGen) return;
+    scheduleSearchRender();
+  });
+}
+
+// scheduleSearchRender coalesces streamed result events into a single nav-list
+// rebuild per animation frame. Rebuilding the whole list on every event would
+// thrash the main thread and block typing while results stream in.
+function scheduleSearchRender(): void {
+  if (searchRenderRaf !== undefined) return;
+  searchRenderRaf = requestAnimationFrame(() => {
+    searchRenderRaf = undefined;
     renderSearchNav();
   });
+}
+
+// cancelSearchRender drops a pending coalesced render (used when a fresh search
+// supersedes the streaming results of a previous one).
+function cancelSearchRender(): void {
+  if (searchRenderRaf !== undefined) {
+    cancelAnimationFrame(searchRenderRaf);
+    searchRenderRaf = undefined;
+  }
 }
 
 // nameQualifies reports whether a document's name/title contains every keyword.
@@ -494,21 +520,23 @@ function nameQualifies(d: DocFileDTO): boolean {
 // matches OR whose name/title contains all keywords, in workspace order, each
 // with its matches nested beneath.
 function renderSearchNav(): void {
-  els.navList.innerHTML = "";
   if (searchKeywords.length === 0) {
     // Empty query: show the full document list (no matches).
     renderNav(workspace);
     return;
   }
+  // Build the rows off-DOM and swap them in once to minimise reflow.
+  const frag = document.createDocumentFragment();
   for (const d of workspace) {
     const matches = searchResults.get(d.path);
     const qualifies = (matches && matches.length > 0) || nameQualifies(d);
     if (!qualifies) continue;
-    els.navList.appendChild(makeNavItem(d));
+    frag.appendChild(makeNavItem(d));
     if (matches) {
-      for (const m of matches) els.navList.appendChild(makeNavMatch(d, m));
+      for (const m of matches) frag.appendChild(makeNavMatch(d, m));
     }
   }
+  els.navList.replaceChildren(frag);
   highlightActiveNav();
 }
 
