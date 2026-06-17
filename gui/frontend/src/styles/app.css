@@ -218,6 +218,7 @@ body.pane-resizing {
 }
 .nav-item {
   display: block;
+  flex: none;
   padding: 5px 8px;
   border-radius: var(--radius);
   color: var(--fg-muted);
@@ -354,6 +355,7 @@ body.mono .markdown-body {
 }
 .toc-item {
   display: block;
+  flex: none;
   padding: 3px 8px;
   font-size: 12.5px;
   color: var(--fg-muted);
@@ -389,6 +391,7 @@ body.mono .markdown-body {
 }
 .backlink-item {
   display: block;
+  flex: none;
   padding: 6px 8px;
   border-radius: var(--radius);
   text-decoration: none;
