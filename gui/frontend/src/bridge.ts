@@ -7,10 +7,11 @@ import type {
   LinkTargetDTO,
   DocFileDTO,
   UpdateDTO,
+  LayoutDTO,
 } from "../bindings/github.com/thgossler/mdv/gui/models";
 import type { Backlink } from "../bindings/github.com/thgossler/mdv/internal/core/models";
 
-export type { InitInfo, DocumentDTO, LinkTargetDTO, DocFileDTO, UpdateDTO, Backlink };
+export type { InitInfo, DocumentDTO, LinkTargetDTO, DocFileDTO, UpdateDTO, LayoutDTO, Backlink };
 
 export const api = {
   init: (): Promise<InitInfo> => Bridge.Init(),
@@ -22,4 +23,7 @@ export const api = {
     Bridge.OpenInNewWindow(path, fragment),
   backlinks: (path: string): Promise<Backlink[] | null> => Bridge.Backlinks(path),
   watch: (path: string): Promise<void> => Bridge.WatchFile(path),
+  saveLayout: (sidebarWidth: number, tocWidth: number): Promise<void> =>
+    Bridge.SaveLayout(sidebarWidth, tocWidth),
+  resetLayout: (): Promise<LayoutDTO> => Bridge.ResetLayout(),
 };

@@ -27,6 +27,12 @@ body {
   overflow: hidden;
 }
 
+/* Hidden until boot applies the persisted side-panel widths, so the panes never
+   flash at their default width and then jump to the stored size on start. */
+#app.layout-pending {
+  visibility: hidden;
+}
+
 /* Native window-resize handles -------------------------------------------- */
 /* Secondary guard for the JS drag path: the `--wails-draggable: drag` toolbar
    would otherwise let a mousemove starting in the top few pixels move the window

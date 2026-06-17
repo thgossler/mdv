@@ -79,6 +79,11 @@ func WriteDefaultConfig() (string, error) {
 	return path, nil
 }
 
+// StripJSONC removes comments and trailing commas from a JSONC byte slice so it
+// can be parsed by encoding/json. It is exported for other packages (e.g. the
+// GUI) that read JSONC files such as state.jsonc.
+func StripJSONC(in []byte) []byte { return stripJSONC(in) }
+
 // stripJSONC removes // line comments, /* block */ comments and trailing commas
 // from a JSONC byte slice so it can be parsed by encoding/json. It is
 // string/escape aware so comment markers inside string literals are preserved.

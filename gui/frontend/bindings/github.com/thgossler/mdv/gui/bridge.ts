@@ -59,6 +59,15 @@ export function ReadDocument(path: string): $CancellablePromise<$models.Document
 }
 
 /**
+ * ResetLayout restores the window to its default size (centered) and the side
+ * panels to their default widths, persisting the result. It returns the default
+ * panel widths so the frontend can update its CSS variables.
+ */
+export function ResetLayout(): $CancellablePromise<$models.LayoutDTO> {
+    return $Call.ByID(2586955248);
+}
+
+/**
  * ResolveAsset resolves a local image/media reference (e.g. "images/icon.png")
  * against the directory of the current document and returns it as a data URI so
  * the webview can display it. The embedded asset server only serves the
@@ -76,6 +85,14 @@ export function ResolveAsset(src: string, currentDir: string): $CancellablePromi
  */
 export function ResolveLink(raw: string, currentDir: string): $CancellablePromise<$models.LinkTargetDTO> {
     return $Call.ByID(1030816277, raw, currentDir);
+}
+
+/**
+ * SaveLayout records the current side-panel widths (in pixels). The store
+ * debounces the write, so the frontend may call this freely on every drag.
+ */
+export function SaveLayout(sidebarWidth: number, tocWidth: number): $CancellablePromise<void> {
+    return $Call.ByID(1777614844, sidebarWidth, tocWidth);
 }
 
 /**

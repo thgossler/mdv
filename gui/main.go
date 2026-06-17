@@ -53,7 +53,9 @@ func runGUI() error {
 
 	app.Menu.Set(buildMenu(app))
 
-	st := LoadWindowState()
+	st := LoadLayoutState()
+	store := NewLayoutStore(st)
+	bridge.layout = store
 	// Home/End (with or without Ctrl/Cmd) are swallowed by WKWebView before they
 	// reach the webview's JS or Wails' key-binding system: WKWebView consumes them
 	// for its own (here no-op) document scrolling and dispatches neither a DOM
@@ -67,8 +69,8 @@ func runGUI() error {
 	})
 	opts := application.WebviewWindowOptions{
 		Title:            core.AppName,
-		Width:            1100,
-		Height:           780,
+		Width:            defaultWindowWidth,
+		Height:           defaultWindowHeight,
 		MinWidth:         480,
 		MinHeight:        360,
 		BackgroundColour: application.NewRGB(255, 255, 255),
@@ -90,23 +92,46 @@ func runGUI() error {
 		},
 	}
 	if st.Valid {
-		opts.Width = st.Width
-		opts.Height = st.Height
+		if st.Width > 0 {
+			opts.Width = st.Width
+		}
+		if st.Height > 0 {
+			opts.Height = st.Height
+		}
 		opts.X = st.X
 		opts.Y = st.Y
 	}
 	win := app.Window.NewWithOptions(opts)
-	_ = win
+	bridge.window = win
+
+	// Restore the maximized state and persist subsequent geometry changes. The
+	// store debounces writes so a drag or resize burst becomes one file write.
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		if st.Valid && st.Maximized {
+			win.Maximise()
+		}
+	})
+	saveGeometry := func() {
+		if win.IsMaximised() {
+			store.UpdateGeometry(0, 0, 0, 0, true)
+			return
+		}
+		w, h := win.Size()
+		if w <= 0 || h <= 0 {
+			return
+		}
+		x, y := win.Position()
+		store.UpdateGeometry(x, y, w, h, false)
+	}
+	win.OnWindowEvent(events.Common.WindowDidMove, func(*application.WindowEvent) { saveGeometry() })
+	win.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) { saveGeometry() })
 
 	if err := app.Run(); err != nil {
 		return err
 	}
 
-	// Persist window geometry on exit.
-	if w, h := win.Size(); w > 0 {
-		x, y := win.Position()
-		SaveWindowState(WindowState{X: x, Y: y, Width: w, Height: h})
-	}
+	// Flush any pending geometry change on exit so nothing is lost.
+	store.Flush()
 	return nil
 }
 

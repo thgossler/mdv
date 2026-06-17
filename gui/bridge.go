@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/thgossler/mdv/internal/core"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // Bridge is the Wails service exposed to the frontend. Its exported methods are
@@ -22,6 +23,8 @@ type Bridge struct {
 	input     core.Input
 	workspace []core.DocFile
 	watcher   *Watcher
+	layout    *LayoutStore
+	window    *application.WebviewWindow
 }
 
 // NewBridge builds a Bridge for the given input and configuration.
@@ -51,6 +54,14 @@ type InitInfo struct {
 	Config    core.Defaults `json:"config"`
 	Workspace []DocFileDTO  `json:"workspace"`
 	Update    UpdateDTO     `json:"update"`
+	Layout    LayoutDTO     `json:"layout"`
+}
+
+// LayoutDTO carries the persisted side-panel widths (in pixels) so the frontend
+// can apply them before the first paint, avoiding panels jumping after start.
+type LayoutDTO struct {
+	SidebarWidth int `json:"sidebarWidth"`
+	TocWidth     int `json:"tocWidth"`
 }
 
 // UpdateDTO carries version-check results to the status bar.
@@ -76,7 +87,49 @@ func (b *Bridge) Init() InitInfo {
 		Config:    b.cfg,
 		Workspace: b.workspaceDTO(),
 		Update:    b.checkUpdate(),
+		Layout:    b.layoutDTO(),
 	}
+}
+
+// layoutDTO returns the persisted side-panel widths, substituting defaults for
+// any unset (zero) value.
+func (b *Bridge) layoutDTO() LayoutDTO {
+	sidebar, toc := defaultSidebarWidth, defaultTocWidth
+	if b.layout != nil {
+		st := b.layout.Get()
+		if st.SidebarWidth > 0 {
+			sidebar = st.SidebarWidth
+		}
+		if st.TocWidth > 0 {
+			toc = st.TocWidth
+		}
+	}
+	return LayoutDTO{SidebarWidth: sidebar, TocWidth: toc}
+}
+
+// SaveLayout records the current side-panel widths (in pixels). The store
+// debounces the write, so the frontend may call this freely on every drag.
+func (b *Bridge) SaveLayout(sidebarWidth, tocWidth int) {
+	if b.layout != nil {
+		b.layout.UpdatePanels(sidebarWidth, tocWidth)
+	}
+}
+
+// ResetLayout restores the window to its default size (centered) and the side
+// panels to their default widths, persisting the result. It returns the default
+// panel widths so the frontend can update its CSS variables.
+func (b *Bridge) ResetLayout() LayoutDTO {
+	if b.window != nil {
+		if b.window.IsMaximised() {
+			b.window.UnMaximise()
+		}
+		b.window.SetSize(defaultWindowWidth, defaultWindowHeight)
+		b.window.Center()
+	}
+	if b.layout != nil {
+		b.layout.ResetPanels()
+	}
+	return LayoutDTO{SidebarWidth: defaultSidebarWidth, TocWidth: defaultTocWidth}
 }
 
 func (b *Bridge) workspaceDTO() []DocFileDTO {

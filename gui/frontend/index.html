@@ -10,7 +10,7 @@
     <title>mdv</title>
   </head>
   <body class="theme-system">
-    <div id="app">
+    <div id="app" class="layout-pending">
       <!-- Thin no-drag strips along the top edge and top corners keep the JS
            `--wails-draggable` toolbar from grabbing those few pixels, so the
            native window frame owns them for resizing. The primary fix lives in
@@ -88,7 +88,8 @@
         <span id="status-left" class="status-left"></span>
         <span id="status-mid" class="status-mid"></span>
         <span id="status-right" class="status-right"></span>
-        <button id="btn-zoom-reset" class="status-btn" title="Reset zoom to 100%">Reset</button>
+        <button id="btn-zoom-reset" class="status-btn" title="Reset zoom to 100%">Reset Zoom</button>
+        <button id="btn-reset-layout" class="status-btn" title="Reset window size and panel widths to defaults">Reset Layout</button>
       </footer>
 
       <div id="context-menu" class="context-menu hidden"></div>

@@ -42,6 +42,16 @@ export interface InitInfo {
     "config": core$0.Defaults;
     "workspace": DocFileDTO[] | null;
     "update": UpdateDTO;
+    "layout": LayoutDTO;
+}
+
+/**
+ * LayoutDTO carries the persisted side-panel widths (in pixels) so the frontend
+ * can apply them before the first paint, avoiding panels jumping after start.
+ */
+export interface LayoutDTO {
+    "sidebarWidth": number;
+    "tocWidth": number;
 }
 
 /**

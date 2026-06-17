@@ -29,6 +29,10 @@ let currentDir = "";
 let history: HistoryEntry[] = [];
 let labelMode: "filename" | "title" = "filename";
 let detachScrollSpy: (() => void) | null = null;
+// The current document's filename and resolved title, kept so the toolbar title
+// can switch between them when the nav-panel label mode is toggled.
+let currentDocName = "";
+let currentDocTitle = "";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -62,6 +66,7 @@ async function boot(): Promise<void> {
   labelMode = info.config.navLabelMode === "title" ? "title" : "filename";
 
   applyConfigStyles();
+  applyLayout(info.layout);
   initTheme((info.config.theme as ThemeMode) || "system");
   onThemeChange(() => rerenderMermaidForTheme());
 
@@ -72,6 +77,7 @@ async function boot(): Promise<void> {
     onChange: (pct) => (els.statusRight.textContent = `${pct}%`),
   });
   $("btn-zoom-reset").addEventListener("click", () => zoomReset());
+  $("btn-reset-layout").addEventListener("click", () => void resetLayout());
 
   initSearch({
     bar: els.searchBar,
@@ -85,6 +91,9 @@ async function boot(): Promise<void> {
   buildSidebar();
   wireToolbar();
   wireResizers();
+  // Layout (panel widths) is now applied; reveal the UI so the panes never
+  // flash at their default width before jumping to the persisted size.
+  $("app").classList.remove("layout-pending");
   initFocusZones({
     navFilter: els.navFilter,
     navList: els.navList,
@@ -153,7 +162,9 @@ async function renderInto(markdown: string, name: string, path: string): Promise
   // `.mmd` files render as a standalone diagram.
   if (/\.mmd$/i.test(path)) {
     await renderMermaidSource(els.content, markdown, isDark());
-    els.docTitle.textContent = name;
+    currentDocName = name;
+    currentDocTitle = name;
+    applyDocTitle();
     refreshZoom();
     return;
   }
@@ -162,7 +173,9 @@ async function renderInto(markdown: string, name: string, path: string): Promise
   const result = render(fm.body);
   els.content.innerHTML = renderFrontmatter(fm.data) + result.html;
 
-  els.docTitle.textContent = chooseTitle(name, result.headings[0]?.text, fm.data);
+  currentDocName = name;
+  currentDocTitle = chooseTitle(name, result.headings[0]?.text, fm.data);
+  applyDocTitle();
 
   await postProcess(result.headings);
 }
@@ -490,8 +503,9 @@ function wireToolbar(): void {
 // wireResizers makes the navigation (left) and contents (right) panes
 // drag-resizable so long filenames, document titles or section headers stay
 // readable. The widths drive the `--sidebar-width` / `--toc-width` CSS custom
-// properties and are intentionally NOT persisted: every launch restores the
-// stylesheet defaults. Double-clicking a splitter resets that pane.
+// properties and are persisted to state.jsonc (debounced on the Go side) so the
+// layout is restored on the next launch. Double-clicking a splitter resets that
+// pane to the stylesheet default.
 function wireResizers(): void {
   const root = document.documentElement;
   // Capture the stylesheet defaults once so a double-click can restore them.
@@ -531,13 +545,17 @@ function wireResizers(): void {
         document.body.classList.remove("pane-resizing");
         resizer.removeEventListener("pointermove", onMove);
         resizer.removeEventListener("pointerup", onUp);
+        persistPanelWidths();
       };
       resizer.addEventListener("pointermove", onMove);
       resizer.addEventListener("pointerup", onUp);
     });
 
     // Double-click restores this pane to its default width.
-    resizer.addEventListener("dblclick", () => root.style.setProperty(cssVar, reset));
+    resizer.addEventListener("dblclick", () => {
+      root.style.setProperty(cssVar, reset);
+      persistPanelWidths();
+    });
   };
 
   // Sidebar splitter sits to the right of the pane: dragging right widens it.
@@ -557,6 +575,38 @@ function wireResizers(): void {
     defaultToc,
   );
 }
+
+// panelWidthPx reads a `--sidebar-width` / `--toc-width` custom property as an
+// integer pixel value (the properties are always stored in px).
+function panelWidthPx(cssVar: string): number {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(cssVar);
+  return Math.round(parseFloat(v)) || 0;
+}
+
+// persistPanelWidths sends the current side-panel widths to the backend, which
+// debounces the write so this can be called freely after each drag/reset.
+function persistPanelWidths(): void {
+  void api.saveLayout(panelWidthPx("--sidebar-width"), panelWidthPx("--toc-width"));
+}
+
+// applyLayout sets the persisted side-panel widths before the UI is revealed so
+// the panes appear at their stored size without flashing the default first.
+function applyLayout(layout: InitInfo["layout"]): void {
+  if (!layout) return;
+  const root = document.documentElement;
+  if (layout.sidebarWidth > 0) root.style.setProperty("--sidebar-width", `${layout.sidebarWidth}px`);
+  if (layout.tocWidth > 0) root.style.setProperty("--toc-width", `${layout.tocWidth}px`);
+}
+
+// resetLayout restores the window to its default size and the side panels to
+// their default widths, persisting the result via the backend.
+async function resetLayout(): Promise<void> {
+  const layout = await api.resetLayout();
+  const root = document.documentElement;
+  root.style.setProperty("--sidebar-width", `${layout.sidebarWidth}px`);
+  root.style.setProperty("--toc-width", `${layout.tocWidth}px`);
+}
+
 
 // titleBarAction mirrors the platform's title-bar double-click: it toggles the
 // window between maximized and its previous size.
@@ -695,7 +745,16 @@ function onDragUp(): void {
 function toggleLabels(): void {
   labelMode = labelMode === "title" ? "filename" : "title";
   renderNav(currentFilter());
+  applyDocTitle();
   void loadBacklinks();
+}
+
+// applyDocTitle sets the toolbar/window title to either the current document's
+// filename or its resolved title, following the nav-panel label mode.
+function applyDocTitle(): void {
+  if (!currentDocName) return;
+  els.docTitle.textContent =
+    labelMode === "title" ? currentDocTitle || currentDocName : currentDocName;
 }
 
 // toggleContentWidth switches between the readable, width-limited layout and a

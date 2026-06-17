@@ -10,6 +10,7 @@ export type {
     DocFileDTO,
     DocumentDTO,
     InitInfo,
+    LayoutDTO,
     LinkTargetDTO,
     UpdateDTO
 } from "./models.js";
