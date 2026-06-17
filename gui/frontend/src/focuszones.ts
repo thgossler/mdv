@@ -17,7 +17,12 @@
 //
 // All keyboard handling runs in the capture phase on `window` so the events are
 // seen before WKWebView's native key handling, which otherwise swallows or
-// re-interprets the navigation keys (the cause of Home/End behaving erratically).
+// re-interprets the navigation keys. Plain/Ctrl/Cmd Home/End never reach the
+// webview's JS on macOS at all (Wails' native NSWindow keyDown: intercepts them),
+// so they are additionally delivered via the `key:home` / `key:end` Wails events
+// registered as key bindings in gui/main.go.
+
+import { Events } from "@wailsio/runtime";
 
 export interface FocusZonesRefs {
   navFilter: HTMLInputElement;
@@ -104,9 +109,32 @@ export function initFocusZones(refs: FocusZonesRefs): void {
   const isDownKey = (e: KeyboardEvent): boolean => e.key === "ArrowDown" || e.code === "ArrowDown";
   const isUpKey = (e: KeyboardEvent): boolean => e.key === "ArrowUp" || e.code === "ArrowUp";
 
-  // Navigate inside a list zone. Moving the selection optionally activates the
-  // focused item (clicks it) so the content view follows the highlighted
-  // document/section, while keyboard focus stays in the list.
+  // Jump to the first/last item of the focused list, or scroll the content view
+  // to the top/bottom when focus is not in a list. Shared by the keyboard
+  // handler and the native `key:home` / `key:end` events.
+  const goToEdge = (toStart: boolean): void => {
+    const active = document.activeElement as HTMLElement | null;
+    const listZone = listZoneFor(active);
+    if (listZone) {
+      const items = itemsOf(listZone);
+      if (items.length === 0) return;
+      const target = toStart ? items[0] : items[items.length - 1];
+      target.focus();
+      target.scrollIntoView({ block: "nearest" });
+      lastItem.set(listZone.el, target);
+      if (listZone.activateOnMove && target !== active) target.click();
+      return;
+    }
+    if (isTypingTarget(active)) return; // keep caret behaviour in editable fields
+    refs.contentWrap.scrollTo({
+      top: toStart ? 0 : refs.contentWrap.scrollHeight,
+      behavior: "smooth",
+    });
+  };
+
+  // Navigate inside a list zone with Arrow keys / Enter. Moving the selection
+  // optionally activates the focused item (clicks it) so the content view follows
+  // the highlighted document/section, while keyboard focus stays in the list.
   const handleList = (z: Extract<Zone, { kind: "list" }>, e: KeyboardEvent): boolean => {
     const items = itemsOf(z);
     if (items.length === 0) return false;
@@ -126,8 +154,6 @@ export function initFocusZones(refs: FocusZonesRefs): void {
     let target: HTMLElement | null = null;
     if (isDownKey(e)) target = items[Math.min(items.length - 1, idx + 1)] ?? items[0];
     else if (isUpKey(e)) target = items[Math.max(0, idx - 1)] ?? items[items.length - 1];
-    else if (isHomeKey(e)) target = items[0];
-    else if (isEndKey(e)) target = items[items.length - 1];
     else return false;
 
     target.focus();
@@ -137,9 +163,10 @@ export function initFocusZones(refs: FocusZonesRefs): void {
     return true;
   };
 
-  // Single capture-phase keydown handler for everything: Tab cycling, list
-  // navigation, and content Home/End scrolling. Capture runs before WKWebView's
-  // native handling, so the navigation keys behave consistently.
+  // Single capture-phase keydown handler: Tab cycling, list Arrow/Enter
+  // navigation, and Home/End edge jumps. Capture runs before WKWebView's native
+  // handling. Home/End are also delivered as Wails events (see below) because on
+  // macOS they never reach JS keydown at all.
   window.addEventListener(
     "keydown",
     (e) => {
@@ -159,29 +186,31 @@ export function initFocusZones(refs: FocusZonesRefs): void {
         return;
       }
 
-      // List navigation when focus is inside one of the list zones.
-      const listZone = listZoneFor(active);
-      if (listZone) {
-        if (handleList(listZone, e)) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-        }
+      // Home/End (alone or with Ctrl/Cmd) jump to the edge of the focused area.
+      // Shift/Alt are excluded so text selection / native combos are untouched.
+      if ((isHomeKey(e) || isEndKey(e)) && !e.shiftKey && !e.altKey) {
+        if (isTypingTarget(active)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        goToEdge(isHomeKey(e));
         return;
       }
 
-      // Plain Home/End scroll the content view, unless an editable field is
-      // focused (those keep their caret behaviour).
-      if ((isHomeKey(e) || isEndKey(e)) && !hasModifier(e) && !isTypingTarget(active)) {
+      // Arrow / Enter navigation inside one of the list zones.
+      const listZone = listZoneFor(active);
+      if (listZone && handleList(listZone, e)) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        refs.contentWrap.scrollTo({
-          top: isHomeKey(e) ? 0 : refs.contentWrap.scrollHeight,
-          behavior: "smooth",
-        });
       }
     },
     true
   );
+
+  // Native delivery of Home/End: on macOS these are intercepted by Wails'
+  // NSWindow keyDown: handler and forwarded as key bindings (gui/main.go), so the
+  // capture-phase listener above never sees them. The events drive the same jump.
+  Events.On("key:home", () => goToEdge(true));
+  Events.On("key:end", () => goToEdge(false));
 
   // Clicking an item (mouse) records it as the remembered selection.
   for (const z of listZones) {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -53,6 +54,17 @@ func runGUI() error {
 	app.Menu.Set(buildMenu(app))
 
 	st := LoadWindowState()
+	// Home/End (with or without Ctrl/Cmd) are swallowed by WKWebView before they
+	// reach the webview's JS or Wails' key-binding system: WKWebView consumes them
+	// for its own (here no-op) document scrolling and dispatches neither a DOM
+	// keydown nor an NSWindow keyDown: that Wails could bind to. A native local
+	// NSEvent monitor installed at startup is the only reliable interception
+	// point; it emits an event the frontend turns into a context-sensitive jump
+	// (first/last list item, or scroll the content view to top/bottom). Arrow keys
+	// are left to the webview and handled in JS.
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		installKeyMonitor(func(name string) { app.Event.Emit(name, "") })
+	})
 	opts := application.WebviewWindowOptions{
 		Title:            core.AppName,
 		Width:            1100,
