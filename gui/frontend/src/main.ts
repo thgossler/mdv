@@ -750,11 +750,15 @@ function toggleLabels(): void {
 }
 
 // applyDocTitle sets the toolbar/window title to either the current document's
-// filename or its resolved title, following the nav-panel label mode.
+// filename or its resolved title, following the nav-panel label mode. The title
+// is taken from the workspace entry so it matches the navigator exactly (a
+// document whose title could not be detected shows its filename in both places);
+// documents outside the workspace fall back to the per-document detected title.
 function applyDocTitle(): void {
   if (!currentDocName) return;
+  const detectedTitle = workspace.find((d) => d.path === currentPath)?.title ?? currentDocTitle;
   els.docTitle.textContent =
-    labelMode === "title" ? currentDocTitle || currentDocName : currentDocName;
+    labelMode === "title" && detectedTitle ? detectedTitle : currentDocName;
 }
 
 // toggleContentWidth switches between the readable, width-limited layout and a
