@@ -17,6 +17,7 @@ import { csvPlugin } from "./md/csv";
 import { adoPlugin } from "./md/ado";
 import { mathPlugin } from "./md/math";
 import { imgsizePlugin } from "./md/imgsize";
+import { sourceLinesPlugin } from "./md/sourcelines";
 
 // RenderResult is the output of rendering a markdown document.
 export interface RenderResult {
@@ -51,7 +52,8 @@ function build(): MarkdownIt {
     .use(csvPlugin)
     .use(adoPlugin)
     .use(imgsizePlugin)
-    .use(anchorsPlugin);
+    .use(anchorsPlugin)
+    .use(sourceLinesPlugin);
 
   return instance;
 }
@@ -92,7 +94,7 @@ const ALLOWED_TAGS_EXTRA = [
 ];
 const ALLOWED_ATTR_EXTRA = [
   "class", "id", "data-slug", "data-lang", "data-wikilink", "data-external",
-  "data-ado-toc", "align", "controls", "preload", "frameborder",
+  "data-ado-toc", "data-source-line", "align", "controls", "preload", "frameborder",
   "allowfullscreen", "loading", "type", "checked", "disabled", "colspan", "rowspan",
 ];
 

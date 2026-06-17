@@ -134,3 +134,107 @@ function clear(): void {
   current = -1;
   update();
 }
+
+// jumpToContentMatch highlights every occurrence of the given keywords in the
+// freshly-rendered document and scrolls to the match nearest to `sourceLine`
+// (the 1-based raw-markdown row reported by the content search), reusing the
+// same highlight styling as in-document find. It is used when the user clicks a
+// content-search result row in the navigator.
+export function jumpToContentMatch(keywords: string[], sourceLine: number): void {
+  clear();
+  const content = document.getElementById("content");
+  if (!content) {
+    update();
+    return;
+  }
+  const kws = keywords.map((k) => k.toLowerCase().trim()).filter(Boolean);
+  if (kws.length === 0) {
+    update();
+    return;
+  }
+  if ((content.textContent?.length ?? 0) > maxSearchChars) {
+    if (countEl) countEl.textContent = "too large";
+    return;
+  }
+  const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      const p = node.parentElement;
+      if (!p) return NodeFilter.FILTER_REJECT;
+      if (p.closest("script,style,.code-copy")) return NodeFilter.FILTER_REJECT;
+      const lower = node.nodeValue?.toLowerCase() ?? "";
+      return kws.some((k) => lower.includes(k))
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    },
+  });
+
+  const toProcess: Text[] = [];
+  let n: Node | null;
+  while ((n = walker.nextNode())) toProcess.push(n as Text);
+  for (const textNode of toProcess) highlightNodeMulti(textNode, kws);
+
+  matches = Array.from(content.querySelectorAll<HTMLElement>("mark.search-hit"));
+  const target = pickBySourceLine(matches, sourceLine);
+  if (target >= 0) {
+    current = target;
+    matches[current].classList.add("current");
+    matches[current].scrollIntoView({ block: "center", behavior: "smooth" });
+    update();
+  } else if (matches.length) {
+    step(1, true);
+  } else {
+    update();
+  }
+}
+
+// highlightNodeMulti wraps occurrences of any of the keywords within one text
+// node, choosing the earliest match at each position.
+function highlightNodeMulti(textNode: Text, kws: string[]): void {
+  const text = textNode.nodeValue || "";
+  const lower = text.toLowerCase();
+  const frag = document.createDocumentFragment();
+  let i = 0;
+  let any = false;
+  while (i < text.length) {
+    let bestIdx = -1;
+    let bestLen = 0;
+    for (const k of kws) {
+      const idx = lower.indexOf(k, i);
+      if (idx >= 0 && (bestIdx < 0 || idx < bestIdx)) {
+        bestIdx = idx;
+        bestLen = k.length;
+      }
+    }
+    if (bestIdx < 0) break;
+    any = true;
+    if (bestIdx > i) frag.appendChild(document.createTextNode(text.slice(i, bestIdx)));
+    const mark = document.createElement("mark");
+    mark.className = "search-hit";
+    mark.textContent = text.slice(bestIdx, bestIdx + bestLen);
+    frag.appendChild(mark);
+    i = bestIdx + bestLen;
+  }
+  if (!any) return;
+  if (i < text.length) frag.appendChild(document.createTextNode(text.slice(i)));
+  textNode.parentNode?.replaceChild(frag, textNode);
+}
+
+// pickBySourceLine returns the index of the highlighted match that best
+// corresponds to `sourceLine`: the one inside the block whose data-source-line
+// is the greatest value not exceeding the target. Returns -1 when no match has
+// a usable source line.
+function pickBySourceLine(marks: HTMLElement[], sourceLine: number): number {
+  let best = -1;
+  let bestLine = -1;
+  for (let i = 0; i < marks.length; i++) {
+    const block = marks[i].closest("[data-source-line]") as HTMLElement | null;
+    if (!block) continue;
+    const line = parseInt(block.dataset.sourceLine || "", 10);
+    if (!Number.isFinite(line)) continue;
+    if (line <= sourceLine && line > bestLine) {
+      bestLine = line;
+      best = i;
+    }
+  }
+  return best;
+}

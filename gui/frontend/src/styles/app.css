@@ -243,6 +243,40 @@ body.pane-resizing {
   background: var(--accent);
   color: var(--accent-fg);
 }
+/* Content-search match rows are nested under their document entry. */
+.nav-match {
+  display: block;
+  flex: none;
+  margin-left: 18px;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-match::before {
+  content: "›";
+  margin-right: 5px;
+  opacity: 0.5;
+}
+.nav-match:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+.nav-match.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+/* The content-search toggle uses a glyph that reads small at the default button
+   font size, so bump it up to match the visual weight of the other controls. */
+#btn-content-search {
+  font-size: 20px;
+}
 
 /* Content ------------------------------------------------------------------ */
 /* The frame is the non-scrolling flex cell; the content view scrolls inside it.
@@ -291,11 +325,13 @@ body.pane-resizing {
 /* Suppress the per-item focus ring; the focused item is shown with a
    background highlight instead, and the area outline marks the active zone. */
 .nav-item:focus,
+.nav-match:focus,
 .toc-item:focus,
 .backlink-item:focus {
   outline: none;
 }
-.nav-list:focus-within .nav-item:focus {
+.nav-list:focus-within .nav-item:focus,
+.nav-list:focus-within .nav-match:focus {
   background: var(--hover);
   color: var(--fg);
 }

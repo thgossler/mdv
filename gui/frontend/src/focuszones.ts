@@ -39,7 +39,7 @@ type Zone =
 export function initFocusZones(refs: FocusZonesRefs): void {
   const zones: Zone[] = [
     { kind: "input", el: refs.navFilter },
-    { kind: "list", el: refs.navList, itemSelector: ".nav-item", activateOnMove: true },
+    { kind: "list", el: refs.navList, itemSelector: ".nav-item, .nav-match", activateOnMove: true },
     { kind: "content", el: refs.contentWrap },
     { kind: "list", el: refs.tocList, itemSelector: ".toc-item", activateOnMove: true },
     // Backlinks navigate to other documents (which rebuilds this very list), so

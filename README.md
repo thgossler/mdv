@@ -114,6 +114,26 @@ mdv --init-config        # write a default settings.jsonc
 | `--version`       | Print version and exit                 |
 | `--init-config`   | Write a default settings file and exit |
 
+### Document content search
+
+The document navigator can search inside your documents, not just filter by
+filename:
+
+- **GUI** — click the **⌕** toggle next to the navigator filter box. When
+  enabled, each matching document is shown with its matching lines nested
+  beneath it; click a match to open the document and jump straight to that line,
+  highlighted like in-document search. Toggle it off again to return to plain
+  filename/title filtering.
+- **TUI** — in the document list press `/` to filter by name, or type `//` to
+  switch to content search. Matches appear indented under each document; press
+  Enter on a match to open the document and jump to it.
+
+Search is case-insensitive and combines multiple space-separated keywords with
+a logical **AND** (a document must contain every keyword). Only documents with a
+filename or content match remain in the list. When [ripgrep](https://github.com/BurntSushi/ripgrep)
+(`rg`) is installed it is used for fast searching; otherwise mdv falls back to a
+built-in scan.
+
 ## Features
 
 - GitHub Flavored Markdown (tables, task lists, strikethrough, autolinks)
@@ -129,6 +149,7 @@ mdv --init-config        # write a default settings.jsonc
 - Azure DevOps constructs (`[[_TOC_]]`, `:::video:::`, `#123` work items)
 - Sanitized inline HTML (DOMPurify)
 - In-document search (Cmd/Ctrl+F), live reload, drag-and-drop
+- Document content search in the navigator (ripgrep when installed, built-in fallback)
 - Zoom (Cmd/Ctrl + wheel / +/-), light/dark/system themes, configurable fonts
 - History navigation, link target preview in the status bar
 - "Open in new window"

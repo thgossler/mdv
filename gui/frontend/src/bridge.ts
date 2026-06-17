@@ -13,6 +13,21 @@ import type { Backlink } from "../bindings/github.com/thgossler/mdv/internal/cor
 
 export type { InitInfo, DocumentDTO, LinkTargetDTO, DocFileDTO, UpdateDTO, LayoutDTO, Backlink };
 
+// Content-search result shapes. These mirror core.ContentMatch /
+// core.DocSearchResult on the Go side. They are delivered via application
+// events (not a binding return value), so they are defined here rather than
+// imported from the generated bindings.
+export interface ContentMatch {
+  line: number;
+  col: number;
+  text: string;
+}
+
+export interface DocSearchResult {
+  path: string;
+  matches: ContentMatch[];
+}
+
 export const api = {
   init: (): Promise<InitInfo> => Bridge.Init(),
   read: (path: string): Promise<DocumentDTO> => Bridge.ReadDocument(path),
@@ -23,6 +38,7 @@ export const api = {
     Bridge.OpenInNewWindow(path, fragment),
   backlinks: (path: string): Promise<Backlink[] | null> => Bridge.Backlinks(path),
   watch: (path: string): Promise<void> => Bridge.WatchFile(path),
+  searchContent: (query: string, gen: number): Promise<void> => Bridge.SearchContent(query, gen),
   saveLayout: (sidebarWidth: number, tocWidth: number): Promise<void> =>
     Bridge.SaveLayout(sidebarWidth, tocWidth),
   resetLayout: (): Promise<LayoutDTO> => Bridge.ResetLayout(),

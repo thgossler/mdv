@@ -5,13 +5,13 @@ import "./styles/app.css";
 import "./styles/markdown.css";
 import "./styles/alerts.css";
 import "./styles/code.css";
-import { api, type InitInfo, type DocFileDTO } from "./bridge";
+import { api, type InitInfo, type DocFileDTO, type ContentMatch } from "./bridge";
 import { render } from "./render";
 import { extractFrontmatter, renderFrontmatter } from "./frontmatter";
 import { renderMermaid, renderMermaidSource } from "./mermaidRunner";
 import { initTheme, toggleTheme, setTheme, isDark, onThemeChange, type ThemeMode } from "./theme";
 import { initZoom, zoomIn, zoomOut, zoomReset, refreshZoom } from "./zoom";
-import { initSearch, showSearch, clearSearch } from "./search";
+import { initSearch, showSearch, clearSearch, jumpToContentMatch } from "./search";
 import { buildTOC, trackActiveHeading } from "./toc";
 import { initFocusZones } from "./focuszones";
 
@@ -34,6 +34,17 @@ let detachScrollSpy: (() => void) | null = null;
 let currentDocName = "";
 let currentDocTitle = "";
 
+// --- content-search state ---------------------------------------------------
+// When enabled, the navigator filter box searches document *content* (not just
+// names): each matching document is shown with its in-document matches nested
+// beneath it. `searchGen` discards results from superseded queries; results
+// stream in via application events keyed by that generation.
+let contentSearchMode = false;
+let searchGen = 0;
+let searchKeywords: string[] = [];
+const searchResults = new Map<string, ContentMatch[]>();
+let searchDebounce: number | undefined;
+
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const els = {
@@ -43,6 +54,7 @@ const els = {
   sidebar: $("sidebar"),
   navList: $("nav-list"),
   navFilter: $<HTMLInputElement>("nav-filter"),
+  btnContentSearch: $<HTMLButtonElement>("btn-content-search"),
   toc: $("toc"),
   tocList: $("toc-list"),
   backlinksList: $("backlinks-list"),
@@ -376,48 +388,183 @@ function goBack(): void {
 
 function buildSidebar(): void {
   renderNav(workspace);
-  els.navFilter.addEventListener("input", () => {
-    const q = els.navFilter.value.toLowerCase();
-    renderNav(
-      workspace.filter(
-        (d) => d.name.toLowerCase().includes(q) || (d.title || "").toLowerCase().includes(q)
-      )
-    );
-  });
+  els.navFilter.addEventListener("input", onNavFilterInput);
   // Escape clears the filter so the full document list is shown again.
   els.navFilter.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && els.navFilter.value !== "") {
       e.preventDefault();
       e.stopPropagation();
       els.navFilter.value = "";
-      renderNav(workspace);
+      onNavFilterInput();
     }
   });
+  els.btnContentSearch.addEventListener("click", toggleContentSearch);
+  wireContentSearchEvents();
+}
+
+// onNavFilterInput routes the navigator filter box to either name filtering or
+// content search depending on the active mode.
+function onNavFilterInput(): void {
+  if (contentSearchMode) {
+    scheduleContentSearch();
+  } else {
+    renderNav(currentFilter());
+  }
+}
+
+// toggleContentSearch flips between name-filter and content-search modes,
+// updating the toggle button, the input placeholder and the navigator view.
+function toggleContentSearch(): void {
+  contentSearchMode = !contentSearchMode;
+  els.btnContentSearch.classList.toggle("active", contentSearchMode);
+  els.btnContentSearch.title = contentSearchMode
+    ? "Search document content (on)"
+    : "Search document content (off)";
+  els.navFilter.placeholder = contentSearchMode
+    ? "Search document content…"
+    : "Filter documents…";
+  // Cancel any in-flight results and reset the view for the new mode.
+  searchGen++;
+  searchResults.clear();
+  searchKeywords = [];
+  if (contentSearchMode) {
+    onNavFilterInput();
+    els.navFilter.focus();
+  } else {
+    renderNav(currentFilter());
+  }
+}
+
+// splitKeywords lowercases and splits the query into distinct space-separated
+// keywords, mirroring the backend's AND-per-document semantics.
+function splitKeywords(query: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const w of query.toLowerCase().split(/\s+/)) {
+    if (w && !seen.has(w)) {
+      seen.add(w);
+      out.push(w);
+    }
+  }
+  return out;
+}
+
+// scheduleContentSearch debounces input so rapid typing issues a single search.
+function scheduleContentSearch(): void {
+  if (searchDebounce !== undefined) clearTimeout(searchDebounce);
+  searchDebounce = window.setTimeout(runContentSearch, 180);
+}
+
+function runContentSearch(): void {
+  const keywords = splitKeywords(els.navFilter.value);
+  searchKeywords = keywords;
+  searchGen++;
+  searchResults.clear();
+  if (keywords.length === 0) {
+    renderSearchNav();
+    return;
+  }
+  // Show filename-qualifying documents immediately while content results stream.
+  renderSearchNav();
+  void api.searchContent(els.navFilter.value, searchGen);
+}
+
+// wireContentSearchEvents subscribes to the streaming results emitted by the
+// backend, discarding any from a superseded query generation.
+function wireContentSearchEvents(): void {
+  Events.On("content-search:result", (ev: { data: { gen: number; result: { path: string; matches: ContentMatch[] } } }) => {
+    if (!contentSearchMode || ev.data.gen !== searchGen) return;
+    searchResults.set(ev.data.result.path, ev.data.result.matches || []);
+    renderSearchNav();
+  });
+  Events.On("content-search:done", (ev: { data: { gen: number; count: number } }) => {
+    if (!contentSearchMode || ev.data.gen !== searchGen) return;
+    renderSearchNav();
+  });
+}
+
+// nameQualifies reports whether a document's name/title contains every keyword.
+function nameQualifies(d: DocFileDTO): boolean {
+  if (searchKeywords.length === 0) return false;
+  const hay = `${d.name} ${d.title || ""}`.toLowerCase();
+  return searchKeywords.every((k) => hay.includes(k));
+}
+
+// renderSearchNav renders the content-search view: documents that have content
+// matches OR whose name/title contains all keywords, in workspace order, each
+// with its matches nested beneath.
+function renderSearchNav(): void {
+  els.navList.innerHTML = "";
+  if (searchKeywords.length === 0) {
+    // Empty query: show the full document list (no matches).
+    renderNav(workspace);
+    return;
+  }
+  for (const d of workspace) {
+    const matches = searchResults.get(d.path);
+    const qualifies = (matches && matches.length > 0) || nameQualifies(d);
+    if (!qualifies) continue;
+    els.navList.appendChild(makeNavItem(d));
+    if (matches) {
+      for (const m of matches) els.navList.appendChild(makeNavMatch(d, m));
+    }
+  }
+  highlightActiveNav();
+}
+
+// makeNavItem builds a document entry anchor (shared by both nav views).
+function makeNavItem(d: DocFileDTO): HTMLAnchorElement {
+  const a = document.createElement("a");
+  a.className = "nav-item";
+  a.tabIndex = -1;
+  a.dataset.path = d.path;
+  a.textContent = labelMode === "title" && d.title ? d.title : d.name;
+  a.title = d.rel || d.path;
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    a.focus();
+    void openDocument(d.path, true, { focusContent: false });
+  });
+  a.addEventListener("contextmenu", (e) =>
+    openMenu(e, [
+      { label: "Copy", fn: () => copyText(a.textContent || "") },
+      { label: "Open in New Window", fn: () => api.openNewWindow(d.path) },
+    ])
+  );
+  return a;
+}
+
+// makeNavMatch builds an indented content-match row that opens its document and
+// jumps to the matching source line.
+function makeNavMatch(d: DocFileDTO, m: ContentMatch): HTMLAnchorElement {
+  const a = document.createElement("a");
+  a.className = "nav-match";
+  a.tabIndex = -1;
+  a.dataset.path = d.path;
+  a.dataset.line = String(m.line);
+  a.textContent = m.text;
+  a.title = m.text;
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    const keywords = searchKeywords.slice();
+    const line = m.line;
+    // When the document is already open (e.g. arrowing between its matches),
+    // just move the highlight instead of re-reading and re-rendering it.
+    if (d.path === currentPath) {
+      jumpToContentMatch(keywords, line);
+      return;
+    }
+    void openDocument(d.path, true, { focusContent: false }).then(() => {
+      jumpToContentMatch(keywords, line);
+    });
+  });
+  return a;
 }
 
 function renderNav(items: DocFileDTO[]): void {
   els.navList.innerHTML = "";
   for (const d of items) {
-    const a = document.createElement("a");
-    a.className = "nav-item";
-    a.tabIndex = -1;
-    a.dataset.path = d.path;
-    a.textContent = labelMode === "title" && d.title ? d.title : d.name;
-    a.title = d.rel || d.path;
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      // Keep keyboard focus on the navigator item so the user can keep arrowing
-      // through the list instead of being pulled into the content view.
-      a.focus();
-      void openDocument(d.path, true, { focusContent: false });
-    });
-    a.addEventListener("contextmenu", (e) =>
-      openMenu(e, [
-        { label: "Copy", fn: () => copyText(a.textContent || "") },
-        { label: "Open in New Window", fn: () => api.openNewWindow(d.path) },
-      ])
-    );
-    els.navList.appendChild(a);
+    els.navList.appendChild(makeNavItem(d));
   }
   highlightActiveNav();
 }
@@ -744,7 +891,11 @@ function onDragUp(): void {
 
 function toggleLabels(): void {
   labelMode = labelMode === "title" ? "filename" : "title";
-  renderNav(currentFilter());
+  if (contentSearchMode) {
+    renderSearchNav();
+  } else {
+    renderNav(currentFilter());
+  }
   applyDocTitle();
   void loadBacklinks();
 }

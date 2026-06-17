@@ -5,11 +5,14 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -29,6 +32,7 @@ const (
 	focusList
 	focusLinks
 	focusSearch
+	focusListFilter
 )
 
 type histEntry struct {
@@ -80,7 +84,15 @@ type Model struct {
 	searchInput string
 	matches     []matchPos
 	matchIdx    int
-	searchQuery string // term currently highlighted (empty when not searching)
+	searchQuery string   // single term currently highlighted (empty when none)
+	searchTerms []string // multiple terms highlighted (content-search jump)
+
+	// Document-navigator filter state. When focus is focusListFilter the user
+	// types into listFilterInput: a plain string filters by filename/title,
+	// while a leading "/" switches to content search (so "/" filters names and
+	// "//" searches content). The list then holds navItem entries (document
+	// headers plus indented per-match rows).
+	listFilterInput string
 
 	statusMsg string
 	update    core.UpdateInfo
@@ -104,6 +116,45 @@ func (d docItem) Title() string {
 }
 func (d docItem) Description() string { return d.doc.Path }
 func (d docItem) FilterValue() string { return d.doc.Name + " " + d.doc.Title }
+
+// navKind distinguishes a document header row from an indented content-match row
+// in the document-navigator filter view.
+type navKind int
+
+const (
+	navDoc navKind = iota
+	navMatch
+)
+
+// navItem is a document-navigator entry used while filtering: either a document
+// header (navDoc) or a content-search match (navMatch) shown indented beneath
+// its document. Match rows carry the source line and the active keywords so
+// selecting one can open the document and jump to the match.
+type navItem struct {
+	kind      navKind
+	doc       core.DocFile
+	labelMode string
+	line      int
+	text      string
+	keywords  []string
+}
+
+func (n navItem) Title() string {
+	if n.kind == navMatch {
+		return "  › " + n.text
+	}
+	if n.labelMode == "title" && n.doc.Title != "" {
+		return n.doc.Title
+	}
+	return n.doc.Name
+}
+func (n navItem) Description() string {
+	if n.kind == navMatch {
+		return fmt.Sprintf("    line %d", n.line)
+	}
+	return n.doc.Path
+}
+func (n navItem) FilterValue() string { return n.Title() }
 
 // linkItem adapts a Link to the picker list.
 type linkItem struct{ link Link }
@@ -240,6 +291,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.focus == focusSearch {
 		return m.handleSearchKey(msg)
 	}
+	// Document-navigator filter input captures most keys too.
+	if m.focus == focusListFilter {
+		return m.handleListFilterKey(msg)
+	}
 
 	switch msg.String() {
 	case "ctrl+c", "q":
@@ -297,6 +352,14 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		m.focus = focusContent
 		return *m, nil
+	case "/":
+		// Enter the navigator filter: a plain query filters by name, a leading
+		// "/" (i.e. "//") switches to content search.
+		m.focus = focusListFilter
+		m.listFilterInput = ""
+		m.statusMsg = ""
+		m.rebuildNavList()
+		return *m, nil
 	case "enter", "right", "l":
 		if it, ok := m.list.SelectedItem().(docItem); ok {
 			m.openPath(it.doc.Path, true)
@@ -310,6 +373,53 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return *m, cmd
+}
+
+// handleListFilterKey handles keystrokes while the document-navigator filter
+// input is active.
+func (m *Model) handleListFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.exitListFilter()
+		return *m, nil
+	case "enter":
+		switch it := m.list.SelectedItem().(type) {
+		case navItem:
+			if it.kind == navMatch {
+				m.openContentMatch(it)
+			} else {
+				m.openPath(it.doc.Path, true)
+				m.focus = focusContent
+				m.resetNavList()
+			}
+		case docItem:
+			m.openPath(it.doc.Path, true)
+			m.focus = focusContent
+			m.resetNavList()
+		}
+		return *m, nil
+	case "backspace":
+		if len(m.listFilterInput) > 0 {
+			m.listFilterInput = m.listFilterInput[:len(m.listFilterInput)-1]
+			m.rebuildNavList()
+		}
+		return *m, nil
+	case "up", "down", "pgup", "pgdown", "home", "end":
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		return *m, cmd
+	default:
+		if msg.Type == tea.KeyRunes {
+			for _, r := range msg.Runes {
+				if unicode.IsControl(r) {
+					continue
+				}
+				m.listFilterInput += string(r)
+			}
+			m.rebuildNavList()
+		}
+		return *m, nil
+	}
 }
 
 func (m *Model) handleLinksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -389,12 +499,150 @@ func (m *Model) exitSearch() {
 	m.focus = focusContent
 	m.searchInput = ""
 	m.statusMsg = ""
-	if m.searchQuery != "" || len(m.matches) > 0 {
+	if m.searchQuery != "" || len(m.searchTerms) > 0 || len(m.matches) > 0 {
 		m.searchQuery = ""
+		m.searchTerms = nil
 		m.matches = nil
 		m.matchIdx = 0
 		m.rerender()
 	}
+}
+
+// --- document-navigator filter / content search ----------------------------
+
+// rgOnce caches ripgrep detection so the content search does not probe the PATH
+// on every keystroke.
+var (
+	rgOnce sync.Once
+	rgExe  string
+)
+
+func detectRipgrep() string {
+	rgOnce.Do(func() { rgExe = core.DetectRipgrep() })
+	return rgExe
+}
+
+// splitKeywords lowercases and splits the query into distinct space-separated
+// keywords, mirroring the content-search engine's AND-per-document semantics.
+func splitKeywords(query string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, w := range strings.Fields(strings.ToLower(query)) {
+		if !seen[w] {
+			seen[w] = true
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// rebuildNavList recomputes the document-navigator list from the current filter
+// input: a plain string filters by filename/title, while a leading "/" runs a
+// content search and shows matching lines indented beneath their documents.
+func (m *Model) rebuildNavList() {
+	input := m.listFilterInput
+	if strings.HasPrefix(input, "/") {
+		m.rebuildContentList(input[1:])
+		return
+	}
+	// Filename / title filter.
+	q := strings.ToLower(strings.TrimSpace(input))
+	var items []list.Item
+	for _, d := range m.workspace {
+		if q == "" || strings.Contains(strings.ToLower(d.Name), q) || strings.Contains(strings.ToLower(d.Title), q) {
+			items = append(items, navItem{kind: navDoc, doc: d, labelMode: m.labelMode})
+		}
+	}
+	m.list.SetItems(items)
+	if len(items) > 0 {
+		m.list.Select(0)
+	}
+}
+
+// rebuildContentList runs a content search across the workspace and rebuilds the
+// list with each qualifying document followed by its indented match rows. A
+// document qualifies when it has content matches OR its name/title contains all
+// keywords.
+func (m *Model) rebuildContentList(query string) {
+	keywords := splitKeywords(query)
+	if len(keywords) == 0 {
+		// No keywords yet: show all documents as headers.
+		var items []list.Item
+		for _, d := range m.workspace {
+			items = append(items, navItem{kind: navDoc, doc: d, labelMode: m.labelMode})
+		}
+		m.list.SetItems(items)
+		if len(items) > 0 {
+			m.list.Select(0)
+		}
+		return
+	}
+
+	results := map[string][]core.ContentMatch{}
+	core.SearchDocuments(context.Background(), m.workspace, query, detectRipgrep(), func(r core.DocSearchResult) {
+		results[r.Path] = r.Matches
+	})
+
+	var items []list.Item
+	for _, d := range m.workspace {
+		matches, has := results[d.Path]
+		qualifies := (has && len(matches) > 0) || nameQualifies(d, keywords)
+		if !qualifies {
+			continue
+		}
+		items = append(items, navItem{kind: navDoc, doc: d, labelMode: m.labelMode})
+		for _, mt := range matches {
+			items = append(items, navItem{
+				kind:     navMatch,
+				doc:      d,
+				line:     mt.Line,
+				text:     mt.Text,
+				keywords: keywords,
+			})
+		}
+	}
+	m.list.SetItems(items)
+	if len(items) > 0 {
+		m.list.Select(0)
+	}
+}
+
+// nameQualifies reports whether a document's name/title contains every keyword.
+func nameQualifies(d core.DocFile, keywords []string) bool {
+	if len(keywords) == 0 {
+		return false
+	}
+	hay := strings.ToLower(d.Name + " " + d.Title)
+	for _, k := range keywords {
+		if !strings.Contains(hay, k) {
+			return false
+		}
+	}
+	return true
+}
+
+// exitListFilter cancels the navigator filter and restores the full document
+// list.
+func (m *Model) exitListFilter() {
+	m.focus = focusList
+	m.listFilterInput = ""
+	m.resetNavList()
+}
+
+// resetNavList restores the navigator to the full, unfiltered document list.
+func (m *Model) resetNavList() {
+	m.list.SetItems(docItemsFrom(m.workspace, m.labelMode))
+	m.syncListSelection()
+}
+
+// openContentMatch opens the document of a content-search match row and jumps to
+// the first occurrence of the keywords in the rendered document, highlighting
+// all of them (current match in green).
+func (m *Model) openContentMatch(it navItem) {
+	m.openPath(it.doc.Path, true)
+	m.focus = focusContent
+	m.resetNavList()
+	m.runSearchMulti(it.keywords)
 }
 
 // --- actions ---------------------------------------------------------------
@@ -453,6 +701,7 @@ func (m *Model) openPath(path string, pushHistory bool) {
 	m.matches = nil
 	m.matchIdx = 0
 	m.searchQuery = ""
+	m.searchTerms = nil
 	m.rerender()
 	m.viewport.GotoTop()
 	m.syncListSelection()
@@ -562,11 +811,56 @@ func (m *Model) jumpMatch(dir int) {
 		return
 	}
 	m.matchIdx = (m.matchIdx + dir + len(m.matches)) % len(m.matches)
-	if m.searchQuery != "" {
+	if m.searchQuery != "" || len(m.searchTerms) > 0 {
 		m.rerender() // move the green current-match highlight
 	}
 	m.viewport.SetYOffset(m.matches[m.matchIdx].line)
 	m.statusMsg = fmt.Sprintf("Match %d/%d", m.matchIdx+1, len(m.matches))
+}
+
+// runSearchMulti finds and highlights every occurrence of any of the given
+// keywords in the rendered document, jumping to the first match. It is used when
+// the user selects a content-search result in the navigator.
+func (m *Model) runSearchMulti(keywords []string) {
+	m.matches = nil
+	m.matchIdx = 0
+	m.searchQuery = ""
+	m.searchTerms = nil
+	if len(keywords) == 0 {
+		m.rerender()
+		return
+	}
+	rendered := strings.Split(stripANSI(m.renderedRaw()), "\n")
+	for i, line := range rendered {
+		ll := strings.ToLower(line)
+		for _, kw := range keywords {
+			for from := 0; ; {
+				idx := strings.Index(ll[from:], kw)
+				if idx < 0 {
+					break
+				}
+				col := from + idx
+				m.matches = append(m.matches, matchPos{line: i, col: col})
+				from = col + len(kw)
+			}
+		}
+	}
+	if len(m.matches) == 0 {
+		m.rerender()
+		m.statusMsg = "No matches in document"
+		return
+	}
+	// Order matches by line then column so navigation follows reading order.
+	sort.Slice(m.matches, func(a, b int) bool {
+		if m.matches[a].line != m.matches[b].line {
+			return m.matches[a].line < m.matches[b].line
+		}
+		return m.matches[a].col < m.matches[b].col
+	})
+	m.searchTerms = keywords
+	m.rerender()
+	m.viewport.SetYOffset(m.matches[0].line)
+	m.statusMsg = fmt.Sprintf("Match 1/%d  Enter/↓: next, ↑: prev", len(m.matches))
 }
 
 // --- rendering -------------------------------------------------------------
@@ -621,13 +915,17 @@ func (m *Model) renderedRaw() string {
 
 func (m *Model) rerender() {
 	content := m.renderedRaw()
-	if m.searchQuery != "" && len(content) <= maxHighlightBytes {
+	if len(content) <= maxHighlightBytes {
 		curLine, curCol := -1, -1
 		if len(m.matches) > 0 {
 			curLine = m.matches[m.matchIdx].line
 			curCol = m.matches[m.matchIdx].col
 		}
-		content = highlightTerm(content, m.searchQuery, curLine, curCol)
+		if len(m.searchTerms) > 0 {
+			content = highlightTerms(content, m.searchTerms, curLine, curCol)
+		} else if m.searchQuery != "" {
+			content = highlightTerm(content, m.searchQuery, curLine, curCol)
+		}
 	}
 	m.viewport.SetContent(content)
 }
@@ -724,6 +1022,15 @@ func (m Model) statusBar() string {
 			Render(" /" + m.searchInput + "▏ (" + hint + ") ")
 	}
 
+	if m.focus == focusListFilter {
+		hint := "name filter — type // to search content, Enter: open, Esc: cancel"
+		if strings.HasPrefix(m.listFilterInput, "/") {
+			hint = "content search — Enter: open match, Esc: cancel"
+		}
+		return lipgloss.NewStyle().Width(m.width).Reverse(true).
+			Render(" /" + m.listFilterInput + "▏ (" + hint + ") ")
+	}
+
 	pct := 0
 	if m.viewport.TotalLineCount() > 0 {
 		pct = int(m.viewport.ScrollPercent() * 100)
@@ -731,7 +1038,7 @@ func (m Model) statusBar() string {
 
 	hints := "b:back  l:links  /:find  q:quit"
 	if m.showList {
-		hints = "tab:switch  enter:open  t:titles  " + hints
+		hints = "tab:switch  enter:open  /:filter  t:titles  " + hints
 	}
 
 	status := m.statusMsg
@@ -873,4 +1180,130 @@ func highlightLine(line, lowerTerm string, currentCol int) string {
 
 func normalize(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
+
+// highlightTerms highlights every occurrence of any of the given terms across
+// the ANSI-styled text, with the single occurrence at (currentLine, currentCol)
+// rendered in green and all others in yellow. It is the multi-keyword companion
+// to highlightTerm, used by the content-search jump.
+func highlightTerms(styled string, terms []string, currentLine, currentCol int) string {
+	if len(terms) == 0 {
+		return styled
+	}
+	lower := make([]string, 0, len(terms))
+	for _, t := range terms {
+		if t != "" {
+			lower = append(lower, strings.ToLower(t))
+		}
+	}
+	if len(lower) == 0 {
+		return styled
+	}
+	lines := strings.Split(styled, "\n")
+	for i, line := range lines {
+		cc := -1
+		if i == currentLine {
+			cc = currentCol
+		}
+		lines[i] = highlightLineMulti(line, lower, cc)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// highlightLineMulti highlights every occurrence of any term (already
+// lowercased) within a single ANSI-styled line, merging overlapping matches.
+// The occurrence whose visible start column equals currentCol is green; the rest
+// yellow. Pass currentCol = -1 when no occurrence on this line is current.
+func highlightLineMulti(line string, lowerTerms []string, currentCol int) string {
+	var vis []byte
+	var off []int
+	for i := 0; i < len(line); {
+		if loc := reANSI.FindStringIndex(line[i:]); loc != nil && loc[0] == 0 {
+			i += loc[1]
+			continue
+		}
+		vis = append(vis, line[i])
+		off = append(off, i)
+		i++
+	}
+	visLower := strings.ToLower(string(vis))
+	if len(visLower) != len(vis) {
+		return line
+	}
+
+	type iv struct {
+		s, e int
+		cur  bool
+	}
+	var ivs []iv
+	for _, t := range lowerTerms {
+		if t == "" {
+			continue
+		}
+		for from := 0; ; {
+			idx := strings.Index(visLower[from:], t)
+			if idx < 0 {
+				break
+			}
+			s := from + idx
+			e := s + len(t)
+			ivs = append(ivs, iv{s: s, e: e, cur: s == currentCol})
+			from = e
+		}
+	}
+	if len(ivs) == 0 {
+		return line
+	}
+	sort.Slice(ivs, func(a, b int) bool { return ivs[a].s < ivs[b].s })
+	merged := []iv{ivs[0]}
+	for _, v := range ivs[1:] {
+		last := &merged[len(merged)-1]
+		if v.s <= last.e {
+			if v.e > last.e {
+				last.e = v.e
+			}
+			if v.cur {
+				last.cur = true
+			}
+		} else {
+			merged = append(merged, v)
+		}
+	}
+
+	starts := map[int]bool{}
+	current := map[int]bool{}
+	ends := map[int]bool{}
+	for _, v := range merged {
+		startByte := off[v.s]
+		endByte := len(line)
+		if v.e < len(off) {
+			endByte = off[v.e]
+		}
+		starts[startByte] = true
+		if v.cur {
+			current[startByte] = true
+		}
+		ends[endByte] = true
+	}
+
+	const yellow = "\x1b[30;43m"
+	const green = "\x1b[30;42m"
+	const off2 = "\x1b[39;49m"
+	var b strings.Builder
+	for i := 0; i <= len(line); i++ {
+		if ends[i] {
+			b.WriteString(off2)
+		}
+		if starts[i] {
+			if current[i] {
+				b.WriteString(green)
+			} else {
+				b.WriteString(yellow)
+			}
+		}
+		if i < len(line) {
+			b.WriteByte(line[i])
+		}
+	}
+	return b.String()
 }

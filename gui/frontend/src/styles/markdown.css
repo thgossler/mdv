@@ -283,6 +283,7 @@ mark.search-hit {
 }
 mark.search-hit.current {
   background: var(--mark-current);
+  color: #0d1117;
 }
 
 /* Anchor flash on navigation */

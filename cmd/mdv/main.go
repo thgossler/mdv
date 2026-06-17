@@ -272,5 +272,9 @@ func usage() {
 	fmt.Fprintf(w, "  --init-config  write a default settings.jsonc and exit\n")
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")
-	fmt.Fprintf(w, "or console output, so it is safe to run over SSH in headless containers.\n")
+	fmt.Fprintf(w, "or console output, so it is safe to run over SSH in headless containers.\n\n")
+	fmt.Fprintf(w, "Tip: install ripgrep (rg) for fast document content search; when it is not\n")
+	fmt.Fprintf(w, "found, mdv falls back to a built-in search. In the GUI, toggle content search\n")
+	fmt.Fprintf(w, "with the ⌕ button next to the navigator filter; in the TUI, type \"//\" in the\n")
+	fmt.Fprintf(w, "document list to search content (\"/\" filters by name).\n")
 }

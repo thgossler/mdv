@@ -33,7 +33,7 @@ body.theme-light {
   --hover: #eef1f4;
   --selection: #b6dafc;
   --mark: #fff3a3;
-  --mark-current: #ffb454;
+  --mark-current: #4ac26b;
   --code-bg: #f6f8fa;
   --code-fg: #1f2328;
   --shadow: 0 6px 24px rgba(31, 35, 40, 0.12);
@@ -54,7 +54,7 @@ body.theme-dark {
   --hover: #1c2128;
   --selection: #264f78;
   --mark: #bb8009;
-  --mark-current: #e3a008;
+  --mark-current: #2ea043;
   --code-bg: #161b22;
   --code-fg: #e6edf3;
   --shadow: 0 6px 24px rgba(1, 4, 9, 0.5);
