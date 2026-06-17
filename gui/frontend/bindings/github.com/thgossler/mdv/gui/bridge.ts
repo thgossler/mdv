@@ -51,7 +51,8 @@ export function OpenInNewWindow(path: string, fragment: string): $CancellablePro
 }
 
 /**
- * ReadDocument loads a markdown document from disk.
+ * ReadDocument loads a markdown document from disk, enforcing the shared
+ * maximum document size so the webview never tries to render an oversized file.
  */
 export function ReadDocument(path: string): $CancellablePromise<$models.DocumentDTO> {
     return $Call.ByID(4167214878, path);

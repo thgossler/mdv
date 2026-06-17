@@ -43,6 +43,12 @@ type matchPos struct {
 	col  int
 }
 
+// maxHighlightBytes is the largest rendered document (in bytes) for which search
+// matches are re-highlighted in place. Above it, search still finds and scrolls
+// between matches, but does not recolor them: re-styling the whole buffer on
+// every jump would make navigation laggy on very large documents.
+const maxHighlightBytes = 4 << 20 // 4 MiB
+
 // Model is the Bubble Tea model for the terminal viewer.
 type Model struct {
 	cfg          core.Defaults
@@ -431,7 +437,7 @@ func (m *Model) followLink(href string) {
 }
 
 func (m *Model) openPath(path string, pushHistory bool) {
-	data, err := os.ReadFile(path)
+	data, err := core.ReadMarkdownFile(path)
 	if err != nil {
 		m.statusMsg = "Cannot read: " + err.Error()
 		return
@@ -543,7 +549,11 @@ func (m *Model) runSearch(q string) {
 	m.searchQuery = q
 	m.rerender()
 	m.viewport.SetYOffset(m.matches[0].line)
-	m.statusMsg = fmt.Sprintf("Match 1/%d for %q", len(m.matches), q)
+	if len(m.renderedRaw()) > maxHighlightBytes {
+		m.statusMsg = fmt.Sprintf("Match 1/%d for %q (large file: highlight off)", len(m.matches), q)
+	} else {
+		m.statusMsg = fmt.Sprintf("Match 1/%d for %q", len(m.matches), q)
+	}
 }
 
 func (m *Model) jumpMatch(dir int) {
@@ -610,7 +620,7 @@ func (m *Model) renderedRaw() string {
 
 func (m *Model) rerender() {
 	content := m.renderedRaw()
-	if m.searchQuery != "" {
+	if m.searchQuery != "" && len(content) <= maxHighlightBytes {
 		curLine, curCol := -1, -1
 		if len(m.matches) > 0 {
 			curLine = m.matches[m.matchIdx].line

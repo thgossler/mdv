@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/mdfmt"
 	"golang.org/x/term"
 )
@@ -27,7 +28,7 @@ type Options struct {
 
 // RenderFile reads a markdown file and writes rendered ANSI text to w.
 func RenderFile(w io.Writer, path string, opt Options) error {
-	data, err := os.ReadFile(path)
+	data, err := core.ReadMarkdownFile(path)
 	if err != nil {
 		return err
 	}

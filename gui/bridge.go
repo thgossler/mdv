@@ -97,9 +97,10 @@ type DocumentDTO struct {
 	Error    string `json:"error"`
 }
 
-// ReadDocument loads a markdown document from disk.
+// ReadDocument loads a markdown document from disk, enforcing the shared
+// maximum document size so the webview never tries to render an oversized file.
 func (b *Bridge) ReadDocument(path string) DocumentDTO {
-	data, err := os.ReadFile(path)
+	data, err := core.ReadMarkdownFile(path)
 	if err != nil {
 		return DocumentDTO{Path: path, Error: err.Error()}
 	}

@@ -2,12 +2,75 @@ package core
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// MaxFileBytes is the largest markdown document mdv will load and render. Above
+// this size the rich renderers (glamour for the console/TUI and markdown-it in
+// the GUI) need impractical amounts of memory and time and would appear to
+// hang, so mdv refuses the file up front with a clear message instead. A
+// typical 20,000-line document is only a few MiB, so this limit leaves a wide
+// margin for real-world files while rejecting pathological inputs (e.g. a
+// multi-hundred-MB log accidentally opened as markdown).
+const MaxFileBytes = 50 << 20 // 50 MiB
+
+// FileTooLargeError is returned when a document exceeds MaxFileBytes. It carries
+// the offending path and sizes so callers can present a friendly message.
+type FileTooLargeError struct {
+	Path  string
+	Size  int64
+	Limit int64
+}
+
+func (e *FileTooLargeError) Error() string {
+	name := e.Path
+	if name == "" {
+		name = "input"
+	} else {
+		name = filepath.Base(name)
+	}
+	return fmt.Sprintf("%s is too large (%s); mdv can display documents up to %s",
+		name, FormatBytes(e.Size), FormatBytes(e.Limit))
+}
+
+// FormatBytes renders a byte count as a short human-readable string such as
+// "734 B", "12.3 KB" or "1.4 GB".
+func FormatBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// ReadMarkdownFile reads a markdown document from disk after verifying it does
+// not exceed MaxFileBytes. Oversized files yield a *FileTooLargeError so every
+// run mode (console, TUI, GUI) can fail with the same friendly message instead
+// of trying to render gigabytes of text. It is the single entry point all modes
+// should use to load a document by path.
+func ReadMarkdownFile(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("%s is a directory", filepath.Base(path))
+	}
+	if info.Size() > MaxFileBytes {
+		return nil, &FileTooLargeError{Path: path, Size: info.Size(), Limit: MaxFileBytes}
+	}
+	return os.ReadFile(path)
+}
 
 // skipDirs are directories never descended into during folder listing.
 var skipDirs = map[string]bool{
@@ -39,6 +102,9 @@ func ResolveInput(arg string) (Input, error) {
 	if info.IsDir() {
 		return Input{Kind: InputFolder, Path: abs, Dir: abs}, nil
 	}
+	if info.Size() > MaxFileBytes {
+		return Input{}, &FileTooLargeError{Path: abs, Size: info.Size(), Limit: MaxFileBytes}
+	}
 	return Input{Kind: InputFile, Path: abs, Dir: filepath.Dir(abs)}, nil
 }
 
@@ -50,6 +116,9 @@ func ReadStdin(r io.Reader) (Input, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return Input{}, err
+	}
+	if int64(len(data)) > MaxFileBytes {
+		return Input{}, &FileTooLargeError{Size: int64(len(data)), Limit: MaxFileBytes}
 	}
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return Input{Kind: InputNone}, nil

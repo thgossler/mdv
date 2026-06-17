@@ -1,6 +1,13 @@
 // search implements in-document find with highlight and next/prev navigation.
 // It walks text nodes inside the content element and wraps matches in <mark>.
 
+// maxSearchChars caps the amount of visible text the in-document find will walk.
+// Above it, highlighting is skipped to keep the UI responsive: building <mark>
+// nodes across a multi-megabyte document would block the main thread. The
+// backend already refuses to load documents larger than its own size limit, so
+// this only affects unusually large-but-loadable files.
+const maxSearchChars = 4_000_000;
+
 let matches: HTMLElement[] = [];
 let current = -1;
 let countEl: HTMLElement | null = null;
@@ -49,6 +56,10 @@ function run(query: string): void {
   const content = document.getElementById("content");
   if (!content || !query.trim()) {
     update();
+    return;
+  }
+  if ((content.textContent?.length ?? 0) > maxSearchChars) {
+    if (countEl) countEl.textContent = "too large";
     return;
   }
   const q = query.toLowerCase();
