@@ -124,7 +124,6 @@ func indexIn(s []string, want string) int {
 	return -1
 }
 
-
 func TestExtractTitleAndPopulate(t *testing.T) {
 	dir := t.TempDir()
 
