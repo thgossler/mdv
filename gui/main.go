@@ -18,6 +18,13 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// appIcon is the application icon (a copy of images/icon.png). Wails uses it on
+// macOS for the Dock icon, on Windows as the window/App-switcher/title-bar icon
+// fallback, and on Linux for the window icon.
+//
+//go:embed appicon.png
+var appIcon []byte
+
 func main() {
 	if err := runGUI(); err != nil {
 		log.Fatal(err)
@@ -38,6 +45,7 @@ func runGUI() error {
 	app := application.New(application.Options{
 		Name:        core.AppName,
 		Description: core.AppTagline,
+		Icon:        appIcon,
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},

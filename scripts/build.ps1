@@ -36,6 +36,29 @@ if ([string]::IsNullOrEmpty($Version)) {
 }
 $LdFlags = "-s -w -X github.com/thgossler/mdv/internal/core.Version=$Version"
 
+# New-WinResSyso generates a Windows resource object so `go build` embeds the
+# application icon (Explorer / desktop-shortcut / taskbar icon and, via Wails'
+# resource-ID-3 lookup, the window / App-switcher / title-bar icon), an app
+# manifest and version info. The generator lives in its own module so its
+# build-only deps stay out of mdv's go.mod (see scripts/winres/main.go).
+function New-WinResSyso {
+    param(
+        [Parameter(Mandatory)][string]$Package,
+        [Parameter(Mandatory)][string]$Description
+    )
+    $root = (Get-Location).Path
+    $ver = $Version.TrimStart('v')
+    $out = Join-Path $root "$Package/rsrc_windows_amd64.syso"
+    $icon = Join-Path $root "images/icon.png"
+    Push-Location (Join-Path $root "scripts/winres")
+    try {
+        go run . -icon $icon -out $out -version $ver -description $Description
+        if ($LASTEXITCODE -ne 0) { throw "winres syso generation failed for $Package" }
+    } finally {
+        Pop-Location
+    }
+}
+
 New-Item -ItemType Directory -Force -Path build, internal/launcher/assets | Out-Null
 
 if ($Stage -eq "all" -or $Stage -eq "helper") {
@@ -50,6 +73,11 @@ if ($Stage -eq "all" -or $Stage -eq "helper") {
     if (-not (Test-Path gui/frontend/dist/.gitkeep)) {
         Copy-Item gui/frontend/public/.gitkeep gui/frontend/dist/.gitkeep
     }
+
+    # Keep the embedded GUI icon (window/App-switcher icon) in sync, and embed
+    # the .exe resource icon for Explorer / shortcuts / taskbar.
+    Copy-Item images/icon.png gui/appicon.png -Force
+    New-WinResSyso -Package "gui" -Description "Markdown Document Viewer (GUI)"
 
     Write-Host "==> [2/4] Generating bindings + compiling GUI helper"
     Push-Location gui
@@ -80,6 +108,7 @@ if ($Stage -eq "all" -or $Stage -eq "launcher") {
     Get-Item internal/launcher/assets/mdv-gui.gz | Select-Object Length
 
     Write-Host "==> [4/4] Compiling self-contained launcher"
+    New-WinResSyso -Package "cmd/mdv" -Description "Markdown Document Viewer"
     $env:CGO_ENABLED = "0"
     go build -tags gui_bundled -ldflags $LdFlags -o build/mdv.exe ./cmd/mdv
 

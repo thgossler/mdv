@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# notarize-macos.sh — submit the signed `mdv` binary to Apple's notary service.
+# notarize-macos.sh — submit a signed `mdv` artifact to Apple's notary service.
 #
-# The launcher is a single Mach-O executable (not an .app/.pkg/.dmg), so a
-# notarization *ticket* cannot be stapled to it — `stapler` only supports
-# bundles, disk images and installer packages. Notarization still registers the
-# binary with Apple so Gatekeeper passes its online check on first launch.
+# Accepts either the bare `mdv` Mach-O executable or the `mdv.app` bundle. A
+# bundle is stapled after notarization (the ticket travels with the archive);
+# a bare executable cannot be stapled — `stapler` only supports bundles, disk
+# images and installer packages — so Gatekeeper verifies it online on first run.
 #
 # No-op when the notary credentials are not configured (local/dev builds).
 #
@@ -14,7 +14,7 @@
 #   APPLE_TEAM_ID    Developer Team ID (10 chars).
 #   APPLE_APP_PASSWORD  App-specific password for the Apple ID.
 #
-# Usage: scripts/notarize-macos.sh [path-to-binary]   (default: build/mdv)
+# Usage: scripts/notarize-macos.sh [path]   (default: build/mdv)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -25,8 +25,8 @@ if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ] || [ -z "${APPLE_APP_PA
   exit 0
 fi
 
-if [ ! -f "$BIN" ]; then
-  echo "notarize-macos: binary not found: $BIN" >&2
+if [ ! -e "$BIN" ]; then
+  echo "notarize-macos: path not found: $BIN" >&2
   exit 1
 fi
 
@@ -43,8 +43,18 @@ xcrun notarytool submit "$ZIP" \
 
 echo "==> Notarization complete. Verifying signature/Gatekeeper assessment:"
 codesign --verify --strict --verbose=2 "$BIN" || true
-spctl --assess --type execute --verbose=4 "$BIN" || true
+
+# A .app bundle CAN be stapled, so the notarization ticket travels with the
+# archive and Gatekeeper passes offline. A bare Mach-O executable cannot be
+# stapled — Gatekeeper verifies it online on first run instead.
+if [ -d "$BIN" ]; then
+  echo "==> Stapling notarization ticket to bundle"
+  xcrun stapler staple "$BIN"
+  xcrun stapler validate "$BIN" || true
+  spctl --assess --type execute --verbose=4 "$BIN" || true
+else
+  spctl --assess --type execute --verbose=4 "$BIN" || true
+fi
 
 rm -f "$ZIP"
-echo "==> Done. Note: a bare executable cannot be stapled; Gatekeeper verifies"
-echo "    the notarization online on first run."
+echo "==> Done."

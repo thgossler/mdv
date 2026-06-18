@@ -50,6 +50,10 @@ macos_sign() {
 
 mkdir -p build internal/launcher/assets
 
+# Keep the icon the GUI embeds (gui/appicon.png, used for the macOS Dock icon and
+# the Linux window icon) in sync with the canonical source.
+cp images/icon.png gui/appicon.png
+
 echo "==> [1/4] Building frontend"
 pushd gui/frontend >/dev/null
 if [ ! -d node_modules ]; then
@@ -101,6 +105,14 @@ else
   go build -tags gui_bundled -ldflags "$LDFLAGS" -o "build/mdv${HELPER_EXT}" ./cmd/mdv
 fi
 macos_sign "build/mdv${HELPER_EXT}"
+
+# macOS: also produce mdv.app, a Finder-friendly bundle that lets users
+# associate Markdown files with mdv (Open With / set as default app). It embeds
+# the universal launcher just built above and is signed with the same identity.
+if [ "$GOOS" = "darwin" ]; then
+  echo "==> Building macOS app bundle (mdv.app)"
+  scripts/make-macos-app.sh build/mdv.app build/mdv
+fi
 
 echo
 echo "Done: build/mdv${HELPER_EXT}  (version ${VERSION}, ${GOOS}/${GOARCH})"

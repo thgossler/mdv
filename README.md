@@ -113,6 +113,31 @@ mdv --init-config        # write a default settings.jsonc
 | `--version`       | Print version and exit                 |
 | `--init-config`   | Write a default settings file and exit |
 
+### Open Markdown files from Finder (macOS)
+
+macOS Finder's **Open With** only lists application bundles, so the bare `mdv`
+command-line tool can't be selected there. The macOS release archive
+(`mdv-darwin-universal.tar.gz`) therefore also contains **`mdv.app`** — a small
+wrapper bundle that forwards opened files to `mdv --gui`.
+
+1. Extract the archive and drag `mdv.app` into `/Applications`.
+2. Make `mdv` the default for Markdown files, either way:
+   - **In Finder:** select a `.md` file → **Get Info** → **Open with** →
+     choose `mdv` → **Change All…**.
+   - **From the command line** with [`duti`](https://github.com/moretension/duti)
+     (`brew install duti`):
+
+     ```sh
+     duti -s com.thgossler.mdv net.daringfireball.markdown all
+     ```
+
+Double-clicking a Markdown file (or any file opened via the bundle) now opens it
+in the mdv GUI. The plain `mdv` executable in the same archive remains the way
+to use mdv from the terminal.
+
+The wrapper runs as a background agent, so opening a file shows only the mdv GUI
+icon in the Dock — the wrapper itself never appears there.
+
 ### Document content search
 
 The document navigator can search inside your documents, not just filter by
@@ -190,7 +215,9 @@ pwsh scripts/build.ps1    # Windows     -> build/mdv.exe
 
 The script builds the frontend, compiles the GUI helper, compresses and embeds
 it into the launcher, and produces a single self-contained executable. On macOS
-the result is a universal (arm64 + amd64) binary.
+the result is a universal (arm64 + amd64) binary, and the script additionally
+produces `build/mdv.app` (the Finder wrapper described under
+[Open Markdown files from Finder](#open-markdown-files-from-finder-macos)).
 
 ### Architecture
 
