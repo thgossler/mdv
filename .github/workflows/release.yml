@@ -160,15 +160,22 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: scripts/notarize-macos.sh build/mdv
 
-      - name: Package
+      # Every platform ships as an archive whose name carries the platform
+      # (e.g. mdv-windows-amd64.zip); the executable inside is always just
+      # "mdv" / "mdv.exe". Windows uses zip, everything else tar.gz.
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build/mdv.exe -DestinationPath "dist/mdv-${{ matrix.target }}.zip" -Force
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p dist
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp build/mdv.exe "dist/mdv-${{ matrix.target }}.exe"
-          else
-            tar -C build -czf "dist/mdv-${{ matrix.target }}.tar.gz" mdv
-          fi
+          tar -C build -czf "dist/mdv-${{ matrix.target }}.tar.gz" mdv
 
       - uses: actions/upload-artifact@v4
         with:

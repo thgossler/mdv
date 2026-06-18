@@ -65,7 +65,7 @@ page:
 | Platform          | Asset                         |
 | ----------------- | ----------------------------- |
 | macOS (universal) | `mdv-darwin-universal.tar.gz` |
-| Windows (x64)     | `mdv-windows-amd64.exe`       |
+| Windows (x64)     | `mdv-windows-amd64.zip`       |
 | Linux (amd64)     | `mdv-linux-amd64.tar.gz`      |
 | Linux (arm64)     | `mdv-linux-arm64.tar.gz`      |
 

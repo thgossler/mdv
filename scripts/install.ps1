@@ -43,8 +43,8 @@ function Get-Arch {
 if ($IsWindows) {
     $arch = Get-Arch
     if ($arch -ne "amd64") { throw "No Windows build available for architecture '$arch'." }
-    $Asset = "mdv-windows-amd64.exe"
-    $IsArchive = $false
+    $Asset = "mdv-windows-amd64.zip"
+    $IsArchive = $true
     $BinaryName = "mdv.exe"
 }
 elseif ($IsMacOS) {
@@ -97,8 +97,9 @@ if ($IsArchive) {
     try {
         Invoke-WebRequest -Uri $Url -OutFile $archivePath -UseBasicParsing
 
-        # `tar` ships with macOS, Linux, and Windows 10+ and handles .tar.gz.
-        & tar -xzf $archivePath -C $tmp
+        # `tar` ships with macOS, Linux, and Windows 10+ and auto-detects the
+        # compression, so it handles both .tar.gz and .zip archives.
+        & tar -xf $archivePath -C $tmp
         if ($LASTEXITCODE -ne 0) { throw "Failed to extract $Asset" }
 
         $extracted = Get-ChildItem -Path $tmp -Recurse -File |
