@@ -1,0 +1,5 @@
+# Placeholder so `//go:embed all:frontend/dist` (gui/main.go) always finds a
+# matching file. The real build output (index.html, assets/) is produced by
+# `vite build` and is gitignored. Without this file, `go vet`/`go test` in CI
+# fail with "pattern all:frontend/dist: no matching files found" because the
+# quality-gate job does not build the frontend.
