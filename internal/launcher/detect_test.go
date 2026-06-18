@@ -1,6 +1,10 @@
 package launcher
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestModeString(t *testing.T) {
 	cases := map[Mode]string{
@@ -30,5 +34,30 @@ func TestDetectModeNonInteractiveDefaultsToConsole(t *testing.T) {
 	// guarantee that keeps mdv usable in headless CI/containers.
 	if got := DetectMode(Preference{}); got != ModeConsole {
 		t.Errorf("non-interactive default -> %v, want ModeConsole", got)
+	}
+}
+
+func TestDetectModeForceGUINonInteractive(t *testing.T) {
+	// Under `go test` stdout is not a TTY. A forced GUI must therefore resolve
+	// to either ModeGUI (when a GUI environment is available) or, when it is
+	// not, degrade straight to ModeConsole — never ModeTUI, since the TUI
+	// fallback requires an interactive stdout.
+	got := DetectMode(Preference{ForceGUI: true})
+	if got != ModeGUI && got != ModeConsole {
+		t.Errorf("ForceGUI non-interactive -> %v, want ModeGUI or ModeConsole", got)
+	}
+}
+
+func TestFileExists(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "present.txt")
+	if err := os.WriteFile(existing, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(existing) {
+		t.Errorf("fileExists(%q) = false, want true", existing)
+	}
+	if fileExists(filepath.Join(dir, "absent.txt")) {
+		t.Error("fileExists(missing) = true, want false")
 	}
 }

@@ -201,6 +201,28 @@ func TestReorderArgsMaxWidthValue(t *testing.T) {
 	}
 }
 
+func TestReorderArgsExtra(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"trailing flags", []string{"file.md", "--console", "--tui"}, []string{"--console", "--tui", "file.md"}},
+		{"already ordered", []string{"--console", "file.md"}, []string{"--console", "file.md"}},
+		{"terminator stops parsing", []string{"--", "--gui", "file.md"}, []string{"--gui", "file.md"}},
+		{"multiple value flags", []string{"file.md", "--max-width", "100", "--images", "auto"}, []string{"--max-width", "100", "--images", "auto", "file.md"}},
+		{"value flag mid-positionals", []string{"--console", "file.md", "--max-width", "80"}, []string{"--console", "--max-width", "80", "file.md"}},
+		{"empty", []string{}, []string{}},
+		{"only positional", []string{"file.md"}, []string{"file.md"}},
+	}
+	for _, c := range cases {
+		got := reorderArgs(c.in)
+		if strings.Join(got, " ") != strings.Join(c.want, " ") {
+			t.Errorf("%s: reorderArgs(%v) = %v, want %v", c.name, c.in, got, c.want)
+		}
+	}
+}
+
 func TestE2EMaxWidthCapsOutput(t *testing.T) {
 	body := "# Heading\n\nThis is a reasonably long paragraph that would otherwise wrap to the full terminal width when rendered by mdv in console mode.\n"
 	// Pipe via stdin so there is no file-path header line to skew the check.
