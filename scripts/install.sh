@@ -17,10 +17,10 @@ VERSION="${MDV_VERSION:-latest}"
 os="$(uname -s)"
 arch="$(uname -m)"
 case "$os" in
-  Darwin) target="darwin-universal" ;;
+  Darwin) target="macos-darwin-universal" ;;
   Linux)
     case "$arch" in
-      x86_64|amd64) target="linux-amd64" ;;
+      x86_64|amd64) target="linux-x64" ;;
       aarch64|arm64) target="linux-arm64" ;;
       *) echo "mdv: unsupported Linux architecture: $arch" >&2; exit 1 ;;
     esac

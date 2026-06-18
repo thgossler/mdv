@@ -16,15 +16,23 @@
 #
 # Run with the default -Stage all for a normal one-shot local build.
 #
-# Usage: pwsh scripts/build.ps1 [-Version v1.2.3] [-Stage all|helper|launcher]
+# Usage: pwsh scripts/build.ps1 [-Version v1.2.3] [-Stage all|helper|launcher] [-Arch amd64|arm64]
 param(
     [string]$Version = "",
     [ValidateSet("all", "helper", "launcher")]
-    [string]$Stage = "all"
+    [string]$Stage = "all",
+    [ValidateSet("amd64", "arm64")]
+    [string]$Arch = "amd64"
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
+
+# Build for the requested architecture. On a native runner this matches the host,
+# but we set it explicitly so the GUI helper (cgo) and launcher agree and the
+# correct winres .syso is linked.
+$env:GOOS = "windows"
+$env:GOARCH = $Arch
 
 if ([string]::IsNullOrEmpty($Version)) {
     $versionFile = Join-Path (Get-Location) "VERSION"
@@ -48,11 +56,11 @@ function New-WinResSyso {
     )
     $root = (Get-Location).Path
     $ver = $Version.TrimStart('v')
-    $out = Join-Path $root "$Package/rsrc_windows_amd64.syso"
+    $out = Join-Path $root "$Package/rsrc_windows_$Arch.syso"
     $icon = Join-Path $root "images/icon.png"
     Push-Location (Join-Path $root "scripts/winres")
     try {
-        go run . -icon $icon -out $out -version $ver -description $Description
+        go run . -icon $icon -out $out -version $ver -description $Description -arch $Arch
         if ($LASTEXITCODE -ne 0) { throw "winres syso generation failed for $Package" }
     } finally {
         Pop-Location
@@ -113,6 +121,6 @@ if ($Stage -eq "all" -or $Stage -eq "launcher") {
     go build -tags gui_bundled -ldflags $LdFlags -o build/mdv.exe ./cmd/mdv
 
     Write-Host ""
-    Write-Host "Done: build/mdv.exe  (version $Version, windows/amd64)"
+    Write-Host "Done: build/mdv.exe  (version $Version, windows/$Arch)"
     Write-Host "Run:  .\build\mdv.exe <file-or-folder>"
 }

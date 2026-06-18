@@ -36,11 +36,15 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            target: darwin-universal
+            target: macos-darwin-universal
           - os: windows-latest
-            target: windows-amd64
+            target: windows-x64
+            arch: amd64
+          - os: windows-11-arm
+            target: windows-arm64
+            arch: arm64
           - os: ubuntu-latest
-            target: linux-amd64
+            target: linux-x64
           - os: ubuntu-24.04-arm
             target: linux-arm64
     runs-on: ${{ matrix.os }}
@@ -112,7 +116,7 @@ jobs:
       - name: Build GUI helper (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME" -Stage helper
+        run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME" -Stage helper -Arch "${{ matrix.arch }}"
 
       - name: Azure login for Artifact Signing (Windows)
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
@@ -137,7 +141,7 @@ jobs:
       - name: Build launcher (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME" -Stage launcher
+        run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME" -Stage launcher -Arch "${{ matrix.arch }}"
 
       - name: Sign launcher (Windows)
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
@@ -163,7 +167,7 @@ jobs:
           scripts/notarize-macos.sh build/mdv.app
 
       # Every platform ships as an archive whose name carries the platform
-      # (e.g. mdv-windows-amd64.zip); the executable inside is always just
+      # (e.g. mdv-windows-x64.zip); the executable inside is always just
       # "mdv" / "mdv.exe". macOS additionally bundles mdv.app (the Finder-
       # friendly wrapper for file associations). Windows uses zip, else tar.gz.
       - name: Package (Windows)

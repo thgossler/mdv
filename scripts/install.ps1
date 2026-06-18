@@ -34,7 +34,7 @@ $Version = if ($env:MDV_VERSION) { $env:MDV_VERSION } else { "latest" }
 function Get-Arch {
     $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
     switch ($arch) {
-        "X64"   { return "amd64" }
+        "X64"   { return "x64" }
         "Arm64" { return "arm64" }
         default { throw "Unsupported architecture: $arch" }
     }
@@ -42,14 +42,14 @@ function Get-Arch {
 
 if ($IsWindows) {
     $arch = Get-Arch
-    if ($arch -ne "amd64") { throw "No Windows build available for architecture '$arch'." }
-    $Asset = "mdv-windows-amd64.zip"
+    if ($arch -notin @("x64", "arm64")) { throw "No Windows build available for architecture '$arch'." }
+    $Asset = "mdv-windows-$arch.zip"
     $IsArchive = $true
     $BinaryName = "mdv.exe"
 }
 elseif ($IsMacOS) {
     # macOS ships a single universal (arm64 + amd64) binary.
-    $Asset = "mdv-darwin-universal.tar.gz"
+    $Asset = "mdv-macos-darwin-universal.tar.gz"
     $IsArchive = $true
     $BinaryName = "mdv"
 }
@@ -87,7 +87,7 @@ $Dest = Join-Path $InstallDir $BinaryName
 
 # --- Download ----------------------------------------------------------------
 
-$platformLabel = if ($IsWindows) { "windows-amd64" } elseif ($IsMacOS) { "darwin-universal" } else { "linux-$arch" }
+$platformLabel = if ($IsWindows) { "windows-$arch" } elseif ($IsMacOS) { "macos-darwin-universal" } else { "linux-$arch" }
 Write-Host "Downloading mdv ($platformLabel, $Version)…"
 
 if ($IsArchive) {

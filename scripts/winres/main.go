@@ -35,20 +35,34 @@ func main() {
 	out := flag.String("out", "", "output .syso path (required)")
 	ver := flag.String("version", "0.0.0", "product/file version, e.g. 1.2.3")
 	desc := flag.String("description", "", "file description shown in Explorer")
+	arch := flag.String("arch", "amd64", "target architecture: amd64 or arm64")
 	flag.Parse()
 
 	if *icon == "" || *out == "" {
 		fmt.Fprintln(os.Stderr, "winres: -icon and -out are required")
 		os.Exit(2)
 	}
-	if err := generate(*icon, *out, *ver, *desc); err != nil {
+	if err := generate(*icon, *out, *ver, *desc, *arch); err != nil {
 		fmt.Fprintln(os.Stderr, "winres:", err)
 		os.Exit(1)
 	}
 	fmt.Printf("winres: wrote %s\n", *out)
 }
 
-func generate(iconPath, outPath, ver, desc string) error {
+func generate(iconPath, outPath, ver, desc, arch string) error {
+	// Map the Go GOARCH name to the matching COFF machine type. The .syso must
+	// be built for the same architecture as the `go build` that links it, or the
+	// linker rejects the object.
+	var machine winres.Arch
+	switch arch {
+	case "amd64":
+		machine = winres.ArchAMD64
+	case "arm64":
+		machine = winres.ArchARM64
+	default:
+		return fmt.Errorf("unsupported arch %q (want amd64 or arm64)", arch)
+	}
+
 	f, err := os.Open(iconPath)
 	if err != nil {
 		return err
@@ -91,7 +105,7 @@ func generate(iconPath, outPath, ver, desc string) error {
 	if err != nil {
 		return err
 	}
-	if err := rs.WriteObject(out, winres.ArchAMD64); err != nil {
+	if err := rs.WriteObject(out, machine); err != nil {
 		_ = out.Close()
 		return fmt.Errorf("write %q: %w", outPath, err)
 	}

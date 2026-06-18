@@ -62,12 +62,13 @@ pwsh -c "irm https://raw.githubusercontent.com/thgossler/mdv/main/scripts/instal
 Or download a binary directly from the [Releases](https://github.com/thgossler/mdv/releases)
 page:
 
-| Platform          | Asset                         |
-| ----------------- | ----------------------------- |
-| macOS (universal) | `mdv-darwin-universal.tar.gz` |
-| Windows (x64)     | `mdv-windows-amd64.zip`       |
-| Linux (amd64)     | `mdv-linux-amd64.tar.gz`      |
-| Linux (arm64)     | `mdv-linux-arm64.tar.gz`      |
+| Platform          | Asset                               |
+| ----------------- | ----------------------------------- |
+| macOS (universal) | `mdv-macos-darwin-universal.tar.gz` |
+| Windows (x64)     | `mdv-windows-x64.zip`               |
+| Windows (arm64)   | `mdv-windows-arm64.zip`             |
+| Linux (x64)       | `mdv-linux-x64.tar.gz`              |
+| Linux (arm64)     | `mdv-linux-arm64.tar.gz`            |
 
 ### Where it gets installed and how PATH is handled
 
@@ -117,7 +118,7 @@ mdv --init-config        # write a default settings.jsonc
 
 macOS Finder's **Open With** only lists application bundles, so the bare `mdv`
 command-line tool can't be selected there. The macOS release archive
-(`mdv-darwin-universal.tar.gz`) therefore also contains **`mdv.app`** — a small
+(`mdv-macos-darwin-universal.tar.gz`) therefore also contains **`mdv.app`** — a small
 wrapper bundle that forwards opened files to `mdv --gui`.
 
 1. Extract the archive and drag `mdv.app` into `/Applications`.
