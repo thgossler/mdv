@@ -1,0 +1,4 @@
+# Vite copies the contents of this `public/` directory into `dist/` on every
+# build. Shipping this placeholder here means `dist/.gitkeep` is regenerated
+# after Vite empties the output directory, so the go:embed placeholder is never
+# accidentally lost from the working tree (and re-committed as a deletion).
