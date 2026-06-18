@@ -7,12 +7,11 @@
   <h1 align="center">mdv</h1>
 
   <p align="center">
-    A minimal, fast, self-contained markdown viewer for reading documentation anywhere with seamless navigation. One small executable, no installation, no dependencies.
+    A minimal, fast, self-contained markdown viewer for reading local markdown docs with seamless navigation. One executable, no installation, no dependencies.
     <br />
 
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-informational?label=Platforms)](https://github.com/thgossler/mdv/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/thgossler/mdv/ci.yml?branch=main&logo=github&label=CI)](https://github.com/thgossler/mdv/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/thgossler/mdv/release.yml?logo=github&label=Release)](https://github.com/thgossler/mdv/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/thgossler/mdv?logo=github&label=Latest%20release&sort=semver)](https://github.com/thgossler/mdv/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/thgossler/mdv/total?logo=github&label=Downloads)](https://github.com/thgossler/mdv/releases)
 [![Open issues](https://img.shields.io/github/issues/thgossler/mdv?logo=github&label=Issues)](https://github.com/thgossler/mdv/issues)
