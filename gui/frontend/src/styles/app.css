@@ -272,6 +272,62 @@ body.pane-resizing {
   background: var(--accent);
   color: var(--accent-fg);
 }
+/* Exclusion-pattern field pinned to the bottom of the navigator pane. */
+.sidebar-foot {
+  flex: none;
+  padding: 8px;
+  border-top: 1px solid var(--border-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.exclude-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.exclude-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+}
+.exclude-toggle {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.exclude-toggle input {
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.nav-exclude {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 3.6em;
+  max-height: 12em;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono-font, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+}
+.nav-exclude:focus {
+  border-color: var(--accent);
+}
+/* When the filters are disabled the field is dimmed to signal it is inactive. */
+.sidebar-foot.disabled .nav-exclude {
+  opacity: 0.55;
+}
 /* The content-search toggle uses a glyph that reads small at the default button
    font size, so bump it up to match the visual weight of the other controls. */
 #btn-content-search {

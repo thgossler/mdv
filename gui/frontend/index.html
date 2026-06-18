@@ -44,6 +44,27 @@
             <button id="btn-labels" class="tb-btn" title="Toggle filename/title (Cmd/Ctrl+T)">#</button>
           </div>
           <nav id="nav-list" class="nav-list" tabindex="-1"></nav>
+          <div id="sidebar-foot" class="sidebar-foot">
+            <div class="exclude-head">
+              <label for="nav-exclude" class="exclude-label" title="Exclusion pattern in the style of .gitignore">Exclude</label>
+              <label
+                class="exclude-toggle"
+                title="Enable/disable the exclusion filters"
+              >
+                <input id="exclude-enabled" type="checkbox" />
+              </label>
+            </div>
+            <textarea
+              id="nav-exclude"
+              class="nav-exclude"
+              rows="3"
+              spellcheck="false"
+              autocomplete="off"
+              autocapitalize="off"
+              placeholder="e.g. archive/&#10;*.draft.md"
+              title="Exclusion pattern in the style of .gitignore"
+            ></textarea>
+          </div>
         </aside>
 
         <div

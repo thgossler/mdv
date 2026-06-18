@@ -33,7 +33,12 @@ type LayoutState struct {
 	Maximized    bool `json:"maximized"`
 	SidebarWidth int  `json:"sidebarWidth"`
 	TocWidth     int  `json:"tocWidth"`
-	Valid        bool `json:"valid"`
+	// ExcludePatterns holds the navigator exclusion patterns (.gitignore style),
+	// one per line, exactly as entered in the sidebar's Exclude field.
+	ExcludePatterns string `json:"excludePatterns"`
+	// ExcludeEnabled toggles whether the exclusion patterns are applied.
+	ExcludeEnabled bool `json:"excludeEnabled"`
+	Valid          bool `json:"valid"`
 }
 
 func layoutStatePath() (string, error) {
@@ -131,6 +136,16 @@ func (s *LayoutStore) ResetPanels() {
 	s.mu.Lock()
 	s.st.SidebarWidth = defaultSidebarWidth
 	s.st.TocWidth = defaultTocWidth
+	s.scheduleLocked()
+	s.mu.Unlock()
+}
+
+// UpdateExcludes records the navigator exclusion patterns and their enabled
+// state and schedules a save.
+func (s *LayoutStore) UpdateExcludes(patterns string, enabled bool) {
+	s.mu.Lock()
+	s.st.ExcludePatterns = patterns
+	s.st.ExcludeEnabled = enabled
 	s.scheduleLocked()
 	s.mu.Unlock()
 }

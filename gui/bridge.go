@@ -40,6 +40,11 @@ type Bridge struct {
 	searchMu     sync.Mutex
 	searchGen    uint64
 	searchCancel context.CancelFunc
+
+	// excludeMu guards the navigator exclusion state below.
+	excludeMu       sync.Mutex
+	excludePatterns []string
+	excludeEnabled  bool
 }
 
 // NewBridge builds a Bridge for the given input and configuration.
@@ -77,6 +82,10 @@ type InitInfo struct {
 type LayoutDTO struct {
 	SidebarWidth int `json:"sidebarWidth"`
 	TocWidth     int `json:"tocWidth"`
+	// ExcludePatterns is the persisted navigator exclusion text (one pattern per
+	// line) and ExcludeEnabled whether it is currently applied.
+	ExcludePatterns string `json:"excludePatterns"`
+	ExcludeEnabled  bool   `json:"excludeEnabled"`
 }
 
 // UpdateDTO carries version-check results to the status bar.
@@ -110,6 +119,7 @@ func (b *Bridge) Init() InitInfo {
 // any unset (zero) value.
 func (b *Bridge) layoutDTO() LayoutDTO {
 	sidebar, toc := defaultSidebarWidth, defaultTocWidth
+	patterns, enabled := "", false
 	if b.layout != nil {
 		st := b.layout.Get()
 		if st.SidebarWidth > 0 {
@@ -118,8 +128,14 @@ func (b *Bridge) layoutDTO() LayoutDTO {
 		if st.TocWidth > 0 {
 			toc = st.TocWidth
 		}
+		patterns, enabled = st.ExcludePatterns, st.ExcludeEnabled
 	}
-	return LayoutDTO{SidebarWidth: sidebar, TocWidth: toc}
+	return LayoutDTO{
+		SidebarWidth:    sidebar,
+		TocWidth:        toc,
+		ExcludePatterns: patterns,
+		ExcludeEnabled:  enabled,
+	}
 }
 
 // SaveLayout records the current side-panel widths (in pixels). The store
@@ -145,6 +161,77 @@ func (b *Bridge) ResetLayout() LayoutDTO {
 		b.layout.ResetPanels()
 	}
 	return LayoutDTO{SidebarWidth: defaultSidebarWidth, TocWidth: defaultTocWidth}
+}
+
+// initExcludes seeds the in-memory exclusion state from the persisted layout.
+// Called once during startup after the layout store is attached.
+func (b *Bridge) initExcludes() {
+	if b.layout == nil {
+		return
+	}
+	st := b.layout.Get()
+	b.excludeMu.Lock()
+	b.excludePatterns = splitExcludeLines(st.ExcludePatterns)
+	b.excludeEnabled = st.ExcludeEnabled
+	b.excludeMu.Unlock()
+}
+
+// splitExcludeLines splits the multi-line exclude text into individual pattern
+// lines. Empty lines and comments are kept here (the matcher skips them) so the
+// stored text round-trips exactly.
+func splitExcludeLines(text string) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	return strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+}
+
+// ApplyExcludes stores the navigator exclusion patterns and enabled flag,
+// persists them (debounced) and returns the absolute paths of the workspace
+// documents that are currently excluded. When disabled it returns an empty
+// list, leaving every document visible while still remembering the patterns.
+func (b *Bridge) ApplyExcludes(text string, enabled bool) []string {
+	patterns := splitExcludeLines(text)
+
+	b.excludeMu.Lock()
+	b.excludePatterns = patterns
+	b.excludeEnabled = enabled
+	b.excludeMu.Unlock()
+
+	if b.layout != nil {
+		b.layout.UpdateExcludes(text, enabled)
+	}
+
+	if !enabled {
+		return []string{}
+	}
+	excluded := core.ExcludedPaths(b.workspace, b.input.Dir, patterns)
+	if excluded == nil {
+		return []string{}
+	}
+	return excluded
+}
+
+// excludedSet returns the set of currently excluded absolute paths, or nil when
+// exclusion is disabled or no patterns are active. Used to skip excluded files
+// during content search.
+func (b *Bridge) excludedSet() map[string]bool {
+	b.excludeMu.Lock()
+	enabled := b.excludeEnabled
+	patterns := b.excludePatterns
+	b.excludeMu.Unlock()
+	if !enabled || len(patterns) == 0 {
+		return nil
+	}
+	excluded := core.ExcludedPaths(b.workspace, b.input.Dir, patterns)
+	if len(excluded) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(excluded))
+	for _, p := range excluded {
+		set[p] = true
+	}
+	return set
 }
 
 func (b *Bridge) workspaceDTO() []DocFileDTO {
@@ -331,7 +418,18 @@ func (b *Bridge) SearchContent(query string, gen int) {
 	rgPath := b.rgPath
 	b.searchMu.Unlock()
 
+	// Restrict the search to documents that are not currently excluded by the
+	// navigator's exclusion patterns, so hidden files never surface as matches.
 	files := b.workspace
+	if excluded := b.excludedSet(); excluded != nil {
+		filtered := make([]core.DocFile, 0, len(files))
+		for _, f := range files {
+			if !excluded[f.Path] {
+				filtered = append(filtered, f)
+			}
+		}
+		files = filtered
+	}
 	emit := b.emit
 
 	go func() {

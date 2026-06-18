@@ -56,6 +56,7 @@ func runGUI() error {
 	st := LoadLayoutState()
 	store := NewLayoutStore(st)
 	bridge.layout = store
+	bridge.initExcludes()
 	// Home/End (with or without Ctrl/Cmd) are swallowed by WKWebView before they
 	// reach the webview's JS or Wails' key-binding system: WKWebView consumes them
 	// for its own (here no-op) document scrolling and dispatches neither a DOM

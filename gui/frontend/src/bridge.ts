@@ -42,4 +42,6 @@ export const api = {
   saveLayout: (sidebarWidth: number, tocWidth: number): Promise<void> =>
     Bridge.SaveLayout(sidebarWidth, tocWidth),
   resetLayout: (): Promise<LayoutDTO> => Bridge.ResetLayout(),
+  applyExcludes: (text: string, enabled: boolean): Promise<string[] | null> =>
+    Bridge.ApplyExcludes(text, enabled),
 };

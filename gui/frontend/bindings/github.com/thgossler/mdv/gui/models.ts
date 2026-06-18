@@ -52,6 +52,13 @@ export interface InitInfo {
 export interface LayoutDTO {
     "sidebarWidth": number;
     "tocWidth": number;
+
+    /**
+     * ExcludePatterns is the persisted navigator exclusion text (one pattern per
+     * line) and ExcludeEnabled whether it is currently applied.
+     */
+    "excludePatterns": string;
+    "excludeEnabled": boolean;
 }
 
 /**

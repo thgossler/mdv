@@ -21,6 +21,16 @@ import * as core$0 from "../internal/core/models.js";
 import * as $models from "./models.js";
 
 /**
+ * ApplyExcludes stores the navigator exclusion patterns and enabled flag,
+ * persists them (debounced) and returns the absolute paths of the workspace
+ * documents that are currently excluded. When disabled it returns an empty
+ * list, leaving every document visible while still remembering the patterns.
+ */
+export function ApplyExcludes(text: string, enabled: boolean): $CancellablePromise<string[] | null> {
+    return $Call.ByID(1416857530, text, enabled);
+}
+
+/**
  * Backlinks returns documents that link to the given file.
  */
 export function Backlinks(path: string): $CancellablePromise<core$0.Backlink[] | null> {

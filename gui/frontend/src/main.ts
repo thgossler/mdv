@@ -49,6 +49,15 @@ let searchDebounce: number | undefined;
 // typing while results pour in.
 let searchRenderRaf: number | undefined;
 
+// --- navigator exclusion state ----------------------------------------------
+// Gitignore-style patterns hide documents/folders from the navigator. The set
+// of excluded absolute paths is computed by the backend (which owns the
+// matching + persistence) and cached here so render passes can filter cheaply.
+// `excludeEnabled` mirrors the checkbox; when off the set is empty.
+let excludeEnabled = false;
+let excludedPaths = new Set<string>();
+let excludeDebounce: number | undefined;
+
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const els = {
@@ -59,6 +68,9 @@ const els = {
   navList: $("nav-list"),
   navFilter: $<HTMLInputElement>("nav-filter"),
   btnContentSearch: $<HTMLButtonElement>("btn-content-search"),
+  navExclude: $<HTMLTextAreaElement>("nav-exclude"),
+  excludeEnabled: $<HTMLInputElement>("exclude-enabled"),
+  sidebarFoot: $<HTMLElement>("sidebar-foot"),
   toc: $("toc"),
   tocList: $("toc-list"),
   backlinksList: $("backlinks-list"),
@@ -107,6 +119,10 @@ async function boot(): Promise<void> {
   buildSidebar();
   wireToolbar();
   wireResizers();
+  // The navigator is most useful when browsing a folder, so start it collapsed
+  // when a single file was opened and expanded when a folder was given. Done
+  // before the UI is revealed so the sidebar never flashes the wrong state.
+  els.sidebar.classList.toggle("collapsed", info.kind === "file");
   // Layout (panel widths) is now applied; reveal the UI so the panes never
   // flash at their default width before jumping to the persisted size.
   $("app").classList.remove("layout-pending");
@@ -391,7 +407,7 @@ function goBack(): void {
 // --- sidebar ----------------------------------------------------------------
 
 function buildSidebar(): void {
-  renderNav(workspace);
+  renderNav(visibleWorkspace());
   els.navFilter.addEventListener("input", onNavFilterInput);
   // Escape clears the filter so the full document list is shown again.
   els.navFilter.addEventListener("keydown", (e) => {
@@ -404,6 +420,96 @@ function buildSidebar(): void {
   });
   els.btnContentSearch.addEventListener("click", toggleContentSearch);
   wireContentSearchEvents();
+  wireExcludeField();
+}
+
+// --- navigator exclusion ----------------------------------------------------
+
+// visibleWorkspace returns the document list with excluded entries removed.
+// `excludedPaths` is empty whenever exclusion is disabled, so this is a no-op
+// in that case.
+function visibleWorkspace(): DocFileDTO[] {
+  if (excludedPaths.size === 0) return workspace;
+  return workspace.filter((d) => !excludedPaths.has(d.path));
+}
+
+// wireExcludeField seeds the exclusion controls from persisted layout state and
+// wires the textarea (debounced) and the enable checkbox.
+function wireExcludeField(): void {
+  els.navExclude.value = info.layout.excludePatterns || "";
+  excludeEnabled = !!info.layout.excludeEnabled;
+  els.excludeEnabled.checked = excludeEnabled;
+  updateExcludeDisabled();
+  els.navExclude.addEventListener("input", scheduleApplyExcludes);
+  els.excludeEnabled.addEventListener("change", () => {
+    excludeEnabled = els.excludeEnabled.checked;
+    updateExcludeDisabled();
+    void applyExcludes();
+  });
+  // Compute the initial excluded set (and re-render) only when there is work to
+  // do, so a clean startup avoids a needless backend round-trip and state write.
+  if (excludeEnabled && els.navExclude.value.trim() !== "") {
+    void applyExcludes();
+  }
+}
+
+// updateExcludeDisabled dims the field when exclusion is switched off.
+function updateExcludeDisabled(): void {
+  els.sidebarFoot.classList.toggle("disabled", !excludeEnabled);
+}
+
+// scheduleApplyExcludes debounces textarea edits so rapid typing triggers a
+// single re-evaluation, mirroring the 500ms filter/search debounce.
+function scheduleApplyExcludes(): void {
+  if (excludeDebounce !== undefined) clearTimeout(excludeDebounce);
+  excludeDebounce = window.setTimeout(() => void applyExcludes(), 500);
+}
+
+// applyExcludes pushes the current patterns + enabled flag to the backend
+// (which persists them and returns the excluded absolute paths) and refreshes
+// the navigator view to reflect the new set.
+async function applyExcludes(): Promise<void> {
+  if (excludeDebounce !== undefined) {
+    clearTimeout(excludeDebounce);
+    excludeDebounce = undefined;
+  }
+  const list = (await api.applyExcludes(els.navExclude.value, excludeEnabled)) || [];
+  excludedPaths = new Set(list);
+  refreshNav();
+}
+
+// refreshNav rebuilds the navigator using the active mode and current filters.
+function refreshNav(): void {
+  if (contentSearchMode) {
+    renderSearchNav();
+  } else {
+    renderNav(currentFilter());
+  }
+  // While the folder welcome is showing (no document open yet), keep its
+  // excluded/visible counts in sync as the ignore patterns change.
+  if (!currentPath && info.kind !== "file") {
+    showFolderWelcome();
+  }
+}
+
+// appendExcludeRule adds a gitignore rule from the context menu, enabling the
+// filters so the action takes immediate effect, scrolling to reveal the new
+// entry, and re-evaluating after the standard debounce.
+function appendExcludeRule(rule: string): void {
+  const ta = els.navExclude;
+  const existing = ta.value.split(/\r?\n/).map((l) => l.trim());
+  if (!existing.includes(rule)) {
+    const trimmed = ta.value.replace(/\s+$/, "");
+    ta.value = (trimmed ? trimmed + "\n" : "") + rule + "\n";
+  }
+  if (!excludeEnabled) {
+    excludeEnabled = true;
+    els.excludeEnabled.checked = true;
+    updateExcludeDisabled();
+  }
+  // Scroll to the bottom so the freshly added rule is visible.
+  ta.scrollTop = ta.scrollHeight;
+  scheduleApplyExcludes();
 }
 
 // onNavFilterInput routes the navigator filter box to either name filtering or
@@ -439,7 +545,6 @@ function toggleContentSearch(): void {
     renderNav(currentFilter());
   }
 }
-
 // splitKeywords lowercases and splits the query into distinct space-separated
 // keywords, mirroring the backend's AND-per-document semantics.
 function splitKeywords(query: string): string[] {
@@ -522,12 +627,12 @@ function nameQualifies(d: DocFileDTO): boolean {
 function renderSearchNav(): void {
   if (searchKeywords.length === 0) {
     // Empty query: show the full document list (no matches).
-    renderNav(workspace);
+    renderNav(visibleWorkspace());
     return;
   }
   // Build the rows off-DOM and swap them in once to minimise reflow.
   const frag = document.createDocumentFragment();
-  for (const d of workspace) {
+  for (const d of visibleWorkspace()) {
     const matches = searchResults.get(d.path);
     const qualifies = (matches && matches.length > 0) || nameQualifies(d);
     if (!qualifies) continue;
@@ -554,12 +659,28 @@ function makeNavItem(d: DocFileDTO): HTMLAnchorElement {
     a.focus();
     void openDocument(d.path, true, { focusContent: false });
   });
-  a.addEventListener("contextmenu", (e) =>
-    openMenu(e, [
+  a.addEventListener("contextmenu", (e) => {
+    const rel = (d.rel || d.name).replace(/^\/+/, "");
+    const items: MenuItem[] = [
       { label: "Copy", fn: () => copyText(a.textContent || "") },
       { label: "Open in New Window", fn: () => api.openNewWindow(d.path) },
-    ])
-  );
+      { label: "Exclude file", fn: () => appendExcludeRule("/" + rel) },
+    ];
+    const slash = rel.lastIndexOf("/");
+    if (slash > 0) {
+      const folder = rel.slice(0, slash);
+      items.push({ label: "Exclude folder", fn: () => appendExcludeRule("/" + folder + "/") });
+    }
+    // Offer "root folder" only when it differs from the immediate parent, i.e.
+    // the document is nested at least two levels deep (otherwise it would add
+    // the exact same rule as "Exclude folder").
+    const firstSlash = rel.indexOf("/");
+    if (firstSlash > 0 && firstSlash !== slash) {
+      const root = rel.slice(0, firstSlash);
+      items.push({ label: "Exclude root folder", fn: () => appendExcludeRule("/" + root + "/") });
+    }
+    openMenu(e, items);
+  });
   return a;
 }
 
@@ -605,9 +726,17 @@ function highlightActiveNav(): void {
 }
 
 function showFolderWelcome(): void {
-  const count = workspace.length;
+  const total = workspace.length;
+  const excluded = excludeEnabled ? excludedPaths.size : 0;
+  const visible = total - excluded;
+  // With exclusion active the count reflects how many documents remain visible
+  // versus how many were hidden; otherwise the plain total reads more clearly.
+  const summary =
+    excluded > 0
+      ? `${visible} of ${total} markdown document${total === 1 ? "" : "s"} shown — ${excluded} excluded by ignore pattern${excluded === 1 ? "" : "s"}.`
+      : `${total} markdown document${total === 1 ? "" : "s"} in this folder.`;
   els.content.innerHTML = `<div class="welcome"><h1>${escapeHtml(info.appName)}</h1>
-    <p>${count} markdown document${count === 1 ? "" : "s"} in this folder.</p>
+    <p>${summary}</p>
     <p class="muted">Select a document from the sidebar to begin.</p></div>`;
   els.docTitle.textContent = info.dir;
   els.tocList.innerHTML = "";
@@ -951,9 +1080,10 @@ function toggleContentWidth(): void {
 }
 
 function currentFilter(): DocFileDTO[] {
+  const base = visibleWorkspace();
   const q = els.navFilter.value.toLowerCase();
-  if (!q) return workspace;
-  return workspace.filter(
+  if (!q) return base;
+  return base.filter(
     (d) => d.name.toLowerCase().includes(q) || (d.title || "").toLowerCase().includes(q)
   );
 }
