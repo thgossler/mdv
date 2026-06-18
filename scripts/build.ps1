@@ -45,6 +45,12 @@ if ($Stage -eq "all" -or $Stage -eq "helper") {
     npm run build
     Pop-Location
 
+    # Safety net for the go:embed placeholder (see scripts/build.sh for the
+    # rationale): guarantee dist/.gitkeep exists so `go vet` on the embed works.
+    if (-not (Test-Path gui/frontend/dist/.gitkeep)) {
+        Copy-Item gui/frontend/public/.gitkeep gui/frontend/dist/.gitkeep
+    }
+
     Write-Host "==> [2/4] Generating bindings + compiling GUI helper"
     Push-Location gui
     & wails3 generate bindings -ts -i -clean=true 2>$null | Out-Null

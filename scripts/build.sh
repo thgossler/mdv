@@ -58,6 +58,15 @@ fi
 npm run build
 popd >/dev/null
 
+# Safety net for the go:embed placeholder. Vite copies gui/frontend/public/ into
+# dist/ on every build, which normally regenerates dist/.gitkeep after Vite
+# empties the output directory. This guard keeps the embed working even if that
+# copy ever stops happening: CI runs `go vet` on the //go:embed all:frontend/dist
+# directive WITHOUT building the frontend, so a missing dist/.gitkeep would fail.
+if [ ! -f gui/frontend/dist/.gitkeep ]; then
+  cp gui/frontend/public/.gitkeep gui/frontend/dist/.gitkeep
+fi
+
 echo "==> [2/4] Generating bindings + compiling GUI helper"
 ( cd gui && wails3 generate bindings -ts -i -clean=true >/dev/null 2>&1 || true )
 
