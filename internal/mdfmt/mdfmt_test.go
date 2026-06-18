@@ -94,6 +94,24 @@ func TestHyperlinksDisabledKeepsURL(t *testing.T) {
 	}
 }
 
+func TestHyperlinksMultilineTextCollapsed(t *testing.T) {
+	// A link whose [text] spans two source lines (a soft break plus the next
+	// line's indentation) must render its visible text on a single line: the
+	// embedded newline/indent would otherwise show as a spurious mid-link break.
+	in := "- [Microsoft.Identity.Client\n  (MSAL)](https://github.com/AzureAD/microsoft-authentication-library-for-dotnet)\n"
+	out, err := Render(in, 120, "notty", true, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out)
+	if !strings.Contains(visible, "Microsoft.Identity.Client (MSAL)") {
+		t.Errorf("multi-line link text not collapsed to one line: %q", visible)
+	}
+	if strings.Contains(visible, "Client\n") || strings.Contains(visible, "Client  ") {
+		t.Errorf("link text retained embedded break/indent: %q", visible)
+	}
+}
+
 func TestHyperlinksImageInLinkUsesAlt(t *testing.T) {
 	in := "[![Platforms](https://img.shields.io/badge.svg)](https://github.com/owner/repo)\n"
 	out, err := Render(in, 80, "notty", true, nil, "")

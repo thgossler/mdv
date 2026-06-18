@@ -264,7 +264,7 @@ func prepareHyperlinks(s string) (string, []string) {
 					if strings.TrimSpace(text) == "" {
 						text = url
 					}
-					add(text, url)
+					add(collapseLinkText(text), url)
 				}
 				i = end
 				continue
@@ -274,6 +274,15 @@ func prepareHyperlinks(s string) (string, []string) {
 		i++
 	}
 	return b.String(), urls
+}
+
+// collapseLinkText normalises a hyperlink's visible text. CommonMark turns soft
+// line breaks and internal whitespace runs inside link text into single spaces,
+// but mdv's lightweight parser keeps the raw source. Left as-is, a link whose
+// [text] spans multiple source lines keeps its embedded newline and indentation
+// and renders as a spurious mid-link line break, so collapse the whitespace.
+func collapseLinkText(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // parseBracketLink parses an inline link "[text](dest)" starting at s[i] == '['.
