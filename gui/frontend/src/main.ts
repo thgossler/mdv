@@ -546,7 +546,8 @@ function makeNavItem(d: DocFileDTO): HTMLAnchorElement {
   a.className = "nav-item";
   a.tabIndex = -1;
   a.dataset.path = d.path;
-  a.textContent = labelMode === "title" && d.title ? d.title : d.name;
+  a.textContent =
+    labelMode === "title" && d.title ? d.title : d.rel || d.name;
   a.title = d.rel || d.path;
   a.addEventListener("click", (e) => {
     e.preventDefault();

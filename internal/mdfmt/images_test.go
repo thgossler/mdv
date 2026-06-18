@@ -36,7 +36,7 @@ func (f *rowImageRenderer) RenderImageRow(srcs []string, width int) (string, boo
 func TestRenderLaysConsecutiveImagesInRow(t *testing.T) {
 	f := &rowImageRenderer{}
 	in := "[![A](a.svg)](l1)\n[![B](b.svg)](l2)\n[![C](c.svg)](l3)\n"
-	out, err := Render(in, 80, "notty", false, f)
+	out, err := Render(in, 80, "notty", false, f, "")
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestRenderLaysConsecutiveImagesInRow(t *testing.T) {
 func TestRenderLoneImageNotTreatedAsRow(t *testing.T) {
 	f := &rowImageRenderer{}
 	in := "![Hero](hero.png)\n\nText.\n"
-	if _, err := Render(in, 80, "notty", false, f); err != nil {
+	if _, err := Render(in, 80, "notty", false, f, ""); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	if len(f.rows) != 0 {
@@ -73,7 +73,7 @@ func TestRenderLoneImageNotTreatedAsRow(t *testing.T) {
 func TestRenderPassesHTMLWidthAttr(t *testing.T) {
 	f := &fakeImageRenderer{}
 	in := `<img src="hero.png" alt="Icon" width="400" />` + "\n"
-	if _, err := Render(in, 80, "notty", false, f); err != nil {
+	if _, err := Render(in, 80, "notty", false, f, ""); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	if len(f.widths) != 1 || f.widths[0] != 400 {
@@ -84,7 +84,7 @@ func TestRenderPassesHTMLWidthAttr(t *testing.T) {
 func TestRenderPassesMarkdownSizeHint(t *testing.T) {
 	f := &fakeImageRenderer{}
 	in := "![Hero](hero.png =640x480)\n"
-	if _, err := Render(in, 80, "notty", false, f); err != nil {
+	if _, err := Render(in, 80, "notty", false, f, ""); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	if len(f.widths) != 1 || f.widths[0] != 640 {
@@ -95,7 +95,7 @@ func TestRenderPassesMarkdownSizeHint(t *testing.T) {
 func TestRenderNoWidthHintIsZero(t *testing.T) {
 	f := &fakeImageRenderer{}
 	in := "![Hero](hero.png)\n"
-	if _, err := Render(in, 80, "notty", false, f); err != nil {
+	if _, err := Render(in, 80, "notty", false, f, ""); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	if len(f.widths) != 1 || f.widths[0] != 0 {
@@ -106,7 +106,7 @@ func TestRenderNoWidthHintIsZero(t *testing.T) {
 func TestRenderSubstitutesStandaloneMarkdownImage(t *testing.T) {
 	f := &fakeImageRenderer{}
 	in := "# Title\n\n![Hero](images/hero.png)\n\nBody text.\n"
-	out, err := Render(in, 80, "notty", false, f)
+	out, err := Render(in, 80, "notty", false, f, "")
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestRenderSubstitutesStandaloneMarkdownImage(t *testing.T) {
 func TestRenderSubstitutesHTMLImage(t *testing.T) {
 	f := &fakeImageRenderer{}
 	in := `<div align="center"><a href="https://x"><img src="logo.svg" alt="Logo" width="800" /></a></div>` + "\n"
-	out, err := Render(in, 80, "notty", false, f)
+	out, err := Render(in, 80, "notty", false, f, "")
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestRenderSubstitutesHTMLImage(t *testing.T) {
 func TestRenderKeepsAltWhenImageUnrenderable(t *testing.T) {
 	f := &fakeImageRenderer{failFor: map[string]bool{"missing.png": true}}
 	in := "![Some Alt](missing.png)\n"
-	out, err := Render(in, 80, "notty", false, f)
+	out, err := Render(in, 80, "notty", false, f, "")
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestRenderKeepsAltWhenImageUnrenderable(t *testing.T) {
 func TestRenderImageInCodeBlockIsNotRendered(t *testing.T) {
 	f := &fakeImageRenderer{}
 	in := "```\n![x](y.png)\n```\n"
-	_, err := Render(in, 80, "notty", false, f)
+	_, err := Render(in, 80, "notty", false, f, "")
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}

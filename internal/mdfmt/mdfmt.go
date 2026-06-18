@@ -13,6 +13,8 @@ package mdfmt
 
 import (
 	"fmt"
+	neturl "net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -58,12 +60,6 @@ var (
 		regexp.MustCompile(`(?is)<h6\b[^>]*>(.*?)</h6>`),
 	}
 
-	// reAnyLink matches, in priority order: a standalone image, an image
-	// wrapped in a link, a plain inline link, and an autolink.
-	reAnyLink = regexp.MustCompile(`(?s)!\[[^\]]*\]\([^)]*\)|\[!\[[^\]]*\]\([^)]*\)\]\([^)]+\)|\[[^\]]*\]\([^)]+\)|<(?:https?|mailto):[^>\s]+>`)
-	reImgLink = regexp.MustCompile(`(?s)^\[!\[([^\]]*)\]\([^)]*\)\]\(([^)]+)\)$`)
-	rePlain   = regexp.MustCompile(`(?s)^\[([^\]]*)\]\(([^)]+)\)$`)
-
 	reSentinel = regexp.MustCompile("(?s)\x01(.*?)\x02")
 )
 
@@ -77,7 +73,12 @@ var (
 //
 // style is "auto"/"" for automatic light/dark detection, or a glamour standard
 // style name such as "dark", "light" or "notty". width is the wrap column.
-func Render(markdown string, width int, style string, hyperlinks bool, images ImageRenderer) (string, error) {
+//
+// baseDir is the directory of the source document. When set, local link targets
+// (relative or absolute filesystem paths, not URLs with a scheme) are rewritten
+// into absolute file:// URIs anchored at baseDir, so OSC 8 hyperlinks resolve
+// against the document's location rather than the terminal's working directory.
+func Render(markdown string, width int, style string, hyperlinks bool, images ImageRenderer, baseDir string) (string, error) {
 	src, code := protectCode(markdown)
 
 	var imgSubs map[string]string
@@ -90,6 +91,11 @@ func Render(markdown string, width int, style string, hyperlinks bool, images Im
 	var urls []string
 	if hyperlinks {
 		src, urls = prepareHyperlinks(src)
+		if baseDir != "" {
+			for i := range urls {
+				urls[i] = absoluteFileURL(urls[i], baseDir)
+			}
+		}
 	}
 	src = restoreCode(src, code)
 
@@ -213,48 +219,220 @@ func unescapeEntities(s string) string {
 // prepareHyperlinks replaces markdown links with sentinel-wrapped visible text
 // and returns the rewritten markdown plus the URLs in document order. Standalone
 // images are left for glamour to render.
+//
+// Links are parsed with a hand-written scanner rather than a regex so that
+// destinations containing balanced parentheses (common in Wikipedia, Microsoft
+// Learn and chat deep links) are consumed whole. A regex that stops at the
+// first ')' would leave the tail of such a URL in the visible text, which then
+// counts toward glamour's wrap width and produces spurious early line breaks.
 func prepareHyperlinks(s string) (string, []string) {
 	var urls []string
+	var b strings.Builder
 
-	wrap := func(text, url, orig string) string {
-		url = cleanURL(url)
-		if url == "" || strings.HasPrefix(url, "#") {
-			return orig
-		}
-		if strings.TrimSpace(text) == "" {
-			text = url
-		}
+	add := func(text, url string) {
 		urls = append(urls, url)
-		return linkStart + text + linkEnd
+		b.WriteString(linkStart)
+		b.WriteString(text)
+		b.WriteString(linkEnd)
 	}
 
-	out := reAnyLink.ReplaceAllStringFunc(s, func(m string) string {
-		switch {
-		case strings.HasPrefix(m, "!["):
-			return m // standalone image: leave for glamour
-		case strings.HasPrefix(m, "["):
-			if sub := reImgLink.FindStringSubmatch(m); sub != nil {
-				return wrap(sub[1], sub[2], m)
+	i, n := 0, len(s)
+	for i < n {
+		switch s[i] {
+		case '<':
+			if u, end, ok := parseAutolink(s, i); ok {
+				add(u, u)
+				i = end
+				continue
 			}
-			if sub := rePlain.FindStringSubmatch(m); sub != nil {
-				return wrap(sub[1], sub[2], m)
+		case '!':
+			// Standalone image ![alt](src): leave verbatim for glamour (or the
+			// image renderer, which has already substituted placeholders).
+			if i+1 < n && s[i+1] == '[' {
+				if _, _, end, ok := parseBracketLink(s, i+1); ok {
+					b.WriteString(s[i:end])
+					i = end
+					continue
+				}
 			}
-			return m
-		case strings.HasPrefix(m, "<"):
-			u := strings.Trim(m, "<>")
-			return wrap(u, u, m)
+		case '[':
+			if text, dest, end, ok := parseBracketLink(s, i); ok {
+				url := cleanURL(dest)
+				if url == "" || strings.HasPrefix(url, "#") {
+					b.WriteString(s[i:end]) // anchor or empty: leave for glamour
+				} else {
+					if strings.TrimSpace(text) == "" {
+						text = url
+					}
+					add(text, url)
+				}
+				i = end
+				continue
+			}
 		}
-		return m
-	})
-	return out, urls
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String(), urls
+}
+
+// parseBracketLink parses an inline link "[text](dest)" starting at s[i] == '['.
+// The link text may itself be a single image "![alt](src)", in which case the
+// image's alt text becomes the visible text. It returns the visible text, the
+// raw destination (which may include a title), the index just past the closing
+// ')', and whether a well-formed link was found.
+func parseBracketLink(s string, i int) (text, dest string, end int, ok bool) {
+	if i >= len(s) || s[i] != '[' {
+		return "", "", 0, false
+	}
+	// Find the ']' that closes the link text, tracking bracket depth so nested
+	// image brackets in the text do not close it early.
+	depth := 0
+	j := i
+	for j < len(s) {
+		switch s[j] {
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				goto closed
+			}
+		}
+		j++
+	}
+	return "", "", 0, false
+closed:
+	rawText := s[i+1 : j]
+	if j+1 >= len(s) || s[j+1] != '(' {
+		return "", "", 0, false // not an inline link (e.g. a reference link)
+	}
+	d, dend, dok := parseDest(s, j+1)
+	if !dok {
+		return "", "", 0, false
+	}
+	vis := rawText
+	if strings.HasPrefix(rawText, "!") {
+		if alt, _, aend, aok := parseBracketLink(rawText, 1); aok && aend == len(rawText) {
+			vis = alt // image-in-link: show the image's alt text
+		}
+	}
+	return vis, d, dend, true
+}
+
+// parseDest parses a link destination "(dest)" starting at s[i] == '('. Nested
+// parentheses are balanced so URLs that legitimately contain them are kept
+// intact. The returned destination still includes any optional title; cleanURL
+// strips that.
+func parseDest(s string, i int) (dest string, end int, ok bool) {
+	depth := 0
+	for j := i; j < len(s); j++ {
+		switch s[j] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return s[i+1 : j], j + 1, true
+			}
+		}
+	}
+	return "", 0, false
+}
+
+// parseAutolink parses an autolink "<scheme:...>" starting at s[i] == '<'. Only
+// http(s) and mailto autolinks are treated as hyperlinks, matching the prior
+// behavior; anything else is left for glamour.
+func parseAutolink(s string, i int) (url string, end int, ok bool) {
+	j := strings.IndexByte(s[i:], '>')
+	if j < 0 {
+		return "", 0, false
+	}
+	inner := s[i+1 : i+j]
+	if inner == "" || strings.ContainsAny(inner, " \t\n") {
+		return "", 0, false
+	}
+	if !strings.HasPrefix(inner, "http://") &&
+		!strings.HasPrefix(inner, "https://") &&
+		!strings.HasPrefix(inner, "mailto:") {
+		return "", 0, false
+	}
+	return inner, i + j + 1, true
 }
 
 func cleanURL(u string) string {
 	u = strings.TrimSpace(u)
+	if strings.HasPrefix(u, "<") {
+		if j := strings.IndexByte(u, '>'); j >= 0 {
+			return u[1:j] // angle-bracket destination: keep its contents verbatim
+		}
+		return strings.TrimPrefix(u, "<")
+	}
 	if i := strings.IndexAny(u, " \t"); i >= 0 {
 		u = u[:i] // drop an optional inline title: (url "title")
 	}
-	return strings.Trim(u, "<>")
+	return u
+}
+
+// absoluteFileURL converts a local link target (a relative or absolute
+// filesystem path) into an absolute file:// URI anchored at baseDir. Targets
+// that carry a URL scheme (http:, mailto:, ...), protocol-relative URLs (//host)
+// and pure fragments (#anchor) are returned unchanged. This makes terminal
+// OSC 8 hyperlinks resolve against the document's directory regardless of the
+// platform path separator or the process working directory.
+func absoluteFileURL(raw, baseDir string) string {
+	u := strings.TrimSpace(raw)
+	if u == "" || strings.HasPrefix(u, "#") || strings.HasPrefix(u, "//") || hasURLScheme(u) {
+		return raw
+	}
+	path, frag := u, ""
+	if k := strings.IndexByte(u, '#'); k >= 0 {
+		path, frag = u[:k], u[k:]
+	}
+	if path == "" {
+		return raw
+	}
+	if dec, err := neturl.PathUnescape(path); err == nil {
+		path = dec
+	}
+	path = filepath.FromSlash(path)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(baseDir, path)
+	}
+	path = filepath.Clean(path)
+	return fileURI(path) + frag
+}
+
+// hasURLScheme reports whether u begins with a URL scheme such as "https:".
+// A single leading letter followed by ':' (a Windows drive, e.g. "C:\\...") is
+// not treated as a scheme.
+func hasURLScheme(u string) bool {
+	for i := 0; i < len(u); i++ {
+		c := u[i]
+		switch {
+		case c == ':':
+			return i > 1
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+			// scheme character
+		case i > 0 && (c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'):
+			// scheme character (not allowed as the first character)
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// fileURI builds an absolute file:// URI from a cleaned absolute filesystem
+// path, percent-encoding as needed. On Windows the drive-letter path "C:\\x"
+// becomes "file:///C:/x".
+func fileURI(p string) string {
+	s := filepath.ToSlash(p)
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
+	}
+	u := neturl.URL{Scheme: "file", Path: s}
+	return u.String()
 }
 
 // applyHyperlinks rewrites sentinel-wrapped text in rendered ANSI output into

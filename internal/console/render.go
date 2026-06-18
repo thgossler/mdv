@@ -75,7 +75,7 @@ func Render(w io.Writer, markdown, path string, opt Options) error {
 		imgRenderer = termimg.NewRenderer(proto, baseDir, opt.AllowRemoteImages)
 	}
 
-	out, err := mdfmt.Render(markdown, width, style, hyperlinks, imgRenderer)
+	out, err := mdfmt.Render(markdown, width, style, hyperlinks, imgRenderer, baseDir)
 	if err != nil {
 		return err
 	}

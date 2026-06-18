@@ -198,7 +198,11 @@ func ListMarkdownFiles(dir string, cfg Defaults) ([]DocFile, error) {
 			return nil
 		}
 		if IsMarkdownPath(path, cfg) {
-			files = append(files, DocFile{Path: path, Name: d.Name()})
+			rel, relErr := filepath.Rel(dir, path)
+			if relErr != nil {
+				rel = d.Name()
+			}
+			files = append(files, DocFile{Path: path, Name: d.Name(), Rel: filepath.ToSlash(rel)})
 		}
 		return nil
 	})

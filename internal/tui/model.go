@@ -112,10 +112,13 @@ func (d docItem) Title() string {
 	if d.labelMode == "title" && d.doc.Title != "" {
 		return d.doc.Title
 	}
+	if d.doc.Rel != "" {
+		return d.doc.Rel
+	}
 	return d.doc.Name
 }
 func (d docItem) Description() string { return d.doc.Path }
-func (d docItem) FilterValue() string { return d.doc.Name + " " + d.doc.Title }
+func (d docItem) FilterValue() string { return d.doc.Name + " " + d.doc.Rel + " " + d.doc.Title }
 
 // navKind distinguishes a document header row from an indented content-match row
 // in the document-navigator filter view.
@@ -145,6 +148,9 @@ func (n navItem) Title() string {
 	}
 	if n.labelMode == "title" && n.doc.Title != "" {
 		return n.doc.Title
+	}
+	if n.doc.Rel != "" {
+		return n.doc.Rel
 	}
 	return n.doc.Name
 }
@@ -904,7 +910,7 @@ func (m *Model) renderedRaw() string {
 	if m.renderCache != "" && m.renderCacheKey == key {
 		return m.renderCache
 	}
-	out, err := renderMarkdown(m.rawMarkdown, w-2, m.cfg.Theme, m.imageRenderer())
+	out, err := renderMarkdown(m.rawMarkdown, w-2, m.cfg.Theme, m.imageRenderer(), m.currentDir)
 	if err != nil {
 		out = m.rawMarkdown
 	}
@@ -930,7 +936,7 @@ func (m *Model) rerender() {
 	m.viewport.SetContent(content)
 }
 
-func renderMarkdown(md string, width int, theme string, images mdfmt.ImageRenderer) (string, error) {
+func renderMarkdown(md string, width int, theme string, images mdfmt.ImageRenderer, baseDir string) (string, error) {
 	if width < 20 {
 		width = 20
 	}
@@ -944,7 +950,7 @@ func renderMarkdown(md string, width int, theme string, images mdfmt.ImageRender
 	// The TUI always renders to an interactive terminal, so emit OSC 8
 	// hyperlinks (clickable links without visible URLs) unless colors are off.
 	hyperlinks := os.Getenv("NO_COLOR") == ""
-	return mdfmt.Render(md, width, style, hyperlinks, images)
+	return mdfmt.Render(md, width, style, hyperlinks, images, baseDir)
 }
 
 // imageRenderer builds the image renderer for the current document. The TUI uses

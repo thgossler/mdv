@@ -14,7 +14,7 @@ const AppTagline = "Markdown Document Viewer"
 // via -ldflags "-X github.com/thgossler/mdv/internal/core.Version=vX.Y.Z". This
 // default is kept in sync with VERSION (by scripts/bump-version.*) so `go run`
 // and unstamped builds still report the real SemVer instead of a commit hash.
-var Version = "v0.7.1"
+var Version = "v0.7.2"
 
 // LinkKind classifies a resolved markdown link target.
 type LinkKind int
@@ -84,6 +84,10 @@ type DocFile struct {
 	Path string
 	// Name is the base file name (e.g. "README.md").
 	Name string
+	// Rel is the path relative to the workspace root, using forward slashes
+	// (e.g. "docs/guide/README.md"). It is empty for documents not discovered
+	// through a workspace walk.
+	Rel string
 	// Title is the first level-1 heading, or empty if none was found.
 	Title string
 }

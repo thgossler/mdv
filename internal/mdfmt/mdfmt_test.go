@@ -1,9 +1,19 @@
 package mdfmt
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// stripANSI removes OSC 8 hyperlink sequences and SGR color codes, leaving only
+// the visible text. It is used to assert that hidden URLs do not leak into the
+// rendered text.
+func stripANSI(s string) string {
+	s = regexp.MustCompile("\x1b\\]8;;[^\x07]*\x07").ReplaceAllString(s, "")
+	s = regexp.MustCompile("\x1b\\[[0-9;]*m").ReplaceAllString(s, "")
+	return s
+}
 
 func TestConvertHTMLHeadingsAndParagraph(t *testing.T) {
 	in := `<h1 align="center">Title</h1>
@@ -41,7 +51,7 @@ func TestConvertHTMLLeavesCodeProtectedByCaller(t *testing.T) {
 	// convertHTML itself does not protect code; Render does. Verify Render keeps
 	// HTML inside fenced code blocks intact.
 	in := "Text <h1>Head</h1>\n\n```\n<h1>literal</h1>\n```\n"
-	out, err := Render(in, 80, "notty", false, nil)
+	out, err := Render(in, 80, "notty", false, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +62,7 @@ func TestConvertHTMLLeavesCodeProtectedByCaller(t *testing.T) {
 
 func TestHyperlinksHideURL(t *testing.T) {
 	in := "See [Example](https://example.com/very/long/path) now.\n"
-	out, err := Render(in, 80, "notty", true, nil)
+	out, err := Render(in, 80, "notty", true, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +82,7 @@ func TestHyperlinksHideURL(t *testing.T) {
 
 func TestHyperlinksDisabledKeepsURL(t *testing.T) {
 	in := "See [Example](https://example.com) now.\n"
-	out, err := Render(in, 80, "notty", false, nil)
+	out, err := Render(in, 80, "notty", false, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +96,7 @@ func TestHyperlinksDisabledKeepsURL(t *testing.T) {
 
 func TestHyperlinksImageInLinkUsesAlt(t *testing.T) {
 	in := "[![Platforms](https://img.shields.io/badge.svg)](https://github.com/owner/repo)\n"
-	out, err := Render(in, 80, "notty", true, nil)
+	out, err := Render(in, 80, "notty", true, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +113,7 @@ func TestHyperlinksImageInLinkUsesAlt(t *testing.T) {
 
 func TestHyperlinksOrderPreserved(t *testing.T) {
 	in := "[one](https://a.example) and [two](https://b.example)\n"
-	out, err := Render(in, 80, "notty", true, nil)
+	out, err := Render(in, 80, "notty", true, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +121,61 @@ func TestHyperlinksOrderPreserved(t *testing.T) {
 	ib := strings.Index(out, "https://b.example")
 	if ia < 0 || ib < 0 || ia > ib {
 		t.Errorf("link URLs out of order: a=%d b=%d out=%q", ia, ib, out)
+	}
+}
+
+func TestHyperlinksBalancedParensInURL(t *testing.T) {
+	// URLs containing balanced parentheses (Wikipedia, Microsoft Learn and chat
+	// deep links) must be consumed whole. A naive parser that stops at the first
+	// ')' would leave the URL tail in the visible text, which counts toward the
+	// wrap width and produces spurious early line breaks.
+	in := "See [MSAL](https://learn.microsoft.com/dotnet/api/microsoft.identity.client_(msal)) now.\n"
+	out, err := Render(in, 80, "notty", true, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "\x1b]8;;https://learn.microsoft.com/dotnet/api/microsoft.identity.client_(msal)\x07"
+	if !strings.Contains(out, want) {
+		t.Errorf("balanced-paren URL not captured whole: %q", out)
+	}
+	// Strip OSC 8 sequences and SGR codes; the visible text must not leak any
+	// part of the URL.
+	visible := stripANSI(out)
+	if strings.Contains(visible, "learn.microsoft.com") || strings.Contains(visible, "(msal)") {
+		t.Errorf("URL leaked into visible text: %q", visible)
+	}
+}
+
+func TestHyperlinksRelativeLinkBecomesFileURI(t *testing.T) {
+	in := "See [Other](sub/other.md) here.\n"
+	out, err := Render(in, 80, "notty", true, nil, "/docs/root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "\x1b]8;;file:///docs/root/sub/other.md\x07") {
+		t.Errorf("relative link not anchored at baseDir as file URI: %q", out)
+	}
+}
+
+func TestHyperlinksRelativeLinkPreservesFragment(t *testing.T) {
+	in := "See [Section](other.md#intro) here.\n"
+	out, err := Render(in, 80, "notty", true, nil, "/docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "\x1b]8;;file:///docs/other.md#intro\x07") {
+		t.Errorf("fragment not preserved on file URI: %q", out)
+	}
+}
+
+func TestHyperlinksAbsoluteURLUnchangedWithBaseDir(t *testing.T) {
+	in := "See [Site](https://example.com/path) here.\n"
+	out, err := Render(in, 80, "notty", true, nil, "/docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "\x1b]8;;https://example.com/path\x07") {
+		t.Errorf("absolute URL should be left unchanged: %q", out)
 	}
 }
 
@@ -138,7 +203,7 @@ func TestProtectRestoreCodeRoundTrip(t *testing.T) {
 
 func TestCompactTablesNarrowsColumns(t *testing.T) {
 	md := "| Flag | Description |\n| --- | --- |\n| x | Force the interactive terminal UI |\n| y | Force the graphical UI |\n"
-	out, err := Render(md, 120, "notty", false, nil)
+	out, err := Render(md, 120, "notty", false, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +229,7 @@ func TestCompactTablesNarrowsColumns(t *testing.T) {
 
 func TestCompactTablesLeavesProseUntouched(t *testing.T) {
 	md := "Just a paragraph with a | pipe in it, no table here.\n"
-	out, err := Render(md, 120, "notty", false, nil)
+	out, err := Render(md, 120, "notty", false, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}

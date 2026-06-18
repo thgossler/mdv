@@ -151,7 +151,7 @@ func (b *Bridge) workspaceDTO() []DocFileDTO {
 	out := make([]DocFileDTO, len(b.workspace))
 	for i, d := range b.workspace {
 		rel, _ := filepath.Rel(b.input.Dir, d.Path)
-		out[i] = DocFileDTO{Path: d.Path, Name: d.Name, Title: d.Title, Rel: rel}
+		out[i] = DocFileDTO{Path: d.Path, Name: d.Name, Title: d.Title, Rel: filepath.ToSlash(rel)}
 	}
 	return out
 }
