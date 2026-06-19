@@ -72,17 +72,34 @@ type Model struct {
 	rawMarkdown string
 	stdin       bool // content was piped in; there is no backing file path
 
-	// renderCache holds the glamour-rendered markdown for renderCacheKey so
-	// that re-rendering for search highlighting (a frequent operation) does not
-	// re-invoke glamour. Re-invoking glamour with the "auto" style re-queries
-	// the terminal background colour, and that response leaks into key input.
-	renderCache    string
-	renderCacheKey string
+	// resolvedStyle is the concrete glamour style ("light"/"dark") chosen once at
+	// startup. Renders never use glamour's "auto" style, because auto-detection
+	// writes an OSC 11 background-colour query to the terminal and waits for the
+	// reply; under Bubble Tea's raw mode that reply is swallowed by the input
+	// reader, so the query blocks until it times out on every fresh render.
+	resolvedStyle string
 
-	history   []histEntry
-	focus     focus
-	showList  bool
-	labelMode string // "filename" | "title"
+	// renderCache holds the rendered markdown keyed by "width|theme|len". Showing
+	// or hiding the navigator changes the content width, and search highlighting
+	// re-renders frequently; caching per width means toggling the side panel back
+	// and forth (a content-independent UI action) never re-invokes glamour or
+	// re-encodes images. Cleared when the document changes. Avoiding re-renders
+	// also avoids a glitch where re-invoking glamour with the "auto" style
+	// re-queries the terminal background colour and that response leaks into key
+	// input.
+	renderCache map[string]string
+
+	// imgRenderer is the persistent image renderer for the content view. Keeping
+	// one renderer across re-renders preserves its decode cache, so remote images
+	// are fetched once per document (and shared across documents) instead of on
+	// every re-render. nil when images are disabled.
+	imgRenderer *termimg.Renderer
+
+	history      []histEntry
+	focus        focus
+	showList     bool
+	labelMode    string // "filename" | "title"
+	titlesLoaded bool   // workspace titles extracted (one-time file scan)
 
 	searchInput string
 	matches     []matchPos
@@ -103,6 +120,14 @@ type Model struct {
 	width  int
 	height int
 	ready  bool
+}
+
+// imagesReadyMsg signals that a background prefetch has finished decoding a
+// document's remote images, so the content view can be re-rendered with them in
+// place. path identifies the document the prefetch was started for, so a stale
+// result (the user already navigated away) is ignored.
+type imagesReadyMsg struct {
+	path string
 }
 
 // docItem adapts a DocFile to the list widget.
@@ -175,11 +200,12 @@ func (l linkItem) FilterValue() string { return l.link.Text + " " + l.link.Href 
 // New constructs a TUI model for the given input.
 func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 	m := Model{
-		cfg:          cfg,
-		workspaceDir: in.Dir,
-		labelMode:    cfg.NavLabelMode,
-		update:       upd,
-		focus:        focusContent,
+		cfg:           cfg,
+		workspaceDir:  in.Dir,
+		labelMode:     cfg.NavLabelMode,
+		resolvedStyle: resolveStyle(cfg.Theme),
+		update:        upd,
+		focus:         focusContent,
 	}
 
 	if in.Kind == core.InputFolder {
@@ -188,6 +214,7 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 		files, _ := core.ListMarkdownFiles(in.Dir, cfg)
 		if cfg.NavLabelMode == "title" {
 			core.PopulateTitles(files)
+			m.titlesLoaded = true
 		}
 		m.workspace = files
 	} else if in.Kind == core.InputFile {
@@ -226,6 +253,26 @@ func docItemsFrom(files []core.DocFile, labelMode string) []list.Item {
 		items[i] = docItem{doc: f, labelMode: labelMode}
 	}
 	return items
+}
+
+// resolveStyle picks a concrete glamour style ("light"/"dark") once, so renders
+// during the session never use glamour's "auto" style. Auto-detection writes an
+// OSC 11 background-colour query to the terminal and waits for the reply; under
+// Bubble Tea's raw mode that reply is consumed by the input reader, so the query
+// blocks until it times out on every fresh render. Detecting once here, before
+// the program takes over the terminal, avoids that content-independent stall.
+func resolveStyle(theme string) string {
+	switch theme {
+	case "light", "dark":
+		return theme
+	}
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return "dark"
+	}
+	if lipgloss.HasDarkBackground() {
+		return "dark"
+	}
+	return "light"
 }
 
 // Init implements tea.Model.
@@ -271,12 +318,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.ready {
 			m.ready = true
 			if m.currentPath != "" {
-				m.openPath(m.currentPath, true)
+				cmd := m.openPath(m.currentPath, true)
+				return m, cmd
 			} else if m.stdin {
 				m.rerender()
 				m.viewport.GotoTop()
 			}
 		} else {
+			m.rerender()
+		}
+		return m, nil
+
+	case imagesReadyMsg:
+		if m.ready && msg.path == m.currentPath {
+			// The decode cache now holds the document's images; drop the render
+			// cache so the next render draws them, then re-render.
+			m.renderCache = nil
 			m.rerender()
 		}
 		return m, nil
@@ -336,8 +393,7 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.toggleNav()
 		return *m, nil
 	case "b", "backspace", "left", "alt+left":
-		m.goBack()
-		return *m, nil
+		return *m, m.goBack()
 	case "enter", "l":
 		m.openLinkPicker()
 		return *m, nil
@@ -366,7 +422,7 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		m.focus = focusContent
 		return *m, nil
-	case "ctrl+b", "esc":
+	case "ctrl+b":
 		m.toggleNav() // hide the navigator, back to the content view
 		return *m, nil
 	case "/":
@@ -379,8 +435,9 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return *m, nil
 	case "enter", "right", "l":
 		if it, ok := m.list.SelectedItem().(docItem); ok {
-			m.openPath(it.doc.Path, true)
+			cmd := m.openPath(it.doc.Path, true)
 			m.focus = focusContent
+			return *m, cmd
 		}
 		return *m, nil
 	case "t":
@@ -400,21 +457,22 @@ func (m *Model) handleListFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.exitListFilter()
 		return *m, nil
 	case "enter":
+		var cmd tea.Cmd
 		switch it := m.list.SelectedItem().(type) {
 		case navItem:
 			if it.kind == navMatch {
-				m.openContentMatch(it)
+				cmd = m.openContentMatch(it)
 			} else {
-				m.openPath(it.doc.Path, true)
+				cmd = m.openPath(it.doc.Path, true)
 				m.focus = focusContent
 				m.resetNavList()
 			}
 		case docItem:
-			m.openPath(it.doc.Path, true)
+			cmd = m.openPath(it.doc.Path, true)
 			m.focus = focusContent
 			m.resetNavList()
 		}
-		return *m, nil
+		return *m, cmd
 	case "backspace":
 		if len(m.listFilterInput) > 0 {
 			m.listFilterInput = m.listFilterInput[:len(m.listFilterInput)-1]
@@ -451,7 +509,7 @@ func (m *Model) handleLinksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if it, ok := m.links.SelectedItem().(linkItem); ok {
 			m.focus = focusContent
-			m.followLink(it.link.Href)
+			return *m, m.followLink(it.link.Href)
 		}
 		return *m, nil
 	}
@@ -554,7 +612,7 @@ func (m *Model) enterContentSearch() {
 			return
 		}
 		if m.labelMode == "title" {
-			core.PopulateTitles(m.workspace)
+			m.ensureTitles()
 		}
 		m.showList = true
 		m.layout()
@@ -683,11 +741,12 @@ func (m *Model) resetNavList() {
 // openContentMatch opens the document of a content-search match row and jumps to
 // the first occurrence of the keywords in the rendered document, highlighting
 // all of them (current match in green).
-func (m *Model) openContentMatch(it navItem) {
-	m.openPath(it.doc.Path, true)
+func (m *Model) openContentMatch(it navItem) tea.Cmd {
+	cmd := m.openPath(it.doc.Path, true)
 	m.focus = focusContent
 	m.resetNavList()
 	m.runSearchMulti(it.keywords)
+	return cmd
 }
 
 // --- actions ---------------------------------------------------------------
@@ -707,14 +766,15 @@ func (m *Model) openLinkPicker() {
 	m.focus = focusLinks
 }
 
-func (m *Model) followLink(href string) {
+func (m *Model) followLink(href string) tea.Cmd {
 	target := core.ResolveLink(href, m.currentDir, m.workspaceDir, m.cfg, m.workspace)
 	switch target.Kind {
 	case core.LinkMarkdown, core.LinkWikiInternal:
-		m.openPath(target.Resolved, true)
+		cmd := m.openPath(target.Resolved, true)
 		if target.Fragment != "" {
 			m.scrollToHeading(target.Fragment)
 		}
+		return cmd
 	case core.LinkAnchor:
 		m.scrollToHeading(strings.TrimPrefix(target.Resolved, "#"))
 	case core.LinkHTTP, core.LinkMailto, core.LinkExternalFile:
@@ -728,13 +788,14 @@ func (m *Model) followLink(href string) {
 	default:
 		m.statusMsg = "Cannot open: " + target.Raw
 	}
+	return nil
 }
 
-func (m *Model) openPath(path string, pushHistory bool) {
+func (m *Model) openPath(path string, pushHistory bool) tea.Cmd {
 	data, err := core.ReadMarkdownFile(path)
 	if err != nil {
 		m.statusMsg = "Cannot read: " + err.Error()
-		return
+		return nil
 	}
 	if pushHistory && m.currentPath != "" {
 		m.history = append(m.history, histEntry{path: m.currentPath, yOffset: m.viewport.YOffset})
@@ -742,7 +803,7 @@ func (m *Model) openPath(path string, pushHistory bool) {
 	m.currentPath = path
 	m.currentDir = filepath.Dir(path)
 	m.rawMarkdown = string(data)
-	m.renderCache = ""
+	m.renderCache = nil
 	m.matches = nil
 	m.matchIdx = 0
 	m.searchQuery = ""
@@ -750,17 +811,40 @@ func (m *Model) openPath(path string, pushHistory bool) {
 	m.rerender()
 	m.viewport.GotoTop()
 	m.syncListSelection()
+	return m.prewarmImagesCmd()
 }
 
-func (m *Model) goBack() {
+// prewarmImagesCmd returns a command that fetches the current document's images
+// in the background and, when done, asks for a re-render. The first render skips
+// uncached remote images (drawing alt text) so opening a document never blocks
+// on the network; this command fills the decode cache so the follow-up render
+// shows the images. Returns nil when there is nothing to fetch.
+func (m *Model) prewarmImagesCmd() tea.Cmd {
+	r := m.imgRenderer
+	if r == nil || !r.Enabled() {
+		return nil
+	}
+	srcs := mdfmt.CollectImageSrcs(m.rawMarkdown)
+	if len(srcs) == 0 {
+		return nil
+	}
+	path := m.currentPath
+	return func() tea.Msg {
+		r.Prefetch(srcs)
+		return imagesReadyMsg{path: path}
+	}
+}
+
+func (m *Model) goBack() tea.Cmd {
 	if len(m.history) == 0 {
 		m.statusMsg = "No history"
-		return
+		return nil
 	}
 	last := m.history[len(m.history)-1]
 	m.history = m.history[:len(m.history)-1]
-	m.openPath(last.path, false)
+	cmd := m.openPath(last.path, false)
 	m.viewport.SetYOffset(last.yOffset)
+	return cmd
 }
 
 func (m *Model) toggleLabelMode() {
@@ -768,10 +852,23 @@ func (m *Model) toggleLabelMode() {
 		m.labelMode = "filename"
 	} else {
 		m.labelMode = "title"
-		core.PopulateTitles(m.workspace)
+		m.ensureTitles()
 	}
 	m.list.SetItems(docItemsFrom(m.workspace, m.labelMode))
 	m.syncListSelection()
+}
+
+// ensureTitles extracts document titles from the workspace files exactly once
+// per session. Title extraction opens and scans every markdown file, so it must
+// not run on content-independent UI actions (showing the navigator, toggling the
+// label mode back and forth): repeating that file scan is what an external
+// malware scanner can stall on.
+func (m *Model) ensureTitles() {
+	if m.titlesLoaded {
+		return
+	}
+	core.PopulateTitles(m.workspace)
+	m.titlesLoaded = true
 }
 
 // toggleNav shows or hides the document-navigator panel. The panel lists every
@@ -790,7 +887,7 @@ func (m *Model) toggleNav() {
 			return
 		}
 		if m.labelMode == "title" {
-			core.PopulateTitles(m.workspace)
+			m.ensureTitles()
 		}
 		m.showList = true
 		m.focus = focusList
@@ -945,7 +1042,7 @@ func (m *Model) contentWidth() int {
 }
 
 func (m *Model) layout() {
-	contentH := m.height - 2 // status bar + header
+	contentH := m.height - 3 // header + focus bar + status bar
 	if contentH < 3 {
 		contentH = 3
 	}
@@ -956,25 +1053,27 @@ func (m *Model) layout() {
 		m.viewport.Height = contentH
 	}
 	if m.showList {
-		m.list.SetSize(sidebarWidth, contentH+1)
-		m.links.SetSize(sidebarWidth, contentH+1)
+		m.list.SetSize(sidebarWidth, contentH)
+		m.links.SetSize(sidebarWidth, contentH)
 	} else {
-		m.links.SetSize(m.width/2, m.height-2)
+		m.links.SetSize(m.width/2, contentH)
 	}
 }
 
 func (m *Model) renderedRaw() string {
 	w := m.contentWidth()
-	key := fmt.Sprintf("%d|%s|%d", w, m.cfg.Theme, len(m.rawMarkdown))
-	if m.renderCache != "" && m.renderCacheKey == key {
-		return m.renderCache
+	key := fmt.Sprintf("%d|%s|%d", w, m.resolvedStyle, len(m.rawMarkdown))
+	if out, ok := m.renderCache[key]; ok {
+		return out
 	}
-	out, err := renderMarkdown(m.rawMarkdown, w-2, m.cfg.Theme, m.imageRenderer(), m.currentDir)
+	out, err := renderMarkdown(m.rawMarkdown, w-2, m.resolvedStyle, m.imageRenderer(), m.currentDir)
 	if err != nil {
 		out = m.rawMarkdown
 	}
-	m.renderCache = out
-	m.renderCacheKey = key
+	if m.renderCache == nil {
+		m.renderCache = make(map[string]string)
+	}
+	m.renderCache[key] = out
 	return out
 }
 
@@ -1028,8 +1127,18 @@ func (m *Model) imageRenderer() mdfmt.ImageRenderer {
 	if dir == "" {
 		dir = "."
 	}
-	r := termimg.NewRenderer(termimg.ProtocolBlocks, dir, m.cfg.ImagesRemote)
-	return r
+	if m.imgRenderer == nil {
+		r := termimg.NewRenderer(termimg.ProtocolBlocks, dir, m.cfg.ImagesRemote)
+		// Skip uncached image loads on the render path; prewarmImagesCmd loads them
+		// in the background so opening or re-rendering a document never blocks on a
+		// file read, SVG rasterization, or network fetch (any of which an external
+		// scanner can stall).
+		r.SetDeferLoad(true)
+		m.imgRenderer = r
+	} else {
+		m.imgRenderer.SetBaseDir(dir)
+	}
+	return m.imgRenderer
 }
 
 // View implements tea.Model.
@@ -1053,11 +1162,36 @@ func (m Model) View() string {
 		body = m.viewport.View()
 	}
 
-	return strings.Join([]string{m.header(), body, m.statusBar()}, "\n")
+	return strings.Join([]string{m.header(), body, m.focusBar(), m.statusBar()}, "\n")
+}
+
+// focusBar renders a one-line indicator beneath the views showing which panel is
+// active: a blue bar sits under the focused view, a dim bar under the inactive
+// one. With only the content view visible the whole bar is blue.
+func (m Model) focusBar() string {
+	active := lipgloss.NewStyle().Background(lipgloss.Color("12"))    // bright blue
+	inactive := lipgloss.NewStyle().Background(lipgloss.Color("238")) // dim grey
+	barSeg := func(style lipgloss.Style, w int) string {
+		if w < 0 {
+			w = 0
+		}
+		return style.Width(w).Render(strings.Repeat(" ", w))
+	}
+	if !m.showList {
+		return barSeg(active, m.width)
+	}
+	navActive := m.focus == focusList || m.focus == focusListFilter
+	leftStyle, rightStyle := inactive, inactive
+	if navActive {
+		leftStyle = active
+	} else {
+		rightStyle = active
+	}
+	return barSeg(leftStyle, sidebarWidth) + barSeg(rightStyle, m.width-sidebarWidth)
 }
 
 func (m Model) sidebar() string {
-	style := lipgloss.NewStyle().Width(sidebarWidth).Height(m.viewport.Height + 1)
+	style := lipgloss.NewStyle().Width(sidebarWidth).Height(m.viewport.Height)
 	return style.Render(m.list.View())
 }
 
@@ -1104,9 +1238,15 @@ func (m Model) statusBar() string {
 		pct = int(m.viewport.ScrollPercent() * 100)
 	}
 
-	hints := "tab:nav  /:find  //:content  b:back  l:links  q:quit"
-	if m.showList {
-		hints = "tab:switch  enter:open  /:filter  //:content  t:titles  esc:hide  q:quit"
+	navActive := m.focus == focusList || m.focus == focusListFilter
+	var hints string
+	switch {
+	case navActive:
+		hints = "^b:nav  tab:switch  enter:open  /:filter  //:content(all files)  t:titles  q:quit"
+	case m.showList:
+		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  l:links  q:quit"
+	default:
+		hints = "^b:nav  /:content  //:content(all files)  b:back  l:links  q:quit"
 	}
 
 	status := m.statusMsg

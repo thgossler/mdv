@@ -152,6 +152,14 @@ func substituteImages(rendered string, subs map[string]string) string {
 	})
 }
 
+// CollectImageSrcs returns the source references of all renderable images in
+// src (HTML <img> tags and standalone markdown images). Callers use it to
+// prefetch image decoding out of band (e.g. the TUI fetches remote images in
+// the background after the first, image-free render).
+func CollectImageSrcs(src string) []string {
+	return collectImageSrcs(src)
+}
+
 // collectImageSrcs returns the source references of all renderable images in
 // src (HTML <img> tags and standalone markdown images), for concurrent
 // prewarming. Code spans are already protected by the caller, so none are

@@ -1,6 +1,7 @@
 package termimg
 
 import (
+	"errors"
 	"strings"
 	"sync"
 )
@@ -11,11 +12,24 @@ import (
 // fetched and decoded once.
 type Renderer struct {
 	protocol    Protocol
-	baseDir     string
 	allowRemote bool
 
-	mu    sync.Mutex
-	cache map[string]cacheEntry
+	mu        sync.Mutex
+	baseDir   string
+	deferLoad bool
+	cache     map[string]cacheEntry
+}
+
+// errDeferred is returned by decode for an uncached image while deferLoad is
+// set, so the render keeps the alt text instead of blocking on a file read,
+// SVG rasterization, or network fetch. A background Prefetch loads the image
+// and a later re-render then draws it from the cache. Keeping all image loading
+// off the render path means an external scanner (e.g. Defender) cannot stall the
+// UI when it intercepts those reads.
+var errDeferred = errors.New("termimg: image load deferred")
+
+func isRemoteSrc(src string) bool {
+	return strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")
 }
 
 type cacheEntry struct {
@@ -48,20 +62,70 @@ func (r *Renderer) Enabled() bool {
 	return r != nil && r.protocol != ProtocolNone
 }
 
-// decode loads and decodes src, caching the result (including failures) so each
-// source is only fetched once.
-func (r *Renderer) decode(src string) (Decoded, error) {
+// SetBaseDir updates the base directory used to resolve relative image paths.
+// The decode cache is retained: remote images stay cached across documents and
+// file images remain namespaced by base directory.
+func (r *Renderer) SetBaseDir(dir string) {
+	if r == nil {
+		return
+	}
 	r.mu.Lock()
-	if e, found := r.cache[src]; found {
+	r.baseDir = dir
+	r.mu.Unlock()
+}
+
+// SetDeferLoad controls whether the synchronous render path skips uncached
+// images (keeping their alt text) instead of loading them inline. In-memory
+// data URIs are always loaded, since they involve no file or network IO. The
+// TUI sets this so opening or re-rendering a document never blocks on image IO;
+// a background Prefetch loads the images and a re-render then draws them.
+func (r *Renderer) SetDeferLoad(v bool) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.deferLoad = v
+	r.mu.Unlock()
+}
+
+// cacheKey returns the cache key for src. Remote URLs and data URIs are
+// self-identifying and shared across documents; file paths are namespaced by
+// the current base directory so the same relative name in different folders
+// does not collide.
+func (r *Renderer) cacheKey(src string) string {
+	if isRemoteSrc(src) || strings.HasPrefix(src, "data:") {
+		return src
+	}
+	r.mu.Lock()
+	b := r.baseDir
+	r.mu.Unlock()
+	return b + "\x00" + src
+}
+
+// decode loads and decodes src, caching the result (including failures) so each
+// source is only fetched once. When deferLoad is set, an uncached image (other
+// than an in-memory data URI) is reported as a miss without loading, so the
+// render never blocks on file or network IO.
+func (r *Renderer) decode(src string) (Decoded, error) {
+	key := r.cacheKey(src)
+
+	r.mu.Lock()
+	if e, found := r.cache[key]; found {
 		r.mu.Unlock()
 		return e.dec, e.err
 	}
+	deferLoad := r.deferLoad
+	baseDir := r.baseDir
 	r.mu.Unlock()
 
-	dec, err := LoadDecoded(src, LoadOptions{BaseDir: r.baseDir, AllowRemote: r.allowRemote})
+	if deferLoad && !strings.HasPrefix(src, "data:") {
+		return Decoded{}, errDeferred
+	}
+
+	dec, err := LoadDecoded(src, LoadOptions{BaseDir: baseDir, AllowRemote: r.allowRemote})
 
 	r.mu.Lock()
-	r.cache[src] = cacheEntry{dec: dec, err: err}
+	r.cache[key] = cacheEntry{dec: dec, err: err}
 	r.mu.Unlock()
 	return dec, err
 }
@@ -164,8 +228,9 @@ func (r *Renderer) PrewarmImages(srcs []string, width int) {
 		}
 		seen[s] = true
 
+		key := r.cacheKey(s)
 		r.mu.Lock()
-		_, done := r.cache[s]
+		_, done := r.cache[key]
 		r.mu.Unlock()
 		if done {
 			continue
@@ -178,6 +243,47 @@ func (r *Renderer) PrewarmImages(srcs []string, width int) {
 			defer func() { <-sem }()
 			r.decode(src)
 		}(s)
+	}
+	wg.Wait()
+}
+
+// Prefetch loads and caches the given image sources, fetching remote images
+// even when deferRemote is set. It is meant to run off the render path (e.g. in
+// a Bubble Tea command) so a later re-render draws the images from cache without
+// the render ever blocking on the network. Already-cached sources are skipped.
+func (r *Renderer) Prefetch(srcs []string) {
+	if !r.Enabled() {
+		return
+	}
+	const maxConcurrent = 8
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	seen := make(map[string]bool, len(srcs))
+	for _, s := range srcs {
+		if s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+
+		key := r.cacheKey(s)
+		r.mu.Lock()
+		_, done := r.cache[key]
+		baseDir := r.baseDir
+		r.mu.Unlock()
+		if done {
+			continue
+		}
+
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(src, key, baseDir string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			dec, err := LoadDecoded(src, LoadOptions{BaseDir: baseDir, AllowRemote: r.allowRemote})
+			r.mu.Lock()
+			r.cache[key] = cacheEntry{dec: dec, err: err}
+			r.mu.Unlock()
+		}(s, key, baseDir)
 	}
 	wg.Wait()
 }
