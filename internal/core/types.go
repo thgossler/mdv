@@ -14,7 +14,7 @@ const AppTagline = "Markdown Document Viewer"
 // via -ldflags "-X github.com/thgossler/mdv/internal/core.Version=vX.Y.Z". This
 // default is kept in sync with VERSION (by scripts/bump-version.*) so `go run`
 // and unstamped builds still report the real SemVer instead of a commit hash.
-var Version = "v0.7.4"
+var Version = "v0.7.5"
 
 // LinkKind classifies a resolved markdown link target.
 type LinkKind int
