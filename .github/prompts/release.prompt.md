@@ -13,23 +13,45 @@ to build, sign/notarize, and publish the binaries to a GitHub Release.
 Perform the following steps **in order** and **stop immediately** if any step
 fails — do not continue past a failure.
 
-1. **Pull the latest changes and ensure it succeeds.** On the current branch:
+1. **Check for uncommitted local changes.** Before doing anything else:
+   ```sh
+   git status --porcelain
+   ```
+   If the output is non-empty (there are staged, unstaged, or untracked changes),
+   **stop** and tell the user:
+   > "There are uncommitted local changes. Please commit (or stash/discard) them,
+   > push all commits to the remote, and wait for the CI pipeline to succeed
+   > before triggering the release."
+
+2. **Check for unpushed local commits.** Determine how many commits are ahead of
+   the remote tracking branch:
+   ```sh
+   git fetch origin
+   git rev-list --count @{u}..HEAD
+   ```
+   If the count is greater than 0 (there are local commits not yet on the
+   remote), **stop** and tell the user:
+   > "There are local commits that have not been pushed to the remote yet. Please
+   > push all pending commits and wait for the CI pipeline to succeed before
+   > triggering the release."
+
+3. **Pull the latest changes and ensure it succeeds.** On the current branch:
    ```sh
    git pull --ff-only
    ```
    - If the pull fails for any reason (merge conflicts, non-fast-forward,
-     network/auth error, detached HEAD, or a dirty working tree that blocks the
-     pull), **stop** and report the exact error. Do **not** attempt to force,
-     rebase, stash, or otherwise work around it without being asked.
-   - Confirm the working tree is clean afterwards (`git status --porcelain`
+     network/auth error, or detached HEAD), **stop** and report the exact error.
+     Do **not** attempt to force, rebase, stash, or otherwise work around it
+     without being asked.
+   - Confirm the working tree is still clean afterwards (`git status --porcelain`
      should print nothing). If it is dirty, stop and report it.
 
-2. **Read the version.** Read the single-line [VERSION](../../VERSION) file and
+4. **Read the version.** Read the single-line [VERSION](../../VERSION) file and
    trim whitespace. The git tag is the version prefixed with `v` — e.g.
    VERSION `0.7.1` → tag `v0.7.1`. (This matches the `v*` tag trigger in
    [release.yml](../workflows/release.yml).)
 
-3. **Guard against an existing tag.** Check whether the tag already exists:
+5. **Guard against an existing tag.** Check whether the tag already exists:
    ```sh
    git tag --list "v<VERSION>"
    git ls-remote --tags origin "refs/tags/v<VERSION>"
@@ -38,18 +60,18 @@ fails — do not continue past a failure.
    do not move or overwrite an existing tag. The fix is to bump the `VERSION`
    file first.
 
-4. **Create the tag on the latest commit.** Create an annotated tag pointing at
+6. **Create the tag on the latest commit.** Create an annotated tag pointing at
    the current `HEAD`:
    ```sh
    git tag -a "v<VERSION>" -m "Release v<VERSION>"
    ```
 
-5. **Push the tag to the remote.**
+7. **Push the tag to the remote.**
    ```sh
    git push origin "v<VERSION>"
    ```
 
-6. **Report.** State the tag that was created and pushed, the commit SHA it
+8. **Report.** State the tag that was created and pushed, the commit SHA it
    points to, and remind the user that pushing the tag has triggered the
    `release` workflow on GitHub Actions, which will publish the signed/notarized
    binaries to the GitHub Release named after the tag.

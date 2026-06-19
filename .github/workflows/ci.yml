@@ -8,8 +8,18 @@ name: ci
 on:
   push:
     branches: ["main"]
+    paths-ignore:
+      - ".agents/**"
+      - ".github/prompts/**"
+      - "README.md"
+      - "LICENSE.md"
   pull_request:
     branches: ["main"]
+    paths-ignore:
+      - ".agents/**"
+      - ".github/prompts/**"
+      - "README.md"
+      - "LICENSE.md"
   workflow_dispatch:
 
 permissions:
