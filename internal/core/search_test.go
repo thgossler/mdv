@@ -209,11 +209,11 @@ func TestWordMatch(t *testing.T) {
 		want   bool
 	}{
 		{"client", "client", true},      // exact
-		{"approval", "approvals", true},  // substring (prefix)
-		{"approvals", "approval", true},  // one edit away (drop trailing 's')
-		{"aproval", "approval", true},    // single edit (typo)
-		{"cat", "dog", false},            // short word, no substring -> no fuzzy
-		{"", "anything", false},          // empty query word never matches
+		{"approval", "approvals", true}, // substring (prefix)
+		{"approvals", "approval", true}, // one edit away (drop trailing 's')
+		{"aproval", "approval", true},   // single edit (typo)
+		{"cat", "dog", false},           // short word, no substring -> no fuzzy
+		{"", "anything", false},         // empty query word never matches
 	}
 	for _, c := range cases {
 		if got := wordMatch(c.q, c.tok); got != c.want {
