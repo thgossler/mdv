@@ -29,7 +29,7 @@ Determine the mode from the prompt argument:
 
 Rules and notes:
 
-- Build **only for the current OS** — do not cross-compile other platforms here.
+- Build **only for the current OS** - do not cross-compile other platforms here.
 - The output must land in `build/` (`build/mdv`, or `build/mdv.exe` on Windows).
 - Filter known-cosmetic macOS linker noise when showing output:
   `... 2>&1 | grep -vE "ld: warning|object file"`.

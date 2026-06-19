@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# notarize-macos.sh — submit a signed `mdv` artifact to Apple's notary service.
+# notarize-macos.sh - submit a signed `mdv` artifact to Apple's notary service.
 #
 # Accepts either the bare `mdv` Mach-O executable or the `mdv.app` bundle. A
 # bundle is stapled after notarization (the ticket travels with the archive);
-# a bare executable cannot be stapled — `stapler` only supports bundles, disk
-# images and installer packages — so Gatekeeper verifies it online on first run.
+# a bare executable cannot be stapled - `stapler` only supports bundles, disk
+# images and installer packages - so Gatekeeper verifies it online on first run.
 #
 # No-op when the notary credentials are not configured (local/dev builds).
 #
@@ -21,7 +21,7 @@ cd "$(dirname "$0")/.."
 BIN="${1:-build/mdv}"
 
 if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ] || [ -z "${APPLE_APP_PASSWORD:-}" ]; then
-  echo "notarize-macos: notary credentials not set — skipping notarization."
+  echo "notarize-macos: notary credentials not set - skipping notarization."
   exit 0
 fi
 
@@ -46,7 +46,7 @@ codesign --verify --strict --verbose=2 "$BIN" || true
 
 # A .app bundle CAN be stapled, so the notarization ticket travels with the
 # archive and Gatekeeper passes offline. A bare Mach-O executable cannot be
-# stapled — Gatekeeper verifies it online on first run instead.
+# stapled - Gatekeeper verifies it online on first run instead.
 if [ -d "$BIN" ]; then
   echo "==> Stapling notarization ticket to bundle"
   xcrun stapler staple "$BIN"

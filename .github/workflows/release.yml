@@ -10,9 +10,9 @@ name: release
 # absent, so the workflow still produces (unsigned) binaries for forks.
 #
 # Required repository secrets for signing:
-#   macOS    — APPLE_CERTIFICATE_P12_BASE64, APPLE_CERTIFICATE_PASSWORD,
+#   macOS    - APPLE_CERTIFICATE_P12_BASE64, APPLE_CERTIFICATE_PASSWORD,
 #              APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
-#   Windows  — AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   Windows  - AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
 #              (Azure Artifact Signing via OpenID Connect / federated credential)
 # Required repository variables for Windows signing (non-secret config):
 #   AZURE_CODESIGNING_ENDPOINT  e.g. https://weu.codesigning.azure.net/

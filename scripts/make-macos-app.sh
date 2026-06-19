@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# make-macos-app.sh — build `mdv.app`, a Finder-friendly application bundle.
+# make-macos-app.sh - build `mdv.app`, a Finder-friendly application bundle.
 #
 # Why this exists:
 #   The shipped `mdv` is a single Unix executable. macOS Finder's "Open With"
 #   (and "set as default app for this file type") only offers *application
-#   bundles* (.app) — a bare executable is always greyed out. This script wraps
+#   bundles* (.app) - a bare executable is always greyed out. This script wraps
 #   the launcher in a minimal .app so Markdown files can be associated with mdv.
 #
 # How it works:

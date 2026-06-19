@@ -3,7 +3,7 @@
 //
 //   - the application icon at resource ID 3 (the numeric value of RT_ICON, which
 //     is the ID the Wails v3 Windows backend looks up for the window / App-
-//     switcher / title-bar icon — see webview_window_windows.go). The same icon
+//     switcher / title-bar icon - see webview_window_windows.go). The same icon
 //     resource is what Windows Explorer shows for the .exe file and any desktop
 //     shortcut to it.
 //   - an application manifest (per-monitor-v2 DPI awareness, common controls v6,

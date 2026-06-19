@@ -1,4 +1,4 @@
-/* themes.css — design tokens for light and dark appearance.
+/* themes.css - design tokens for light and dark appearance.
    Colours are exposed as CSS custom properties consumed by the rest of the UI.
    The active scheme is selected by the `theme-light` / `theme-dark` body class. */
 

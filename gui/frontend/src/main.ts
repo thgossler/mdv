@@ -139,7 +139,7 @@ async function boot(): Promise<void> {
   wireLiveReload();
 
   if (info.update?.available) {
-    els.statusMid.innerHTML = `Update ${escapeHtml(info.update.latest)} available — <a href="#" id="upd-link">download</a>`;
+    els.statusMid.innerHTML = `Update ${escapeHtml(info.update.latest)} available - <a href="#" id="upd-link">download</a>`;
     $("upd-link")?.addEventListener("click", (e) => {
       e.preventDefault();
       api.openExternal(info.update.downloadUrl);
@@ -281,7 +281,7 @@ async function resolveAssets(): Promise<void> {
       const attr = el.tagName === "VIDEO" ? "poster" : "src";
       const ref = el.getAttribute(attr) || "";
       if (!ref || /^[a-z][a-z0-9+.-]+:/i.test(ref) || ref.startsWith("//") || ref.startsWith("#")) {
-        return; // absolute URL, data URI or empty — nothing to resolve
+        return; // absolute URL, data URI or empty - nothing to resolve
       }
       try {
         const dataUri = await api.resolveAsset(ref, currentDir);
@@ -735,7 +735,7 @@ function showFolderWelcome(): void {
   // versus how many were hidden; otherwise the plain total reads more clearly.
   const summary =
     excluded > 0
-      ? `${visible} of ${total} markdown document${total === 1 ? "" : "s"} shown — ${excluded} excluded by ignore pattern${excluded === 1 ? "" : "s"}.`
+      ? `${visible} of ${total} markdown document${total === 1 ? "" : "s"} shown - ${excluded} excluded by ignore pattern${excluded === 1 ? "" : "s"}.`
       : `${total} markdown document${total === 1 ? "" : "s"} in this folder.`;
   els.content.innerHTML = `<div class="welcome"><h1>${escapeHtml(info.appName)}</h1>
     <p>${summary}</p>
@@ -934,7 +934,7 @@ async function titleBarAction(): Promise<void> {
 // On macOS the native title-bar drag does not restore a maximized window, so we
 // track the maximized state ourselves and, when the user starts dragging a
 // maximized window, shrink it back to its previous size under the cursor and
-// then follow the pointer — matching standard OS behaviour.
+// then follow the pointer - matching standard OS behaviour.
 const isMac = navigator.userAgent.includes("Macintosh");
 let winMaximized = false;
 let preMaxBounds: { x: number; y: number; w: number; h: number } | null = null;

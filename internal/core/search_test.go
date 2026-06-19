@@ -240,3 +240,52 @@ func TestFuzzyMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestMatchPhraseSpans(t *testing.T) {
+	cases := []struct {
+		name, s, q string
+		want       []PhraseSpan
+	}{
+		{
+			name: "hyphenated phrase",
+			s:    "azdw mcp --client-approvals",
+			q:    "client approvals",
+			want: []PhraseSpan{{Start: 11, End: 27}}, // "client-approvals"
+		},
+		{
+			name: "phrase with filler word",
+			s:    "the Client-side Approvals dialog",
+			q:    "client approvals",
+			want: []PhraseSpan{{Start: 4, End: 25}}, // "Client-side Approvals"
+		},
+		{
+			name: "single word spans whole token",
+			s:    "approve the approvals now",
+			q:    "approvals",
+			want: []PhraseSpan{{Start: 12, End: 21}}, // "approvals"
+		},
+		{
+			name: "no match",
+			s:    "budget overview only",
+			q:    "client approvals",
+			want: nil,
+		},
+		{
+			name: "blank query",
+			s:    "anything",
+			q:    "",
+			want: nil,
+		},
+	}
+	for _, c := range cases {
+		got := MatchPhraseSpans(c.s, c.q)
+		if len(got) != len(c.want) {
+			t.Fatalf("%s: MatchPhraseSpans(%q, %q) = %v, want %v", c.name, c.s, c.q, got, c.want)
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: span %d = %+v, want %+v (matched %q)", c.name, i, got[i], c.want[i], c.s[got[i].Start:got[i].End])
+			}
+		}
+	}
+}

@@ -40,8 +40,8 @@ const maxPhraseGap = 2
 
 // maxLineSpan is how many lines apart two consecutive matched query words may be
 // and still count as the same phrase. A value of 1 lets a phrase span a single
-// line break — the common case when markdown source is hard-wrapped at ~80
-// columns — while still rejecting words separated by a blank line (a paragraph
+// line break - the common case when markdown source is hard-wrapped at ~80
+// columns - while still rejecting words separated by a blank line (a paragraph
 // boundary), which would be two lines apart.
 const maxLineSpan = 1
 
@@ -284,6 +284,69 @@ func matchPhrase(tokens []token, words []string) (col int, ok bool) {
 		}
 	}
 	return 0, false
+}
+
+// PhraseSpan is the byte range [Start, End) of a fuzzy-phrase match within a
+// single string. It spans from the start of the first matched word to the end of
+// the last matched word, so the whole matched phrase can be highlighted.
+type PhraseSpan struct {
+	Start int
+	End   int
+}
+
+// MatchPhraseSpans returns the byte ranges of every non-overlapping fuzzy-phrase
+// match of query within s, in order of appearance, using the same matching rules
+// as the document content search (words in order, small gaps, substring and typo
+// tolerance). This lets callers highlight in-document matches consistently with
+// content search - for example "client approvals" matches the phrase in
+// "azdw mcp --client-approvals". A blank query yields no spans.
+func MatchPhraseSpans(s, query string) []PhraseSpan {
+	words := queryWords(query)
+	if len(words) == 0 {
+		return nil
+	}
+	toks := tokenize(s)
+	var spans []PhraseSpan
+	for i := 0; i < len(toks); {
+		if !wordMatch(words[0], toks[i].text) {
+			i++
+			continue
+		}
+		end, ok := alignPhraseFrom(toks, i, words)
+		if !ok {
+			i++
+			continue
+		}
+		last := toks[end]
+		spans = append(spans, PhraseSpan{Start: toks[i].start, End: last.start + len(last.text)})
+		i = end + 1
+	}
+	return spans
+}
+
+// alignPhraseFrom reports whether the ordered query words match the token slice
+// starting with words[0] anchored at toks[s], returning the index of the last
+// matched token. It mirrors matchPhrase's alignment, allowing up to maxPhraseGap
+// non-matching tokens between consecutive matched words.
+func alignPhraseFrom(toks []token, s int, words []string) (end int, ok bool) {
+	ti := s + 1
+	last := s
+	for qi := 1; qi < len(words); qi++ {
+		found := false
+		for gap := 0; ti < len(toks) && gap <= maxPhraseGap; gap++ {
+			if wordMatch(words[qi], toks[ti].text) {
+				last = ti
+				ti++
+				found = true
+				break
+			}
+			ti++
+		}
+		if !found {
+			return 0, false
+		}
+	}
+	return last, true
 }
 
 // wordMatch reports whether query word q matches token t: as a substring

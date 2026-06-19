@@ -1,5 +1,5 @@
 // Command mdv is the Markdown Document Viewer launcher. It is pure Go with no
-// webview linkage, so it always starts — even in a headless container. Based on
+// webview linkage, so it always starts - even in a headless container. Based on
 // the environment and flags it renders to the console, runs the terminal UI, or
 // spawns the bundled GUI helper (falling back automatically if the GUI cannot
 // run).
@@ -257,7 +257,7 @@ func reorderArgs(args []string) []string {
 
 func usage() {
 	w := flag.CommandLine.Output()
-	fmt.Fprintf(w, "%s %s — %s\n\n", core.AppName, core.Version, core.AppTagline)
+	fmt.Fprintf(w, "%s %s - %s\n\n", core.AppName, core.Version, core.AppTagline)
 	fmt.Fprintf(w, "Usage:\n")
 	fmt.Fprintf(w, "  %s [flags] <file.md | folder>\n", core.AppName)
 	fmt.Fprintf(w, "  %s .          open the current directory as a folder\n", core.AppName)
@@ -277,5 +277,6 @@ func usage() {
 	fmt.Fprintf(w, "your query as a smart fuzzy phrase, so \"client approvals\" also finds\n")
 	fmt.Fprintf(w, "\"Client-side Approvals\" (even when wrapped across two lines). In the GUI,\n")
 	fmt.Fprintf(w, "toggle content search with the ⌕ button next to the navigator filter; in the\n")
-	fmt.Fprintf(w, "TUI, type \"//\" in the document list to search content (\"/\" filters by name).\n")
+	fmt.Fprintf(w, "TUI, press Tab (or Ctrl+B) to open the document list, then type \"//\" to search\n")
+	fmt.Fprintf(w, "content (\"/\" filters by name).\n")
 }

@@ -1,4 +1,4 @@
-# AGENTS.md — Working on `mdv`
+# AGENTS.md - Working on `mdv`
 
 Guidance for AI coding agents (and humans) contributing to **mdv**, the
 Markdown Document Viewer. Read this first; it captures the goals, the
@@ -10,15 +10,15 @@ A minimal, fast, **self-contained** markdown viewer shipped as a single
 executable with no installation and no runtime dependencies. It adapts to its
 environment:
 
-- **GUI** — native-webview window (default on desktops).
-- **TUI** — rich terminal UI when there is no graphical environment.
-- **Console** — plain rendered stdout when piped or non-interactive.
+- **GUI** - native-webview window (default on desktops).
+- **TUI** - rich terminal UI when there is no graphical environment.
+- **Console** - plain rendered stdout when piped or non-interactive.
 
 ## Core goals (optimize for these)
 
 1. **Always starts.** Even in a headless Docker container over SSH. The shipped
    binary is a pure-Go launcher that links **no** webview libraries, so a
-   missing `WebKitGTK`/WebView2 never causes a failure — it degrades to TUI or
+   missing `WebKitGTK`/WebView2 never causes a failure - it degrades to TUI or
    console.
 2. **Self-contained.** One binary. The GUI helper is embedded (gzip-compressed)
    and only extracted/spawned when a graphical environment is detected.
@@ -37,13 +37,13 @@ environment:
 - **All Go code must be `gofmt`-clean** and pass `go vet`.
 - **Tests must pass with no errors or warnings** before any change is
   considered done (`go test ./...`).
-- **Don't add heavy dependencies** without strong justification — minimalism is
+- **Don't add heavy dependencies** without strong justification - minimalism is
   a feature.
 
 ## Architecture map
 
 ```
-cmd/mdv             pure-Go launcher (NO webview) — picks GUI/TUI/console
+cmd/mdv             pure-Go launcher (NO webview) - picks GUI/TUI/console
 internal/core       shared logic: config, links, slugs, backlinks, updates, input
 internal/console    glamour-based stdout rendering
 internal/tui        Bubble Tea terminal UI
@@ -76,7 +76,7 @@ launcher (`-tags gui_bundled`, `CGO_ENABLED=0`) embedding the helper.
 
 For a quick Go-only compile check without the full pipeline: `go build ./...`.
 (The macOS linker may print harmless "object file built for newer macOS"
-warnings — these are cosmetic.)
+warnings - these are cosmetic.)
 
 ## Run
 
@@ -122,7 +122,7 @@ launcher's headless-safety guarantee covered.
 1. Branch from `main`: `git checkout -b feature/<short-name>` (or
    `fix/<short-name>`).
 2. Make the change; keep it focused and small.
-3. Ensure quality locally — all of these must be clean:
+3. Ensure quality locally - all of these must be clean:
    - `gofmt -l $(git ls-files '*.go')` prints nothing
    - `go vet ./...`
    - `go test ./...`
@@ -152,7 +152,7 @@ A good issue is specific and reproducible. Include:
   goals.
 - **Search first** to avoid duplicates; link related issues.
 
-Open issues at https://github.com/thgossler/mdv/issues — or use the `/write-issue`
+Open issues at https://github.com/thgossler/mdv/issues - or use the `/write-issue`
 prompt, which searches for duplicates and opens the new-issue form for you.
 
 ## Handy references

@@ -41,10 +41,14 @@ type histEntry struct {
 
 // matchPos identifies a single search hit: a 0-based line index in the rendered
 // (ANSI-stripped) content and the visible-column offset of the match start on
-// that line. Multiple hits on the same line are tracked independently.
+// that line. For phrase searches end is the visible-column offset just past the
+// match so the whole matched span can be highlighted; it is 0 for keyword
+// searches that highlight by term. Multiple hits on the same line are tracked
+// independently.
 type matchPos struct {
 	line int
 	col  int
+	end  int
 }
 
 // maxHighlightBytes is the largest rendered document (in bytes) for which search
@@ -209,7 +213,7 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 	m.list = fileList
 
 	linkList := list.New(nil, list.NewDefaultDelegate(), 0, 0)
-	linkList.Title = "Links — Enter to follow, Esc to cancel"
+	linkList.Title = "Links - Enter to follow, Esc to cancel"
 	linkList.SetShowHelp(false)
 	m.links = linkList
 
@@ -322,9 +326,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "tab":
-		if m.showList {
+		if !m.showList {
+			m.toggleNav() // reveal and focus the navigator
+		} else {
 			m.focus = focusList
 		}
+		return *m, nil
+	case "ctrl+b":
+		m.toggleNav()
 		return *m, nil
 	case "b", "backspace", "left", "alt+left":
 		m.goBack()
@@ -356,6 +365,9 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "tab":
 		m.focus = focusContent
+		return *m, nil
+	case "ctrl+b", "esc":
+		m.toggleNav() // hide the navigator, back to the content view
 		return *m, nil
 	case "/":
 		// Enter the navigator filter: a plain query filters by name, a leading
@@ -487,10 +499,21 @@ func (m *Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchInput = m.searchInput[:len(m.searchInput)-1]
 		}
 		return *m, nil
+	case "/":
+		// A leading "/" in the in-document search prompt means the user typed
+		// "//": switch to workspace-wide content search shown in the navigator,
+		// matching the document list's "//" behavior. A "/" anywhere else in the
+		// query is treated as a literal character.
+		if m.searchInput == "" {
+			m.enterContentSearch()
+		} else {
+			m.searchInput += "/"
+		}
+		return *m, nil
 	default:
 		// Only accept real typed text. Guarding on KeyRunes/KeySpace (and dropping
-		// any control characters) prevents stray terminal responses — such as the
-		// OSC background-colour reply — from leaking into the query, while still
+		// any control characters) prevents stray terminal responses - such as the
+		// OSC background-colour reply - from leaking into the query, while still
 		// allowing spaces (reported as KeySpace) in multi-word searches.
 		if msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace {
 			for _, r := range msg.Runes {
@@ -516,6 +539,38 @@ func (m *Model) exitSearch() {
 		m.matchIdx = 0
 		m.rerender()
 	}
+}
+
+// enterContentSearch switches from the in-document search prompt to the
+// workspace-wide content search shown in the document navigator, so the full
+// "//" search is reachable directly from the content view. It reveals the
+// navigator (which lists every markdown file in the folder, even when a single
+// file was opened) and seeds the filter with a leading "/" so further typing
+// continues the content query.
+func (m *Model) enterContentSearch() {
+	if !m.showList {
+		if len(m.workspace) == 0 {
+			m.statusMsg = "No other documents in this folder"
+			return
+		}
+		if m.labelMode == "title" {
+			core.PopulateTitles(m.workspace)
+		}
+		m.showList = true
+		m.layout()
+	}
+	// Drop any in-document search state carried over from the content view.
+	m.searchInput = ""
+	m.searchQuery = ""
+	m.searchTerms = nil
+	m.matches = nil
+	m.matchIdx = 0
+	m.rerender()
+
+	m.focus = focusListFilter
+	m.listFilterInput = "/"
+	m.statusMsg = ""
+	m.rebuildNavList()
 }
 
 // --- document-navigator filter / content search ----------------------------
@@ -719,6 +774,33 @@ func (m *Model) toggleLabelMode() {
 	m.syncListSelection()
 }
 
+// toggleNav shows or hides the document-navigator panel. The panel lists every
+// markdown file in the workspace folder regardless of whether mdv was opened on
+// a single file or on a folder, so name filtering ("/") and content search
+// ("//") across all those documents are always available. Showing it focuses the
+// list; hiding it returns to the content view.
+func (m *Model) toggleNav() {
+	if m.showList {
+		m.listFilterInput = ""
+		m.showList = false
+		m.focus = focusContent
+	} else {
+		if len(m.workspace) == 0 {
+			m.statusMsg = "No other documents in this folder"
+			return
+		}
+		if m.labelMode == "title" {
+			core.PopulateTitles(m.workspace)
+		}
+		m.showList = true
+		m.focus = focusList
+		m.listFilterInput = ""
+		m.resetNavList()
+	}
+	m.layout()
+	m.rerender()
+}
+
 func (m *Model) syncListSelection() {
 	for i, it := range m.list.Items() {
 		if d, ok := it.(docItem); ok && d.doc.Path == m.currentPath {
@@ -763,22 +845,15 @@ func (m *Model) runSearch(q string) {
 	m.matches = nil
 	m.matchIdx = 0
 	m.searchQuery = ""
+	m.searchTerms = nil
 	if strings.TrimSpace(q) == "" {
 		m.rerender()
 		return
 	}
 	rendered := strings.Split(stripANSI(m.renderedRaw()), "\n")
-	ql := strings.ToLower(q)
 	for i, line := range rendered {
-		ll := strings.ToLower(line)
-		for from := 0; ; {
-			idx := strings.Index(ll[from:], ql)
-			if idx < 0 {
-				break
-			}
-			col := from + idx
-			m.matches = append(m.matches, matchPos{line: i, col: col})
-			from = col + len(ql)
+		for _, sp := range core.MatchPhraseSpans(line, q) {
+			m.matches = append(m.matches, matchPos{line: i, col: sp.Start, end: sp.End})
 		}
 	}
 	if len(m.matches) == 0 {
@@ -914,7 +989,7 @@ func (m *Model) rerender() {
 		if len(m.searchTerms) > 0 {
 			content = highlightTerms(content, m.searchTerms, curLine, curCol)
 		} else if m.searchQuery != "" {
-			content = highlightTerm(content, m.searchQuery, curLine, curCol)
+			content = highlightSpans(content, m.matches, m.matchIdx)
 		}
 	}
 	m.viewport.SetContent(content)
@@ -1001,6 +1076,9 @@ func (m Model) header() string {
 func (m Model) statusBar() string {
 	if m.focus == focusSearch {
 		hint := "Enter: search, Esc: cancel"
+		if m.searchInput == "" {
+			hint = "find in page - type / for content search, Esc: cancel"
+		}
 		if m.searchInput == m.searchQuery && m.searchQuery != "" {
 			if len(m.matches) > 0 {
 				hint = fmt.Sprintf("%d/%d  Enter/↓: next, ↑: prev, Esc: done", m.matchIdx+1, len(m.matches))
@@ -1013,9 +1091,9 @@ func (m Model) statusBar() string {
 	}
 
 	if m.focus == focusListFilter {
-		hint := "name filter — type // to search content, Enter: open, Esc: cancel"
+		hint := "name filter - type // to search content, Enter: open, Esc: cancel"
 		if strings.HasPrefix(m.listFilterInput, "/") {
-			hint = "content search — Enter: open match, Esc: cancel"
+			hint = "content search - Enter: open match, Esc: cancel"
 		}
 		return lipgloss.NewStyle().Width(m.width).Reverse(true).
 			Render(" /" + m.listFilterInput + "▏ (" + hint + ") ")
@@ -1026,9 +1104,9 @@ func (m Model) statusBar() string {
 		pct = int(m.viewport.ScrollPercent() * 100)
 	}
 
-	hints := "b:back  l:links  /:find  q:quit"
+	hints := "tab:nav  /:find  //:content  b:back  l:links  q:quit"
 	if m.showList {
-		hints = "tab:switch  enter:open  /:filter  t:titles  " + hints
+		hints = "tab:switch  enter:open  /:filter  //:content  t:titles  esc:hide  q:quit"
 	}
 
 	status := m.statusMsg
@@ -1072,8 +1150,8 @@ func stripANSI(s string) string { return reANSI.ReplaceAllString(s, "") }
 
 // highlightTerm wraps every case-insensitive occurrence of term in the ANSI
 // styled text so matches stand out while searching. The single occurrence at
-// (currentLine, currentCol) — both 0-based, with currentCol the visible-column
-// offset of the match start — gets a green background; every other occurrence
+// (currentLine, currentCol) - both 0-based, with currentCol the visible-column
+// offset of the match start - gets a green background; every other occurrence
 // gets a yellow background. Pass currentLine = -1 for no current match.
 // Matching is performed on the visible characters only; embedded escape
 // sequences are skipped. Each line is processed independently.
@@ -1170,6 +1248,99 @@ func highlightLine(line, lowerTerm string, currentCol int) string {
 
 func normalize(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
+
+// hlSpan is a visible-column byte range to highlight on a single line, flagged
+// as the current match (green) or not (yellow).
+type hlSpan struct {
+	s, e int
+	cur  bool
+}
+
+// highlightSpans highlights each matched phrase span recorded in matches across
+// the ANSI-styled content. The span at index currentIdx is rendered with a green
+// background; all others yellow. Spans use visible-column byte offsets, matching
+// the ANSI-stripped text the phrase search ran against.
+func highlightSpans(styled string, matches []matchPos, currentIdx int) string {
+	if len(matches) == 0 {
+		return styled
+	}
+	byLine := map[int][]hlSpan{}
+	for idx, mt := range matches {
+		byLine[mt.line] = append(byLine[mt.line], hlSpan{s: mt.col, e: mt.end, cur: idx == currentIdx})
+	}
+	lines := strings.Split(styled, "\n")
+	for i := range lines {
+		spans, ok := byLine[i]
+		if !ok {
+			continue
+		}
+		lines[i] = highlightSpanLine(lines[i], spans)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// highlightSpanLine paints the given visible-column spans onto a single
+// ANSI-styled line, mapping visible offsets back to byte offsets so existing
+// escape sequences are preserved. Current spans are green, the rest yellow.
+func highlightSpanLine(line string, spans []hlSpan) string {
+	var vis []byte
+	var off []int
+	for i := 0; i < len(line); {
+		if loc := reANSI.FindStringIndex(line[i:]); loc != nil && loc[0] == 0 {
+			i += loc[1]
+			continue
+		}
+		vis = append(vis, line[i])
+		off = append(off, i)
+		i++
+	}
+	n := len(vis)
+
+	starts := map[int]bool{}
+	current := map[int]bool{}
+	ends := map[int]bool{}
+	found := false
+	for _, sp := range spans {
+		if sp.s < 0 || sp.s >= n || sp.e <= sp.s {
+			continue
+		}
+		startByte := off[sp.s]
+		endByte := len(line)
+		if sp.e < len(off) {
+			endByte = off[sp.e]
+		}
+		starts[startByte] = true
+		if sp.cur {
+			current[startByte] = true
+		}
+		ends[endByte] = true
+		found = true
+	}
+	if !found {
+		return line
+	}
+
+	const yellow = "\x1b[30;43m" // black foreground, yellow background
+	const green = "\x1b[30;42m"  // black foreground, green background
+	const off2 = "\x1b[39;49m"   // restore default foreground and background
+	var b strings.Builder
+	for i := 0; i <= len(line); i++ {
+		if ends[i] {
+			b.WriteString(off2)
+		}
+		if starts[i] {
+			if current[i] {
+				b.WriteString(green)
+			} else {
+				b.WriteString(yellow)
+			}
+		}
+		if i < len(line) {
+			b.WriteByte(line[i])
+		}
+	}
+	return b.String()
 }
 
 // highlightTerms highlights every occurrence of any of the given terms across

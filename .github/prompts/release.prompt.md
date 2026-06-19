@@ -11,7 +11,7 @@ the `release` GitHub Actions workflow ([release.yml](../workflows/release.yml))
 to build, sign/notarize, and publish the binaries to a GitHub Release.
 
 Perform the following steps **in order** and **stop immediately** if any step
-fails — do not continue past a failure.
+fails - do not continue past a failure.
 
 1. **Check for uncommitted local changes.** Before doing anything else:
    ```sh
@@ -47,7 +47,7 @@ fails — do not continue past a failure.
      should print nothing). If it is dirty, stop and report it.
 
 4. **Read the version.** Read the single-line [VERSION](../../VERSION) file and
-   trim whitespace. The git tag is the version prefixed with `v` — e.g.
+   trim whitespace. The git tag is the version prefixed with `v` - e.g.
    VERSION `0.7.1` → tag `v0.7.1`. (This matches the `v*` tag trigger in
    [release.yml](../workflows/release.yml).)
 
@@ -56,7 +56,7 @@ fails — do not continue past a failure.
    git tag --list "v<VERSION>"
    git ls-remote --tags origin "refs/tags/v<VERSION>"
    ```
-   If the tag already exists locally or on the remote, **stop** and report it —
+   If the tag already exists locally or on the remote, **stop** and report it -
    do not move or overwrite an existing tag. The fix is to bump the `VERSION`
    file first.
 
@@ -80,5 +80,5 @@ Notes:
 
 - Replace `<VERSION>` with the actual trimmed contents of the `VERSION` file in
   every command above.
-- Do not edit the `VERSION` file in this prompt — it is the source of truth and
+- Do not edit the `VERSION` file in this prompt - it is the source of truth and
   is expected to already hold the version being released.

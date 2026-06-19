@@ -1,4 +1,4 @@
-/* app.css — application chrome: layout, toolbar, sidebar, TOC, status bar,
+/* app.css - application chrome: layout, toolbar, sidebar, TOC, status bar,
    search bar, context/history menus. */
 
 * {
@@ -153,7 +153,7 @@ body.full-width {
 
 /* Pane resizers ------------------------------------------------------------ */
 /* Thin draggable splitters between the navigation/content/contents panes.
-   Positions are not persisted — every launch starts at the default widths. */
+   Positions are not persisted - every launch starts at the default widths. */
 .pane-resizer {
   flex: none;
   width: 6px;

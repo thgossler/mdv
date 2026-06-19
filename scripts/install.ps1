@@ -16,8 +16,21 @@
 
 .NOTES
   Override the version with $env:MDV_VERSION and the install dir with
-  $env:MDV_INSTALL before running.
+  $env:MDV_INSTALL before running. Set $env:MDV_ASSOCIATE_MD to 1/yes (or no) to
+  associate .md files with mdv without being prompted.
+
+  Use -Silent for unattended installs (no prompts; file association is left
+  untouched by default), and -AssociateMdFileExtension to associate .md files
+  with mdv even in -Silent mode - handy when chaining this script from another
+  installer or tool.
 #>
+param(
+    # Run unattended: never prompt. Without -AssociateMdFileExtension no file
+    # association is performed.
+    [switch]$Silent,
+    # Associate the .md file extension with mdv (honored even with -Silent).
+    [switch]$AssociateMdFileExtension
+)
 $ErrorActionPreference = "Stop"
 
 # PowerShell 5.1 (Windows PowerShell) lacks the $IsWindows/$IsMacOS/$IsLinux
@@ -155,11 +168,60 @@ else {
 
 # Make mdv usable immediately in the current session. When this script is run
 # via the documented `irm ... | iex` one-liner it executes in the current
-# session scope, so updating $env:PATH takes effect right away — no terminal
+# session scope, so updating $env:PATH takes effect right away - no terminal
 # restart or profile reload needed.
 $sep = [IO.Path]::PathSeparator
 if (($env:PATH -split $sep) -notcontains $InstallDir) {
     $env:PATH = "$InstallDir$sep$env:PATH"
+}
+
+# --- Optionally associate .md files with mdv (Windows) -----------------------
+# Registers a per-user ProgID and points the .md extension at it. No admin
+# rights needed. Set $env:MDV_ASSOCIATE_MD to 1/yes to associate without
+# prompting, or to no to skip silently (useful for non-interactive installs).
+
+function Set-MdvMarkdownAssociation {
+    param([Parameter(Mandatory)][string]$ExePath)
+
+    $progId  = "mdv.Markdown"
+    $classes = "HKCU:\Software\Classes"
+
+    # ProgID: friendly name, document icon, and the command used to open a file.
+    New-Item -Path "$classes\$progId\shell\open\command" -Force | Out-Null
+    Set-ItemProperty -Path "$classes\$progId" -Name "(default)" -Value "Markdown Document"
+    New-Item -Path "$classes\$progId\DefaultIcon" -Force | Out-Null
+    Set-ItemProperty -Path "$classes\$progId\DefaultIcon" -Name "(default)" -Value "$ExePath,0"
+    Set-ItemProperty -Path "$classes\$progId\shell\open\command" -Name "(default)" -Value "`"$ExePath`" --gui `"%1`""
+
+    # List the ProgID under .md's "Open with" set and make it the per-user default.
+    New-Item -Path "$classes\.md\OpenWithProgids" -Force | Out-Null
+    New-ItemProperty -Path "$classes\.md\OpenWithProgids" -Name $progId -PropertyType String -Value "" -Force | Out-Null
+    Set-ItemProperty -Path "$classes\.md" -Name "(default)" -Value $progId
+
+    # Notify the shell so the new association is picked up without a sign-out.
+    try {
+        Add-Type -Namespace MdvInstaller -Name Shell -MemberDefinition '[DllImport("shell32.dll")] public static extern void SHChangeNotify(int eventId, int flags, System.IntPtr item1, System.IntPtr item2);' -ErrorAction SilentlyContinue
+        [MdvInstaller.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+    } catch { }
+
+    Write-Host "Associated .md files with mdv for the current user."
+    Write-Host "If Windows keeps a previous default, set it via Settings > Apps > Default apps,"
+    Write-Host "or right-click a .md file > Open with > Choose another app > mdv > Always."
+}
+
+if ($IsWindows) {
+    $doAssoc = $false
+    if ($AssociateMdFileExtension -or ($env:MDV_ASSOCIATE_MD -match '^(1|y|yes|true)$')) {
+        $doAssoc = $true
+    }
+    elseif (-not $Silent -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        $reply = Read-Host "Associate Markdown (.md) files with mdv? [y/N]"
+        $doAssoc = $reply -match '^\s*(y|yes)\s*$'
+    }
+    if ($doAssoc) {
+        try { Set-MdvMarkdownAssociation -ExePath $Dest }
+        catch { Write-Warning "Could not set .md association: $($_.Exception.Message)" }
+    }
 }
 
 Write-Host "Try:  mdv --version"

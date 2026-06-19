@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-// hasConsole records whether mdv has somewhere to read/write text at startup —
+// hasConsole records whether mdv has somewhere to read/write text at startup -
 // either a console (inherited from the launching terminal or reattached below)
 // or std handles the shell redirected to a pipe/file. A GUI-subsystem binary
 // double-clicked in Explorer has neither, which is how mode detection knows to
@@ -73,5 +73,5 @@ func stdHandleValid(kind int) bool {
 
 // HasStartupConsole reports whether mdv has a console or redirected output to
 // write to. It is false only when launched from a GUI shell (Explorer) with no
-// console and no redirection — the one case where GUI mode is the right default.
+// console and no redirection - the one case where GUI mode is the right default.
 func HasStartupConsole() bool { return hasConsole }

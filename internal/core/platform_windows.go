@@ -8,8 +8,8 @@ import (
 )
 
 // Process creation flags (from <winbase.h>). DETACHED_PROCESS gives the child
-// no console at all — it neither inherits the launcher's console nor creates a
-// new one — so spawning the GUI helper can never leave a console window behind
+// no console at all - it neither inherits the launcher's console nor creates a
+// new one - so spawning the GUI helper can never leave a console window behind
 // (or tie up the terminal when mdv is run from a shell).
 const (
 	detachedProcess       = 0x00000008

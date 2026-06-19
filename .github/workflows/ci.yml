@@ -3,7 +3,7 @@ name: ci
 # Continuous integration: build the self-contained `mdv` executable on every
 # supported platform and run the test suite. Runs on pushes and pull requests so
 # breakages are caught before a release tag is cut. No signing or publishing
-# happens here — see release.yml for signed, notarized release artifacts.
+# happens here - see release.yml for signed, notarized release artifacts.
 
 on:
   push:

@@ -1,14 +1,48 @@
 #!/usr/bin/env sh
 #
-# mdv installer — downloads the latest self-contained `mdv` from GitHub Releases
+# mdv installer - downloads the latest self-contained `mdv` from GitHub Releases
 # and installs it to a directory on your PATH. No package manager required.
 #
 #   curl -fsSL https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.sh | sh
 #
+# Options (pass after `-s --` when piping, e.g. `... | sh -s -- --silent`):
+#   --silent                        unattended install: never prompt; no file
+#                                   association unless explicitly requested
+#   --associate-md-file-extension   associate .md files with mdv (honored even
+#                                   with --silent)
+#   -h, --help                      show this help and exit
+#
 # Environment overrides:
-#   MDV_VERSION   install a specific tag (default: latest)
-#   MDV_INSTALL   install directory (default: /usr/local/bin or ~/.local/bin)
+#   MDV_VERSION        install a specific tag (default: latest)
+#   MDV_INSTALL        install directory (default: /usr/local/bin or ~/.local/bin)
+#   MDV_ASSOCIATE_MD   associate .md files with mdv without prompting (1/yes/no)
 set -eu
+
+# --- parse options ----------------------------------------------------------
+silent=no
+associate_opt=""   # "" = decide interactively/env, "yes"/"no" = forced
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --silent|-s) silent=yes ;;
+    --associate-md-file-extension|--associate-md) associate_opt=yes ;;
+    --no-associate-md-file-extension|--no-associate-md) associate_opt=no ;;
+    -h|--help)
+      cat <<'EOF'
+mdv installer
+Usage: install.sh [options]
+  --silent                        unattended install: never prompt; no file
+                                  association unless explicitly requested
+  --associate-md-file-extension   associate .md files with mdv (honored even
+                                  with --silent)
+  -h, --help                      show this help and exit
+Environment overrides: MDV_VERSION, MDV_INSTALL, MDV_ASSOCIATE_MD
+EOF
+      exit 0
+      ;;
+    *) echo "mdv: unknown option: $1 (use --help)" >&2; exit 1 ;;
+  esac
+  shift
+done
 
 REPO="thgossler/mdv"
 VERSION="${MDV_VERSION:-latest}"
@@ -60,7 +94,7 @@ if [ -n "${MDV_INSTALL:-}" ]; then
 else
   bindir=""
   # Prefer a directory that is already on PATH and writable, so `mdv` is
-  # immediately runnable in the current shell — no profile reload or restart.
+  # immediately runnable in the current shell - no profile reload or restart.
   for d in "/usr/local/bin" "$HOME/.local/bin" "$HOME/bin"; do
     if on_path "$d" && writable_dir "$d"; then
       bindir="$d"
@@ -111,6 +145,58 @@ else
   export PATH="$bindir:$PATH"
   hash -r 2>/dev/null || true
   echo "To use mdv now in the current shell, run:  export PATH=\"$bindir:\$PATH\""
+fi
+
+# --- optional: associate .md files with the mdv app (macOS) -----------------
+# The macOS release archive bundles mdv.app, the only thing Finder/LaunchServices
+# can use as a handler for a file type (a bare CLI binary can never be a default
+# app). Offer to install and register it. Set MDV_ASSOCIATE_MD=1 to associate
+# without prompting, or =no to skip silently (useful for non-interactive runs).
+install_macos_app() {
+  src="$1"
+  appdir="/Applications"
+  [ -w "$appdir" ] || appdir="$HOME/Applications"
+  mkdir -p "$appdir"
+  dest="$appdir/mdv.app"
+  rm -rf "$dest"
+  cp -R "$src" "$dest"
+  echo "Installed app bundle: $dest"
+
+  # Register the bundle so it shows up in Finder's "Open With".
+  lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+  if [ -x "$lsregister" ]; then
+    "$lsregister" -f "$dest" >/dev/null 2>&1 || true
+  fi
+
+  # Make it the default Markdown handler when duti is available; otherwise show
+  # how to finish (macOS protects default-handler changes from silent override).
+  if command -v duti >/dev/null 2>&1; then
+    if duti -s com.thgossler.mdv net.daringfireball.markdown all >/dev/null 2>&1; then
+      echo "Set mdv as the default app for Markdown (.md) files."
+    else
+      echo "Registered mdv.app, but setting it as the default failed."
+    fi
+  else
+    echo "Registered mdv.app. To make it the default for .md files:"
+    echo "  - Finder: select a .md file -> Get Info -> Open with -> mdv -> Change All..."
+    echo "  - or: brew install duti && duti -s com.thgossler.mdv net.daringfireball.markdown all"
+  fi
+}
+
+if [ "$os" = "Darwin" ] && [ -d "$tmp/mdv.app" ]; then
+  associate=no
+  if [ -n "$associate_opt" ]; then
+    associate="$associate_opt"
+  elif [ -n "${MDV_ASSOCIATE_MD:-}" ]; then
+    case "$MDV_ASSOCIATE_MD" in 1|y|Y|yes|YES|true|TRUE) associate=yes ;; esac
+  elif [ "$silent" != yes ] && [ -r /dev/tty ]; then
+    printf 'Associate Markdown (.md) files with mdv? [y/N] ' > /dev/tty
+    read -r reply < /dev/tty || reply=""
+    case "$reply" in y|Y|yes|YES) associate=yes ;; esac
+  fi
+  if [ "$associate" = yes ]; then
+    install_macos_app "$tmp/mdv.app"
+  fi
 fi
 
 echo "Try:  mdv --version"

@@ -25,9 +25,15 @@
 
 `mdv` adapts to wherever it runs:
 
-- **GUI** — a native-webview window with full rendering (default on desktops).
-- **TUI** — a rich terminal UI when no graphical environment is available.
-- **Console** — plain rendered output to stdout when piped or non-interactive.
+- **GUI** - a native-webview window with full rendering (default on desktops).
+- **TUI** - a rich terminal UI when no graphical environment is available.
+- **Console** - plain rendered output to stdout when piped or non-interactive.
+
+> Honestly? This might be the missing tool that *should* ship pre-installed on
+> every OS, with `.md` files associated to it out of the box. Or - even better -
+> every OS should just bake this kind of instant markdown preview straight into
+> its native file manager (File Explorer, Finder, Nautilus, you name it). Until
+> that glorious day arrives, there's `mdv`. 😉
 
 It is built so it **always starts**, including inside headless Docker containers
 over SSH: the distributed binary is a pure-Go launcher with **zero webview
@@ -37,7 +43,7 @@ environment is actually present.
 
 ## Install
 
-No package managers needed — the install scripts download a single executable
+No package managers needed - the install scripts download a single executable
 from GitHub Releases.
 
 **macOS / Linux:**
@@ -52,11 +58,23 @@ curl -fsSL https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.
 irm https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.ps1 | iex
 ```
 
-The PowerShell installer is cross-platform — with PowerShell 7+ it also works on
+The PowerShell installer is cross-platform - with PowerShell 7+ it also works on
 macOS and Linux:
 
 ```sh
 pwsh -c "irm https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.ps1 | iex"
+```
+
+Silent install with automatic `.md` file association (for unattended setups
+or chaining from another installer):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.sh | sh -s -- --silent --associate-md-file-extension
+```
+
+```powershell
+$s = irm https://raw.githubusercontent.com/thgossler/mdv/main/scripts/install.ps1
+& ([scriptblock]::Create($s)) -Silent -AssociateMdFileExtension
 ```
 
 Or download a binary directly from the [Releases](https://github.com/thgossler/mdv/releases)
@@ -80,6 +98,20 @@ page:
 Set the `MDV_INSTALL` environment variable to install somewhere else (e.g.
 `MDV_INSTALL=$HOME/bin`), and `MDV_VERSION` to pin a specific release tag.
 
+On Windows and macOS the installer also **asks whether to associate `.md` files
+with mdv** so you can open Markdown by double-clicking. Set
+`MDV_ASSOCIATE_MD=1` to associate without being prompted (or `=no` to skip it
+silently in non-interactive installs). See
+[Open Markdown files from Finder (macOS)](#open-markdown-files-from-finder-macos)
+for how the macOS association works and how to change the default by hand.
+
+For unattended installs (e.g. chaining the script from another installer or
+tool), pass `--silent` (`-Silent` in PowerShell) to suppress all prompts; this
+leaves the file association untouched. Add
+`--associate-md-file-extension` (`-AssociateMdFileExtension` in PowerShell) to
+request the `.md` association even in silent mode (see the
+[silent install example](#install) above).
+
 Both installers make `mdv` usable in the **same shell**, with no restart or
 manual `source` needed:
 
@@ -89,7 +121,7 @@ manual `source` needed:
 - The POSIX installer prefers a directory that is already on your `PATH`, so the
   binary is found right away. If it has to fall back to `~/.local/bin`, it
   updates your profile for future shells and prints the one-line `export` to
-  enable it in the current one (or run it sourced — `. install.sh` — to have the
+  enable it in the current one (or run it sourced - `. install.sh` - to have the
   `PATH` update applied directly to your shell).
 
 ## Usage
@@ -118,8 +150,12 @@ mdv --init-config        # write a default settings.jsonc
 
 macOS Finder's **Open With** only lists application bundles, so the bare `mdv`
 command-line tool can't be selected there. The macOS release archive
-(`mdv-macos-darwin-universal.tar.gz`) therefore also contains **`mdv.app`** — a small
+(`mdv-macos-darwin-universal.tar.gz`) therefore also contains **`mdv.app`** - a small
 wrapper bundle that forwards opened files to `mdv --gui`.
+
+The `install.sh` installer offers to do all of this for you (it copies
+`mdv.app` into `Applications`, registers it, and - if [`duti`](https://github.com/moretension/duti)
+is installed - sets it as the default). To do it manually instead:
 
 1. Extract the archive and drag `mdv.app` into `/Applications`.
 2. Make `mdv` the default for Markdown files, either way:
@@ -137,24 +173,29 @@ in the mdv GUI. The plain `mdv` executable in the same archive remains the way
 to use mdv from the terminal.
 
 The wrapper runs as a background agent, so opening a file shows only the mdv GUI
-icon in the Dock — the wrapper itself never appears there.
+icon in the Dock - the wrapper itself never appears there.
 
 ### Document content search
 
 The document navigator can search inside your documents, not just filter by
 filename:
 
-- **GUI** — click the **⌕** toggle next to the navigator filter box. When
+- **GUI** - click the **⌕** toggle next to the navigator filter box. When
   enabled, each matching document is shown with its matching lines nested
   beneath it; click a match to open the document and jump straight to that line,
   highlighted like in-document search. Toggle it off again to return to plain
   filename/title filtering.
-- **TUI** — in the document list press `/` to filter by name, or type `//` to
-  switch to content search. Matches appear indented under each document; press
-  Enter on a match to open the document and jump to it.
+- **TUI** - press `Tab` (or `Ctrl+B`) to open the document navigator. It lists
+  every markdown file in the folder even when you opened a single file. In the
+  list, press `/` to filter by name, or type `//` to switch to content search.
+  Matches appear indented under each document; press Enter on a match to open the
+  document and jump to it. Press `Esc` (or `Ctrl+B`) to hide the navigator again.
+  You can also start content search straight from the content view: press `/` to
+  search the current page, or type `/` again (`//`) to search across all
+  documents.
 
 Search is case-insensitive and treats your query as a smart **fuzzy phrase**:
-the words must appear in order and close together — but minor differences are
+the words must appear in order and close together - but minor differences are
 tolerated, so "client approvals" also matches "Client-side Approvals". It also
 forgives small typos (edit-distance matching) and matches a query word inside a
 longer word ("approval" finds "approvals"). Content search even spans a single
@@ -231,7 +272,7 @@ produces `build/mdv.app` (the Finder wrapper described under
 ### Architecture
 
 ```
-cmd/mdv             pure-Go launcher (no webview linkage) — picks GUI/TUI/console
+cmd/mdv             pure-Go launcher (no webview linkage) - picks GUI/TUI/console
 internal/core       shared logic: config, links, slugs, backlinks, updates
 internal/console    glamour-based stdout rendering
 internal/tui        Bubble Tea terminal UI
@@ -265,19 +306,19 @@ from the Command Palette.
 
 ## Contributing
 
-Pull requests are warmly welcome — whether it's a one-character typo fix or a
+Pull requests are warmly welcome - whether it's a one-character typo fix or a
 whole new rendering feature. `mdv` is a small codebase on purpose, so it's an
 approachable place to make your first open-source contribution. 🌱
 
 **The quick path:**
 
 1. **Fork** the repo and create a branch: `git checkout -b feature/amazing-thing`.
-2. **Hack** away. Keep the launcher webview-free — that headless-safety guarantee
+2. **Hack** away. Keep the launcher webview-free - that headless-safety guarantee
    is the whole point of the project, so anything touching native UI belongs in
    `gui/`, never in `cmd/mdv` or `internal/launcher`.
 3. **Test** your change: `go test ./...` must stay green, and please add a test
    for anything you fix or add. The CI quality gate runs `go vet`, `gofmt`, the
-   race detector, and the full suite — running them locally first saves a round
+   race detector, and the full suite - running them locally first saves a round
    trip.
 4. **Format**: `gofmt -w .` for Go and `npx tsc --noEmit` in `gui/frontend` for
    the TypeScript side.
@@ -300,16 +341,16 @@ welcoming, harassment-free environment for everyone.
 (and a non-trivial amount of coffee ☕). If it saves you a few clicks every day,
 consider giving a little back:
 
-- ⭐ **Star the repo** — it's free, it takes two seconds, and it genuinely helps
+- ⭐ **Star the repo** - it's free, it takes two seconds, and it genuinely helps
   others discover the project.
-- 💬 **Spread the word** — blog about it, tell a colleague, or drop it in your
+- 💬 **Spread the word** - blog about it, tell a colleague, or drop it in your
   team's tooling channel.
-- 🐛 **Report bugs and ideas** — high-signal issues are worth their weight in gold.
+- 🐛 **Report bugs and ideas** - high-signal issues are worth their weight in gold.
 - 💖 **Back it financially** via 
   - [GitHub Sponsors](https://github.com/sponsors/thgossler) or 
   - [PayPal](https://www.paypal.com/donate/?hosted_button_id=JVG7PFJ8DMW7J).
   
-  — every tier, down to "buy the maintainer a coffee," keeps the lights on and
+  - every tier, down to "buy the maintainer a coffee," keeps the lights on and
   the commits coming.
 
 Sponsorships directly fund maintenance time, code-signing certificates, and the
@@ -318,7 +359,7 @@ alive. 🙏
 
 ## License
 
-Released under the [MIT License](LICENSE.md) — do what you like, just keep the
+Released under the [MIT License](LICENSE.md) - do what you like, just keep the
 copyright notice. 
 
 Copyright © 2026 Thomas Gossler

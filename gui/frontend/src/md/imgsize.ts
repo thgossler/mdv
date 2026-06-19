@@ -2,9 +2,9 @@ import type MarkdownIt from "markdown-it";
 
 // imgsizePlugin adds Azure DevOps-style explicit image sizing:
 //
-//   ![alt](url =800x600)   — explicit width and height
-//   ![alt](url =800x)      — explicit width only
-//   ![alt](url =x600)      — explicit height only
+//   ![alt](url =800x600)   - explicit width and height
+//   ![alt](url =800x)      - explicit width only
+//   ![alt](url =x600)      - explicit height only
 //
 // The spec is stripped from the src and converted into HTML width/height
 // attributes so the browser renders the image at the intended size at 100% zoom.

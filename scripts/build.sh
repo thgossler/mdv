@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# build.sh — produce a self-contained `mdv` executable for the host platform.
+# build.sh - produce a self-contained `mdv` executable for the host platform.
 #
 # Pipeline:
 #   1. Build the Wails GUI frontend (TypeScript -> static assets).

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# bump-version.sh — bump the project's SemVer version.
+# bump-version.sh - bump the project's SemVer version.
 #
 # The canonical version lives in the repository-root VERSION file (e.g. 0.9.1).
 # This script increments one component and resets the lower-level ones to 0,

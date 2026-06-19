@@ -1,6 +1,6 @@
 // Package core contains the shared, pure-Go engine used by every run mode
 // (console, TUI and GUI). It has no GUI/webview dependencies so the launcher
-// binary that imports it always starts — even in a headless container.
+// binary that imports it always starts - even in a headless container.
 package core
 
 // AppName is the user-facing product name.

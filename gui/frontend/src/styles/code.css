@@ -1,4 +1,4 @@
-/* code.css — fenced code block chrome and highlight.js token colours.
+/* code.css - fenced code block chrome and highlight.js token colours.
    Token colours are driven by CSS variables so the active palette can switch
    with the chosen code theme (config `codeTheme`) and light/dark mode. */
 

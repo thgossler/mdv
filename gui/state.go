@@ -69,7 +69,7 @@ func LoadLayoutState() LayoutState {
 // layoutStateHeader is prepended to the persisted file so it reads as JSONC,
 // consistent with settings.jsonc. Go's encoding/json cannot emit comments, so
 // the body itself is plain (valid) JSON.
-const layoutStateHeader = "// mdv window & panel layout — managed automatically, safe to delete.\n"
+const layoutStateHeader = "// mdv window & panel layout - managed automatically, safe to delete.\n"
 
 func writeLayoutState(st LayoutState) {
 	path, err := layoutStatePath()

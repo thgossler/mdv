@@ -40,7 +40,7 @@ func TestDetectModeNonInteractiveDefaultsToConsole(t *testing.T) {
 func TestDetectModeForceGUINonInteractive(t *testing.T) {
 	// Under `go test` stdout is not a TTY. A forced GUI must therefore resolve
 	// to either ModeGUI (when a GUI environment is available) or, when it is
-	// not, degrade straight to ModeConsole — never ModeTUI, since the TUI
+	// not, degrade straight to ModeConsole - never ModeTUI, since the TUI
 	// fallback requires an interactive stdout.
 	got := DetectMode(Preference{ForceGUI: true})
 	if got != ModeGUI && got != ModeConsole {

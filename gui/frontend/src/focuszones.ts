@@ -43,7 +43,7 @@ export function initFocusZones(refs: FocusZonesRefs): void {
     { kind: "content", el: refs.contentWrap },
     { kind: "list", el: refs.tocList, itemSelector: ".toc-item", activateOnMove: true },
     // Backlinks navigate to other documents (which rebuilds this very list), so
-    // moving the selection must not auto-activate — only Enter/Space opens one.
+    // moving the selection must not auto-activate - only Enter/Space opens one.
     { kind: "list", el: refs.backlinksList, itemSelector: ".backlink-item", activateOnMove: false },
   ];
 

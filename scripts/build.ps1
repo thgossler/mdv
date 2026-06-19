@@ -1,4 +1,4 @@
-# build.ps1 — produce a self-contained mdv.exe for Windows (x64).
+# build.ps1 - produce a self-contained mdv.exe for Windows (x64).
 #
 # Mirrors scripts/build.sh: builds the Wails GUI frontend, compiles the GUI
 # helper, gzips it into the launcher assets, then builds the launcher with the

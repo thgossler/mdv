@@ -1,5 +1,5 @@
-// Package launcher decides how mdv should present a document — GUI, TUI or
-// plain console — and (later) extracts and spawns the embedded GUI helper.
+// Package launcher decides how mdv should present a document - GUI, TUI or
+// plain console - and (later) extracts and spawns the embedded GUI helper.
 //
 // All detection here is pure Go with no webview linkage, so importing this
 // package never adds a native library dependency. That is what allows the

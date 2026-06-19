@@ -5,11 +5,11 @@
 //
 // The package is split across files:
 //
-//   - termimg.go  — capability detection and the public Protocol type
-//   - load.go     — decoding image bytes (PNG/JPEG/GIF/WebP/SVG) from files,
+//   - termimg.go  - capability detection and the public Protocol type
+//   - load.go     - decoding image bytes (PNG/JPEG/GIF/WebP/SVG) from files,
 //     data: URIs, and remote URLs
-//   - encode.go   — encoding a decoded image for a given protocol
-//   - markdown.go — replacing standalone markdown images with rendered output
+//   - encode.go   - encoding a decoded image for a given protocol
+//   - markdown.go - replacing standalone markdown images with rendered output
 package termimg
 
 import (
