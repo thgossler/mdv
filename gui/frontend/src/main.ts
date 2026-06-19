@@ -14,6 +14,7 @@ import { initZoom, zoomIn, zoomOut, zoomReset, refreshZoom } from "./zoom";
 import { initSearch, showSearch, clearSearch, jumpToContentMatch } from "./search";
 import { buildTOC, trackActiveHeading } from "./toc";
 import { initFocusZones } from "./focuszones";
+import { fuzzyPhraseMatch } from "./fuzzy";
 
 // --- application state ------------------------------------------------------
 
@@ -614,11 +615,12 @@ function cancelSearchRender(): void {
   }
 }
 
-// nameQualifies reports whether a document's name/title contains every keyword.
+// nameQualifies reports whether a document's name/title matches the current
+// content-search query as a fuzzy phrase, mirroring the content-search rules.
 function nameQualifies(d: DocFileDTO): boolean {
-  if (searchKeywords.length === 0) return false;
-  const hay = `${d.name} ${d.title || ""}`.toLowerCase();
-  return searchKeywords.every((k) => hay.includes(k));
+  const q = els.navFilter.value.trim();
+  if (!q) return false;
+  return fuzzyPhraseMatch(`${d.name} ${d.title || ""}`, q);
 }
 
 // renderSearchNav renders the content-search view: documents that have content
@@ -1081,10 +1083,10 @@ function toggleContentWidth(): void {
 
 function currentFilter(): DocFileDTO[] {
   const base = visibleWorkspace();
-  const q = els.navFilter.value.toLowerCase();
+  const q = els.navFilter.value.trim();
   if (!q) return base;
   return base.filter(
-    (d) => d.name.toLowerCase().includes(q) || (d.title || "").toLowerCase().includes(q)
+    (d) => fuzzyPhraseMatch(d.name, q) || fuzzyPhraseMatch(d.title || "", q)
   );
 }
 

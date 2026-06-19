@@ -106,8 +106,8 @@ export function SaveLayout(sidebarWidth: number, tocWidth: number): $Cancellable
 }
 
 /**
- * SearchContent runs a streaming, case-insensitive AND-per-document content
- * search over the workspace markdown files. Results are delivered to the
+ * SearchContent runs a streaming, case-insensitive fuzzy-phrase content search
+ * over the workspace markdown files. Results are delivered to the
  * frontend as "content-search:result" events (one per matching document) and a
  * final "content-search:done" event. Each call cancels any in-flight search.
  * The caller passes a generation number that is echoed back in every event so

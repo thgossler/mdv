@@ -47,6 +47,7 @@ func OpenInOS(target string) error {
 // document in a new window (a separate mdv instance).
 func SpawnDetached(exe string, args ...string) error {
 	cmd := exec.Command(exe, args...)
+	applyDetachedAttrs(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("spawning %q: %w", exe, err)
 	}

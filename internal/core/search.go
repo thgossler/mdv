@@ -4,10 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
-	"os/exec"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 // ContentMatch is a single matching line within a document. Line is 1-based and
@@ -33,38 +32,46 @@ const maxMatchesPerDoc = 200
 // lines are trimmed around the first keyword occurrence with ellipses.
 const matchContextChars = 120
 
-// DetectRipgrep returns the path to the ripgrep executable ("rg") if it is on
-// the system PATH, or an empty string when it is not installed. Content search
-// uses ripgrep when available for speed and falls back to an in-memory scan.
-func DetectRipgrep() string {
-	path, err := exec.LookPath("rg")
-	if err != nil {
-		return ""
-	}
-	return path
-}
+// maxPhraseGap is how many non-matching word tokens may sit between two
+// consecutive query words and still count as part of the same phrase. It lets a
+// query like "client approvals" match "Client-side Approvals" (one filler token,
+// "side", between the two matched words).
+const maxPhraseGap = 2
 
-// SearchDocuments searches the given documents for all of the space-separated
-// keywords in query, case-insensitively, combining keywords with logical AND
-// per document: a document qualifies only if every keyword appears somewhere in
-// it, and then every line containing any keyword is reported as a match.
+// maxLineSpan is how many lines apart two consecutive matched query words may be
+// and still count as the same phrase. A value of 1 lets a phrase span a single
+// line break — the common case when markdown source is hard-wrapped at ~80
+// columns — while still rejecting words separated by a blank line (a paragraph
+// boundary), which would be two lines apart.
+const maxLineSpan = 1
+
+// SearchDocuments searches the given documents for query as a smart, fuzzy
+// phrase: the query's words must appear in order and close together (allowing a
+// few intervening words and minor spelling differences), rather than each word
+// matching independently anywhere in the document. The phrase may span a single
+// line break, so a term hard-wrapped across two lines still matches. For example
+// "client approvals" matches "Client-side Approvals". Matching is
+// case-insensitive and operates on whole word tokens, so a query word matches a
+// longer token it is contained in (e.g. "approval" matches "approvals") or one
+// within a small edit distance (typo tolerance).
+//
+// A document qualifies when at least one phrase match is found, and the line on
+// which each match begins is reported.
 //
 // Results are delivered incrementally through emit, one call per qualifying
 // document, so callers can stream them into a UI as they are found. emit may be
 // invoked from multiple goroutines; SearchDocuments serializes those calls so
 // the callback itself need not be safe for concurrent use.
 //
-// When rgPath is non-empty it is used as the ripgrep executable for a fast
-// external scan; otherwise an in-memory scan is performed. The search honors
-// ctx cancellation. A blank query emits nothing.
-func SearchDocuments(ctx context.Context, files []DocFile, query, rgPath string, emit func(DocSearchResult)) {
-	keywords := splitKeywords(query)
-	if len(keywords) == 0 || len(files) == 0 {
+// The search is performed entirely in memory and honors ctx cancellation. A
+// blank query emits nothing.
+func SearchDocuments(ctx context.Context, files []DocFile, query string, emit func(DocSearchResult)) {
+	words := queryWords(query)
+	if len(words) == 0 || len(files) == 0 {
 		return
 	}
 
-	// Serialize emit so the callback never runs concurrently regardless of the
-	// scanning strategy.
+	// Serialize emit so the callback never runs concurrently.
 	var emitMu sync.Mutex
 	safeEmit := func(r DocSearchResult) {
 		emitMu.Lock()
@@ -72,75 +79,293 @@ func SearchDocuments(ctx context.Context, files []DocFile, query, rgPath string,
 		emitMu.Unlock()
 	}
 
-	if rgPath != "" {
-		if ok := searchWithRipgrep(ctx, files, keywords, rgPath, safeEmit); ok {
-			return
-		}
-		// ripgrep failed to start or errored; fall back to the in-memory scan.
-	}
-	searchInMemory(ctx, files, keywords, safeEmit)
+	searchInMemory(ctx, files, words, safeEmit)
 }
 
-// splitKeywords lowercases query and splits it into distinct, non-empty
-// keywords on whitespace.
-func splitKeywords(query string) []string {
-	fields := strings.Fields(strings.ToLower(query))
-	if len(fields) == 0 {
+// queryWords lowercases query and splits it into its ordered word tokens,
+// preserving duplicates so the phrase is matched faithfully. A word token is a
+// maximal run of letters and digits.
+func queryWords(query string) []string {
+	toks := tokenize(query)
+	if len(toks) == 0 {
 		return nil
 	}
-	seen := make(map[string]bool, len(fields))
-	out := make([]string, 0, len(fields))
-	for _, f := range fields {
-		if !seen[f] {
-			seen[f] = true
-			out = append(out, f)
-		}
+	out := make([]string, len(toks))
+	for i, t := range toks {
+		out[i] = t.text
 	}
 	return out
 }
 
-// scanLines applies the per-document AND logic to a document's raw bytes: it
-// returns the matching lines (any keyword) and whether every keyword was found
-// somewhere in the document. Returns ok=false if no result should be emitted.
-func scanLines(content []byte, keywords []string) (matches []ContentMatch, ok bool) {
-	seen := make([]bool, len(keywords))
-	remaining := len(keywords)
+// FuzzyMatch reports whether query matches haystack as a smart fuzzy phrase,
+// using the same matching rules as the document content search: the query's
+// words must appear in order and close together within haystack, tolerating a
+// few intervening words, minor spelling differences and a query word contained
+// in a longer one. A blank query matches anything. This powers the navigator's
+// filename/title filtering so it behaves consistently with content search.
+func FuzzyMatch(haystack, query string) bool {
+	words := queryWords(query)
+	if len(words) == 0 {
+		return true
+	}
+	_, ok := matchPhrase(tokenize(haystack), words)
+	return ok
+}
 
+// token is a single word occurrence within a string: its lowercased text and
+// the byte offset where it begins in the original string.
+type token struct {
+	text  string
+	start int
+}
+
+// isWordRune reports whether r is part of a word token (letters and digits).
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+// tokenize splits s into lowercase word tokens with their byte offsets. Tokens
+// are maximal runs of letters and digits; every other rune is a separator, so
+// "Client-side" yields the two tokens "client" and "side".
+func tokenize(s string) []token {
+	var toks []token
+	start := -1
+	for i, r := range s {
+		if isWordRune(r) {
+			if start < 0 {
+				start = i
+			}
+			continue
+		}
+		if start >= 0 {
+			toks = append(toks, token{text: strings.ToLower(s[start:i]), start: start})
+			start = -1
+		}
+	}
+	if start >= 0 {
+		toks = append(toks, token{text: strings.ToLower(s[start:]), start: start})
+	}
+	return toks
+}
+
+// lineToken is a word token tagged with the 0-based index of the line it occurs
+// on, so a phrase match can be allowed to span a line break while still knowing
+// where (and on which line) it begins.
+type lineToken struct {
+	text  string
+	start int // byte offset within its line
+	line  int
+}
+
+// splitLines splits a document's raw bytes into its individual lines (without
+// trailing newlines), preserving the original text for excerpting.
+func splitLines(content []byte) []string {
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	// Allow long lines (default bufio limit is 64 KiB).
 	scanner.Buffer(make([]byte, 0, 64*1024), MaxFileBytes)
-
-	lineNo := 0
+	var lines []string
 	for scanner.Scan() {
-		lineNo++
-		line := scanner.Text()
-		lower := strings.ToLower(line)
+		lines = append(lines, scanner.Text())
+	}
+	return lines
+}
 
-		firstCol := -1
-		any := false
-		for ki, kw := range keywords {
-			idx := strings.Index(lower, kw)
-			if idx < 0 {
-				continue
-			}
-			any = true
-			if firstCol < 0 || idx < firstCol {
-				firstCol = idx
-			}
-			if !seen[ki] {
-				seen[ki] = true
-				remaining--
-			}
-		}
-		if any && len(matches) < maxMatchesPerDoc {
-			text, col := excerpt(line, firstCol)
-			matches = append(matches, ContentMatch{Line: lineNo, Col: col, Text: text})
+// streamTokens flattens the document's lines into a single ordered token stream,
+// tagging each token with its line index so phrase matching can cross line
+// breaks.
+func streamTokens(lines []string) []lineToken {
+	var toks []lineToken
+	for li, line := range lines {
+		for _, t := range tokenize(line) {
+			toks = append(toks, lineToken{text: t.text, start: t.start, line: li})
 		}
 	}
-	if remaining > 0 {
+	return toks
+}
+
+// scanLines applies the fuzzy-phrase logic to a document's raw bytes. The phrase
+// may span a line break (up to maxLineSpan lines between consecutive matched
+// words), which catches multi-word terms hard-wrapped across two source lines.
+// It reports the starting line of each match (at most one per starting line) and
+// whether any match was found.
+func scanLines(content []byte, words []string) (matches []ContentMatch, ok bool) {
+	lines := splitLines(content)
+	toks := streamTokens(lines)
+
+	seenLine := make(map[int]bool)
+	for s := 0; s < len(toks); s++ {
+		if seenLine[toks[s].line] {
+			continue
+		}
+		if !wordMatch(words[0], toks[s].text) {
+			continue
+		}
+		if !alignPhrase(toks, s, words) {
+			continue
+		}
+		li := toks[s].line
+		seenLine[li] = true
+		text, c := excerpt(lines[li], toks[s].start)
+		matches = append(matches, ContentMatch{Line: li + 1, Col: c, Text: text})
+		if len(matches) >= maxMatchesPerDoc {
+			break
+		}
+	}
+	if len(matches) == 0 {
 		return nil, false
 	}
 	return matches, true
+}
+
+// alignPhrase reports whether the ordered query words match the token stream
+// starting with words[0] anchored at toks[s]. Each subsequent word must
+// fuzzy-match a later token within maxPhraseGap non-matching tokens and within
+// maxLineSpan lines of the previously matched word, so a phrase can cross one
+// line break but not a blank-line paragraph boundary.
+func alignPhrase(toks []lineToken, s int, words []string) bool {
+	ti := s + 1
+	prevLine := toks[s].line
+	for qi := 1; qi < len(words); qi++ {
+		found := false
+		for gap := 0; ti < len(toks) && gap <= maxPhraseGap; gap++ {
+			cand := toks[ti]
+			if cand.line-prevLine > maxLineSpan {
+				return false // next word is too far down; the phrase is broken
+			}
+			if wordMatch(words[qi], cand.text) {
+				prevLine = cand.line
+				ti++
+				found = true
+				break
+			}
+			ti++
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// matchPhrase reports whether the ordered query words appear as a fuzzy phrase
+// within the line's tokens. Each query word must fuzzy-match a token, the
+// matched tokens must occur in order, and at most maxPhraseGap non-matching
+// tokens may separate two consecutive matches. It returns the byte offset of the
+// first matched token (for excerpting) and whether a match was found.
+func matchPhrase(tokens []token, words []string) (col int, ok bool) {
+	if len(words) == 0 || len(tokens) == 0 {
+		return 0, false
+	}
+	n := len(tokens)
+	for s := 0; s < n; s++ {
+		if !wordMatch(words[0], tokens[s].text) {
+			continue
+		}
+		// words[0] anchored at s; align the rest allowing small gaps.
+		ti := s + 1
+		matched := true
+		for qi := 1; qi < len(words); qi++ {
+			found := false
+			for gap := 0; ti < n && gap <= maxPhraseGap; gap++ {
+				if wordMatch(words[qi], tokens[ti].text) {
+					ti++
+					found = true
+					break
+				}
+				ti++
+			}
+			if !found {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return tokens[s].start, true
+		}
+	}
+	return 0, false
+}
+
+// wordMatch reports whether query word q matches token t: as a substring
+// (covering exact, prefix and infix matches such as "approval" in "approvals")
+// or within a small Levenshtein edit distance for typo tolerance. The edit
+// distance budget grows with q's length, and very short words must match as a
+// substring to avoid spurious fuzzy hits.
+func wordMatch(q, t string) bool {
+	if q == "" {
+		return false
+	}
+	if strings.Contains(t, q) {
+		return true
+	}
+	qr := []rune(q)
+	d := maxEditDist(len(qr))
+	if d == 0 {
+		return false
+	}
+	tr := []rune(t)
+	if abs(len(qr)-len(tr)) > d {
+		return false
+	}
+	return levenshtein(qr, tr) <= d
+}
+
+// maxEditDist returns the Levenshtein budget for a query word of n runes.
+func maxEditDist(n int) int {
+	switch {
+	case n >= 8:
+		return 2
+	case n >= 5:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// levenshtein computes the edit distance between two rune slices.
+func levenshtein(a, b []rune) int {
+	la, lb := len(a), len(b)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+	for j := 0; j <= lb; j++ {
+		prev[j] = j
+	}
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			curr[j] = min3(prev[j]+1, curr[j-1]+1, prev[j-1]+cost)
+		}
+		prev, curr = curr, prev
+	}
+	return prev[lb]
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func min3(a, b, c int) int {
+	m := a
+	if b < m {
+		m = b
+	}
+	if c < m {
+		m = c
+	}
+	return m
 }
 
 // excerpt trims a long line to matchContextChars characters, keeping a window
@@ -206,8 +431,8 @@ func clamp(v, lo, hi int) int {
 }
 
 // searchInMemory scans each document's bytes concurrently and emits a result
-// for every document that contains all keywords.
-func searchInMemory(ctx context.Context, files []DocFile, keywords []string, emit func(DocSearchResult)) {
+// for every document with at least one line matching the query phrase.
+func searchInMemory(ctx context.Context, files []DocFile, words []string, emit func(DocSearchResult)) {
 	const workers = 8
 	jobs := make(chan DocFile)
 
@@ -224,7 +449,7 @@ func searchInMemory(ctx context.Context, files []DocFile, keywords []string, emi
 				if err != nil {
 					continue // skip oversized/unreadable files
 				}
-				if matches, ok := scanLines(content, keywords); ok {
+				if matches, ok := scanLines(content, words); ok {
 					emit(DocSearchResult{Path: f.Path, Matches: matches})
 				}
 			}
@@ -245,144 +470,4 @@ func searchInMemory(ctx context.Context, files []DocFile, keywords []string, emi
 	}
 	close(jobs)
 	wg.Wait()
-}
-
-// rgMessage is the subset of ripgrep's JSON output (--json) that we consume.
-type rgMessage struct {
-	Type string `json:"type"`
-	Data struct {
-		Path struct {
-			Text string `json:"text"`
-		} `json:"path"`
-		LineNumber int `json:"line_number"`
-		Lines      struct {
-			Text string `json:"text"`
-		} `json:"lines"`
-		Submatches []struct {
-			Start int `json:"start"`
-		} `json:"submatches"`
-	} `json:"data"`
-}
-
-// searchWithRipgrep runs ripgrep over the given files and emits one result per
-// document that contains all keywords. It returns false if ripgrep could not be
-// started or failed in a way that warrants the in-memory fallback.
-func searchWithRipgrep(ctx context.Context, files []DocFile, keywords []string, rgPath string, emit func(DocSearchResult)) (ok bool) {
-	if len(files) == 0 {
-		return true
-	}
-
-	// Index files by path so ripgrep results can be grouped and limited to the
-	// documents shown in the navigator.
-	known := make(map[string]bool, len(files))
-	for _, f := range files {
-		known[f.Path] = true
-	}
-
-	// Multiple --regexp patterns are OR-ed by ripgrep, so each output line
-	// contains at least one keyword; the per-document AND is enforced below by
-	// tracking which keywords were seen before flushing a file's matches.
-	args := []string{"--json", "--ignore-case", "--no-config"}
-	for _, kw := range keywords {
-		args = append(args, "--regexp", regexpEscape(kw))
-	}
-	args = append(args, "--")
-	for _, f := range files {
-		args = append(args, f.Path)
-	}
-
-	cmd := exec.CommandContext(ctx, rgPath, args...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return false
-	}
-	if err := cmd.Start(); err != nil {
-		return false
-	}
-
-	// Accumulate matches per document. ripgrep groups output by file (begin/
-	// match.../end), so we flush when a file's "end" message arrives.
-	type acc struct {
-		matches   []ContentMatch
-		seen      []bool
-		remaining int
-	}
-	current := map[string]*acc{}
-	getAcc := func(path string) *acc {
-		a := current[path]
-		if a == nil {
-			a = &acc{seen: make([]bool, len(keywords)), remaining: len(keywords)}
-			current[path] = a
-		}
-		return a
-	}
-
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	for scanner.Scan() {
-		if ctx.Err() != nil {
-			break
-		}
-		var msg rgMessage
-		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
-			continue
-		}
-		path := msg.Data.Path.Text
-		if path != "" && !known[path] {
-			continue
-		}
-		switch msg.Type {
-		case "match":
-			a := getAcc(path)
-			line := strings.TrimRight(msg.Data.Lines.Text, "\r\n")
-			lower := strings.ToLower(line)
-			firstCol := -1
-			for ki, kw := range keywords {
-				idx := strings.Index(lower, kw)
-				if idx < 0 {
-					continue
-				}
-				if firstCol < 0 || idx < firstCol {
-					firstCol = idx
-				}
-				if !a.seen[ki] {
-					a.seen[ki] = true
-					a.remaining--
-				}
-			}
-			if firstCol < 0 {
-				firstCol = 0
-			}
-			if len(a.matches) < maxMatchesPerDoc {
-				text, col := excerpt(line, firstCol)
-				a.matches = append(a.matches, ContentMatch{Line: msg.Data.LineNumber, Col: col, Text: text})
-			}
-		case "end":
-			a := current[path]
-			delete(current, path)
-			if a != nil && a.remaining == 0 {
-				emit(DocSearchResult{Path: path, Matches: a.matches})
-			}
-		}
-	}
-
-	// Drain the command. ripgrep exits 1 when there are no matches, which is not
-	// an error for our purposes.
-	_ = cmd.Wait()
-	return true
-}
-
-// regexpEscape escapes regex metacharacters so a keyword is matched literally by
-// ripgrep.
-func regexpEscape(s string) string {
-	const special = `\.+*?()|[]{}^$`
-	var b strings.Builder
-	b.Grow(len(s) * 2)
-	for _, r := range s {
-		if strings.ContainsRune(special, r) {
-			b.WriteByte('\\')
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
 }

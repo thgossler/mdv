@@ -31,6 +31,12 @@ GOOS="$(go env GOOS)"
 GOARCH="$(go env GOARCH)"
 HELPER_EXT=""
 [ "$GOOS" = "windows" ] && HELPER_EXT=".exe"
+# On Windows, mark both executables as GUI-subsystem binaries so no console
+# window is created when a .md file is double-clicked in Explorer. The launcher
+# reattaches to the parent console at startup for terminal use (see
+# internal/console/console_windows.go).
+WINGUI_LDFLAGS=""
+[ "$GOOS" = "windows" ] && WINGUI_LDFLAGS=" -H windowsgui"
 
 # macos_sign code-signs a Mach-O file with the Developer ID identity in
 # MDV_MACOS_SIGN_IDENTITY (a no-op when that variable is unset, e.g. local dev
@@ -87,7 +93,7 @@ build_macos_universal() {
 if [ "$GOOS" = "darwin" ]; then
   build_macos_universal "build/mdv-gui"
 else
-  go build -tags production -ldflags "$LDFLAGS" -o "build/mdv-gui${HELPER_EXT}" ./gui
+  go build -tags production -ldflags "$LDFLAGS$WINGUI_LDFLAGS" -o "build/mdv-gui${HELPER_EXT}" ./gui
 fi
 macos_sign "build/mdv-gui${HELPER_EXT}"
 
@@ -102,7 +108,7 @@ if [ "$GOOS" = "darwin" ]; then
   lipo -create -output "build/mdv" build/mdv-arm64 build/mdv-amd64
   rm -f build/mdv-arm64 build/mdv-amd64
 else
-  go build -tags gui_bundled -ldflags "$LDFLAGS" -o "build/mdv${HELPER_EXT}" ./cmd/mdv
+  go build -tags gui_bundled -ldflags "$LDFLAGS$WINGUI_LDFLAGS" -o "build/mdv${HELPER_EXT}" ./cmd/mdv
 fi
 macos_sign "build/mdv${HELPER_EXT}"
 

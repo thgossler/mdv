@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"sync"
 	"unicode"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -415,7 +414,11 @@ func (m *Model) handleListFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.list, cmd = m.list.Update(msg)
 		return *m, cmd
 	default:
-		if msg.Type == tea.KeyRunes {
+		// Accept typed text, including spaces for multi-word queries. Bubble Tea
+		// reports a single space as KeySpace (with the space in Runes) rather than
+		// KeyRunes, so both types are handled; control characters are dropped to
+		// keep stray terminal responses out of the input.
+		if msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace {
 			for _, r := range msg.Runes {
 				if unicode.IsControl(r) {
 					continue
@@ -485,10 +488,11 @@ func (m *Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return *m, nil
 	default:
-		// Only accept real typed text. Guarding on KeyRunes (and dropping any
-		// control characters) prevents stray terminal responses — such as the
-		// OSC background-colour reply — from leaking into the query.
-		if msg.Type == tea.KeyRunes {
+		// Only accept real typed text. Guarding on KeyRunes/KeySpace (and dropping
+		// any control characters) prevents stray terminal responses — such as the
+		// OSC background-colour reply — from leaking into the query, while still
+		// allowing spaces (reported as KeySpace) in multi-word searches.
+		if msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace {
 			for _, r := range msg.Runes {
 				if unicode.IsControl(r) {
 					continue
@@ -516,20 +520,8 @@ func (m *Model) exitSearch() {
 
 // --- document-navigator filter / content search ----------------------------
 
-// rgOnce caches ripgrep detection so the content search does not probe the PATH
-// on every keystroke.
-var (
-	rgOnce sync.Once
-	rgExe  string
-)
-
-func detectRipgrep() string {
-	rgOnce.Do(func() { rgExe = core.DetectRipgrep() })
-	return rgExe
-}
-
 // splitKeywords lowercases and splits the query into distinct space-separated
-// keywords, mirroring the content-search engine's AND-per-document semantics.
+// keywords, used for highlighting matched words and name/title qualification.
 func splitKeywords(query string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -552,10 +544,10 @@ func (m *Model) rebuildNavList() {
 		return
 	}
 	// Filename / title filter.
-	q := strings.ToLower(strings.TrimSpace(input))
+	q := strings.TrimSpace(input)
 	var items []list.Item
 	for _, d := range m.workspace {
-		if q == "" || strings.Contains(strings.ToLower(d.Name), q) || strings.Contains(strings.ToLower(d.Title), q) {
+		if q == "" || core.FuzzyMatch(d.Name, q) || core.FuzzyMatch(d.Title, q) {
 			items = append(items, navItem{kind: navDoc, doc: d, labelMode: m.labelMode})
 		}
 	}
@@ -585,14 +577,14 @@ func (m *Model) rebuildContentList(query string) {
 	}
 
 	results := map[string][]core.ContentMatch{}
-	core.SearchDocuments(context.Background(), m.workspace, query, detectRipgrep(), func(r core.DocSearchResult) {
+	core.SearchDocuments(context.Background(), m.workspace, query, func(r core.DocSearchResult) {
 		results[r.Path] = r.Matches
 	})
 
 	var items []list.Item
 	for _, d := range m.workspace {
 		matches, has := results[d.Path]
-		qualifies := (has && len(matches) > 0) || nameQualifies(d, keywords)
+		qualifies := (has && len(matches) > 0) || nameQualifies(d, query)
 		if !qualifies {
 			continue
 		}
@@ -613,18 +605,10 @@ func (m *Model) rebuildContentList(query string) {
 	}
 }
 
-// nameQualifies reports whether a document's name/title contains every keyword.
-func nameQualifies(d core.DocFile, keywords []string) bool {
-	if len(keywords) == 0 {
-		return false
-	}
-	hay := strings.ToLower(d.Name + " " + d.Title)
-	for _, k := range keywords {
-		if !strings.Contains(hay, k) {
-			return false
-		}
-	}
-	return true
+// nameQualifies reports whether a document's name or title matches the query as
+// a fuzzy phrase, mirroring the content-search matching rules.
+func nameQualifies(d core.DocFile, query string) bool {
+	return core.FuzzyMatch(d.Name+" "+d.Title, query)
 }
 
 // exitListFilter cancels the navigator filter and restores the full document

@@ -273,8 +273,9 @@ func usage() {
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")
 	fmt.Fprintf(w, "or console output, so it is safe to run over SSH in headless containers.\n\n")
-	fmt.Fprintf(w, "Tip: install ripgrep (rg) for fast document content search; when it is not\n")
-	fmt.Fprintf(w, "found, mdv falls back to a built-in search. In the GUI, toggle content search\n")
-	fmt.Fprintf(w, "with the ⌕ button next to the navigator filter; in the TUI, type \"//\" in the\n")
-	fmt.Fprintf(w, "document list to search content (\"/\" filters by name).\n")
+	fmt.Fprintf(w, "Tip: the navigator's filename filter and document content search both match\n")
+	fmt.Fprintf(w, "your query as a smart fuzzy phrase, so \"client approvals\" also finds\n")
+	fmt.Fprintf(w, "\"Client-side Approvals\" (even when wrapped across two lines). In the GUI,\n")
+	fmt.Fprintf(w, "toggle content search with the ⌕ button next to the navigator filter; in the\n")
+	fmt.Fprintf(w, "TUI, type \"//\" in the document list to search content (\"/\" filters by name).\n")
 }

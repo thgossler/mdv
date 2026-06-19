@@ -31,12 +31,7 @@ type Bridge struct {
 	// frontend. It is wired in main.go after the app is created.
 	emit func(name string, data any)
 
-	// rgPath is the resolved ripgrep executable path, or "" when ripgrep is not
-	// installed. It is detected in the background after startup; reads/writes are
-	// guarded by searchMu.
-	rgPath string
-
-	// searchMu guards rgPath, searchGen and searchCancel.
+	// searchMu guards searchGen and searchCancel.
 	searchMu     sync.Mutex
 	searchGen    uint64
 	searchCancel context.CancelFunc
@@ -378,15 +373,6 @@ func (b *Bridge) checkUpdate() UpdateDTO {
 	return UpdateDTO{Available: info.Available, Latest: info.Latest, DownloadURL: info.DownloadURL}
 }
 
-// detectRipgrep resolves the ripgrep path in the background and stores it for
-// later content searches. Called once shortly after startup.
-func (b *Bridge) detectRipgrep() {
-	path := core.DetectRipgrep()
-	b.searchMu.Lock()
-	b.rgPath = path
-	b.searchMu.Unlock()
-}
-
 // ContentSearchResultEvent is the payload streamed to the frontend for each
 // document that matches a content search.
 type ContentSearchResultEvent struct {
@@ -400,8 +386,8 @@ type ContentSearchDoneEvent struct {
 	Count int    `json:"count"`
 }
 
-// SearchContent runs a streaming, case-insensitive AND-per-document content
-// search over the workspace markdown files. Results are delivered to the
+// SearchContent runs a streaming, case-insensitive fuzzy-phrase content search
+// over the workspace markdown files. Results are delivered to the
 // frontend as "content-search:result" events (one per matching document) and a
 // final "content-search:done" event. Each call cancels any in-flight search.
 // The caller passes a generation number that is echoed back in every event so
@@ -415,7 +401,6 @@ func (b *Bridge) SearchContent(query string, gen int) {
 	cur := b.searchGen
 	ctx, cancel := context.WithCancel(context.Background())
 	b.searchCancel = cancel
-	rgPath := b.rgPath
 	b.searchMu.Unlock()
 
 	// Restrict the search to documents that are not currently excluded by the
@@ -435,7 +420,7 @@ func (b *Bridge) SearchContent(query string, gen int) {
 	go func() {
 		defer cancel()
 		count := 0
-		core.SearchDocuments(ctx, files, query, rgPath, func(r core.DocSearchResult) {
+		core.SearchDocuments(ctx, files, query, func(r core.DocSearchResult) {
 			if ctx.Err() != nil {
 				return
 			}

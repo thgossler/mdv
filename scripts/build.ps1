@@ -91,8 +91,10 @@ if ($Stage -eq "all" -or $Stage -eq "helper") {
     Push-Location gui
     & wails3 generate bindings -ts -i -clean=true 2>$null | Out-Null
     Pop-Location
+    # -H windowsgui marks the PE as a GUI-subsystem binary so Windows never
+    # allocates a console window for the helper (it is a webview app).
     $env:CGO_ENABLED = "1"
-    go build -tags production -ldflags $LdFlags -o build/mdv-gui.exe ./gui
+    go build -tags production -ldflags "$LdFlags -H windowsgui" -o build/mdv-gui.exe ./gui
 }
 
 if ($Stage -eq "helper") {
@@ -117,8 +119,11 @@ if ($Stage -eq "all" -or $Stage -eq "launcher") {
 
     Write-Host "==> [4/4] Compiling self-contained launcher"
     New-WinResSyso -Package "cmd/mdv" -Description "Markdown Document Viewer"
+    # -H windowsgui keeps Explorer from flashing a console window on a .md
+    # double-click. The launcher reattaches to the parent console at startup
+    # (see internal/console/console_windows.go) so terminal use still works.
     $env:CGO_ENABLED = "0"
-    go build -tags gui_bundled -ldflags $LdFlags -o build/mdv.exe ./cmd/mdv
+    go build -tags gui_bundled -ldflags "$LdFlags -H windowsgui" -o build/mdv.exe ./cmd/mdv
 
     Write-Host ""
     Write-Host "Done: build/mdv.exe  (version $Version, windows/$Arch)"

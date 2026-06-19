@@ -153,11 +153,19 @@ filename:
   switch to content search. Matches appear indented under each document; press
   Enter on a match to open the document and jump to it.
 
-Search is case-insensitive and combines multiple space-separated keywords with
-a logical **AND** (a document must contain every keyword). Only documents with a
-filename or content match remain in the list. When [ripgrep](https://github.com/BurntSushi/ripgrep)
-(`rg`) is installed it is used for fast searching; otherwise mdv falls back to a
-built-in scan.
+Search is case-insensitive and treats your query as a smart **fuzzy phrase**:
+the words must appear in order and close together — but minor differences are
+tolerated, so "client approvals" also matches "Client-side Approvals". It also
+forgives small typos (edit-distance matching) and matches a query word inside a
+longer word ("approval" finds "approvals"). Content search even spans a single
+line break, so a multi-word term that is hard-wrapped across two source lines
+(e.g. at ~80 columns) is still found, while words separated by a blank line are
+treated as different paragraphs and not matched together.
+
+The same smart matching powers the navigator's **filename/title filter** (when
+content search is off), so filtering documents by name behaves just like
+searching their content. Only documents with a filename or content match remain
+in the list. The search runs entirely in-memory with no external dependencies.
 
 ## Features
 
@@ -174,7 +182,7 @@ built-in scan.
 - Azure DevOps constructs (`[[_TOC_]]`, `:::video:::`, `#123` work items)
 - Sanitized inline HTML (DOMPurify)
 - In-document search (Cmd/Ctrl+F), live reload, drag-and-drop
-- Document content search in the navigator (ripgrep when installed, built-in fallback)
+- Document content search in the navigator (smart fuzzy-phrase matching)
 - Zoom (Cmd/Ctrl + wheel / +/-), light/dark/system themes, configurable fonts
 - History navigation, link target preview in the status bar
 - "Open in new window"

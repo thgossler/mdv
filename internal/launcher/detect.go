@@ -73,6 +73,13 @@ func DetectMode(pref Preference) Mode {
 
 	// No explicit preference: infer.
 	if !console.StdoutIsTTY() {
+		// On Windows a GUI-subsystem launch (double-click in Explorer) has no
+		// console and no redirected output: there is nowhere to dump text, so
+		// the GUI is the only sensible default. Everywhere else a non-TTY
+		// stdout means piped/redirected output, which should get a console dump.
+		if !console.HasStartupConsole() && GUIAvailable() {
+			return ModeGUI
+		}
 		return ModeConsole
 	}
 	if GUIAvailable() {

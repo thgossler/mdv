@@ -114,10 +114,8 @@ func runGUI() error {
 	bridge.window = win
 
 	// Wire the event emitter so the bridge can stream search results and other
-	// notifications to the frontend, and detect ripgrep in the background so the
-	// first content search can use it without blocking startup.
+	// notifications to the frontend.
 	bridge.emit = func(name string, data any) { app.Event.Emit(name, data) }
-	go bridge.detectRipgrep()
 
 	// Restore the maximized state and persist subsequent geometry changes. The
 	// store debounces writes so a drag or resize burst becomes one file write.
