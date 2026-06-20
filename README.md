@@ -7,7 +7,7 @@
   <h1 align="center">mdv</h1>
 
   <p align="center">
-    A minimal, fast, self-contained markdown viewer for reading local markdown docs with seamless navigation. One executable, no installation, no dependencies.
+    A minimal, self-contained cross-platform markdown viewer with TUI and GUI. One executable, no installation, no dependencies, runs everywhere.
     <br />
 
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-informational?label=Platforms)](https://github.com/thgossler/mdv/releases/latest)
