@@ -79,7 +79,19 @@ var (
 // (relative or absolute filesystem paths, not URLs with a scheme) are rewritten
 // into absolute file:// URIs anchored at baseDir, so OSC 8 hyperlinks resolve
 // against the document's location rather than the terminal's working directory.
-func Render(markdown string, width int, style string, hyperlinks bool, images ImageRenderer, baseDir string) (string, error) {
+func Render(markdown string, width int, style string, hyperlinks bool, images ImageRenderer, baseDir string) (result string, err error) {
+	// Resilience guard: glamour drives goldmark plus several reflow/ansi
+	// libraries, and this package runs hand-written scanners and regex passes
+	// around them. A panic deep in any of those on a single malformed construct
+	// must never crash the whole process. Recover it into an error so callers
+	// (console/TUI) fall back to showing the raw markdown instead.
+	defer func() {
+		if r := recover(); r != nil {
+			result = ""
+			err = fmt.Errorf("mdfmt: recovered from render panic: %v", r)
+		}
+	}()
+
 	// Drop any leading YAML front matter so glamour never renders it as a
 	// thematic break plus setext heading. Surfaces that want to display the
 	// metadata format it themselves and prepend it to this output.

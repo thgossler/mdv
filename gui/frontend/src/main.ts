@@ -127,6 +127,9 @@ async function boot(): Promise<void> {
   labelMode = info.config.navLabelMode === "title" ? "title" : "filename";
 
   applyConfigStyles();
+  // Let the browser pick paragraph direction from content so right-to-left
+  // scripts (Arabic, Hebrew, …) render correctly without affecting LTR text.
+  els.content.setAttribute("dir", "auto");
   extendedSyntax = info.extendedSyntax === true;
   els.btnExtended.classList.toggle("active", extendedSyntax);
   applyLayout(info.layout);
@@ -248,7 +251,14 @@ async function renderInto(markdown: string, name: string, path: string): Promise
   currentDocTitle = chooseTitle(name, result.headings[0]?.text, fm.data);
   applyDocTitle();
 
-  await postProcess(result.headings);
+  // Post-processing (anchors, wikilinks, mermaid, TOC, …) runs against the DOM
+  // that is already in place. Guard it so a failure in one step can never throw
+  // away the document that has just been rendered.
+  try {
+    await postProcess(result.headings);
+  } catch (err) {
+    console.error("mdv: post-processing failed", err);
+  }
 }
 
 async function postProcess(headings: { level: number; text: string; slug: string }[]): Promise<void> {
@@ -1677,5 +1687,19 @@ function isTypingTarget(target: EventTarget | null): boolean {
   const tag = el.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 }
+
+// Global safety net: surface unexpected errors/rejections in the status bar and
+// the console instead of failing silently and leaving the user staring at a
+// stale or blank pane. Rendering itself has its own fallback (see render()), so
+// this is a last resort for anything outside that path.
+function reportUnexpected(detail: unknown): void {
+  const message = detail instanceof Error ? detail.message : String(detail);
+  console.error("mdv: unexpected error", detail);
+  if (els.statusMid) {
+    els.statusMid.textContent = `Unexpected error: ${message}`;
+  }
+}
+window.addEventListener("error", (e) => reportUnexpected(e.error ?? e.message));
+window.addEventListener("unhandledrejection", (e) => reportUnexpected(e.reason));
 
 void boot();

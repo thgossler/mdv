@@ -53,6 +53,14 @@ function build(extended: boolean): MarkdownIt {
     highlight: highlightCode,
   });
 
+  // Explicit nesting cap (markdown-it's default is 100). Pathologically deep
+  // nesting of lists/blockquotes is bounded here so it can never blow the stack
+  // or hang the renderer; beyond the limit markdown-it emits the remaining
+  // input as plain text instead of recursing further. `maxNesting` is a
+  // parser-level option not present in the typed constructor options, so it is
+  // assigned directly on the options object.
+  (instance.options as { maxNesting?: number }).maxNesting = 100;
+
   // Always-on extensions: distinctive delimiters, no false positives on plain
   // CommonMark/GitHub/GitLab prose.
   instance
@@ -163,25 +171,47 @@ const FORBID_ATTR = ["srcdoc"];
 // render parses markdown and returns sanitised HTML plus extracted metadata.
 // When `extended` is true the opt-in inline extensions (math, sub/sup, mark,
 // ins) are enabled.
+//
+// Resilience: the whole parse+sanitise stage is wrapped in a try/catch so a
+// single malformed element handled by a throwing plugin can never blank the
+// entire document. On failure it returns a self-contained error panel that
+// still shows the raw markdown source, so the rest of the content remains
+// readable instead of leaving an empty pane.
 export function render(markdown: string, extended = false): RenderResult {
-  const md = getInstance(extended);
-  const env: { headings?: HeadingInfo[] } = {};
-  const rawHtml = md.render(markdown, env);
+  // Strip a leading UTF-8 BOM so it never leaks into the first text node.
+  if (markdown.charCodeAt(0) === 0xfeff) {
+    markdown = markdown.slice(1);
+  }
+  try {
+    const md = getInstance(extended);
+    const env: { headings?: HeadingInfo[] } = {};
+    const rawHtml = md.render(markdown, env);
 
-  const clean = DOMPurify.sanitize(rawHtml, {
-    ADD_TAGS: ALLOWED_TAGS_EXTRA,
-    ADD_ATTR: ALLOWED_ATTR_EXTRA,
-    FORBID_TAGS,
-    FORBID_ATTR,
-    ALLOW_DATA_ATTR: true,
-    ADD_URI_SAFE_ATTR: ["data-wikilink"],
-  });
+    const clean = DOMPurify.sanitize(rawHtml, {
+      ADD_TAGS: ALLOWED_TAGS_EXTRA,
+      ADD_ATTR: ALLOWED_ATTR_EXTRA,
+      FORBID_TAGS,
+      FORBID_ATTR,
+      ALLOW_DATA_ATTR: true,
+      ADD_URI_SAFE_ATTR: ["data-wikilink"],
+    });
 
-  return {
-    html: clean,
-    headings: env.headings || [],
-    frontmatter: null,
-  };
+    return {
+      html: clean,
+      headings: env.headings || [],
+      frontmatter: null,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const html =
+      `<div class="render-error">` +
+      `<p><strong>This document could not be fully rendered.</strong> ` +
+      `Showing the raw source instead.</p>` +
+      `<p class="render-error-detail">${escapeHtml(message)}</p>` +
+      `</div>` +
+      `<pre class="render-error-source"><code>${escapeHtml(markdown)}</code></pre>`;
+    return { html, headings: [], frontmatter: null };
+  }
 }
 
 function escapeHtml(s: string): string {

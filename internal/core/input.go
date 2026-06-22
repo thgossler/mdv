@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"golang.org/x/text/encoding/unicode"
 )
 
 // MaxFileBytes is the largest markdown document mdv will load and render. Above
@@ -69,7 +71,36 @@ func ReadMarkdownFile(path string) ([]byte, error) {
 	if info.Size() > MaxFileBytes {
 		return nil, &FileTooLargeError{Path: path, Size: info.Size(), Limit: MaxFileBytes}
 	}
-	return os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeToUTF8(data), nil
+}
+
+// DecodeToUTF8 normalizes a freshly read document to UTF-8 text without a byte
+// order mark, so every downstream renderer (glamour for the console/TUI and
+// markdown-it in the GUI) only ever sees plain UTF-8. It transcodes UTF-16
+// (little- or big-endian, detected via a leading BOM) and strips a leading
+// UTF-8 BOM. Content without a recognized BOM is assumed to already be UTF-8
+// and returned unchanged. Transcoding failures fall back to the original bytes
+// so a misdetected file is still displayed rather than rejected.
+func DecodeToUTF8(data []byte) []byte {
+	switch {
+	case len(data) >= 2 && data[0] == 0xFE && data[1] == 0xFF:
+		dec := unicode.UTF16(unicode.BigEndian, unicode.ExpectBOM).NewDecoder()
+		if out, err := dec.Bytes(data); err == nil {
+			return out
+		}
+	case len(data) >= 2 && data[0] == 0xFF && data[1] == 0xFE:
+		dec := unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder()
+		if out, err := dec.Bytes(data); err == nil {
+			return out
+		}
+	case len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF:
+		return data[3:]
+	}
+	return data
 }
 
 // skipDirs are directories never descended into during folder listing.
@@ -120,6 +151,7 @@ func ReadStdin(r io.Reader) (Input, error) {
 	if int64(len(data)) > MaxFileBytes {
 		return Input{}, &FileTooLargeError{Size: int64(len(data)), Limit: MaxFileBytes}
 	}
+	data = DecodeToUTF8(data)
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return Input{Kind: InputNone}, nil
 	}

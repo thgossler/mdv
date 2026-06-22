@@ -77,7 +77,10 @@ func Render(w io.Writer, markdown, path string, opt Options) error {
 
 	out, err := mdfmt.Render(markdown, width, style, hyperlinks, imgRenderer, baseDir)
 	if err != nil {
-		return err
+		// Resilience: never abort output entirely on a render failure. Fall
+		// back to the raw markdown body (front matter is shown separately
+		// below) so the document stays readable, mirroring the TUI's fallback.
+		out = core.StripFrontmatter(markdown)
 	}
 
 	// Prepend a tidy, unobtrusive metadata block for any leading YAML front

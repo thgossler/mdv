@@ -697,6 +697,29 @@ body.mono .markdown-body {
   color: var(--fg);
 }
 
+/* Fallback panel shown when a document cannot be fully rendered. The raw
+   source is still displayed below the notice so no content is lost. */
+.render-error {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid #d29922;
+  border-radius: var(--radius);
+  color: var(--fg);
+}
+.render-error p {
+  margin: 4px 0;
+}
+.render-error-detail {
+  color: var(--fg-subtle);
+  font-family: var(--mono, monospace);
+  font-size: 0.9em;
+}
+.render-error-source {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Scrollbars --------------------------------------------------------------- */
 ::-webkit-scrollbar {
   width: 10px;
