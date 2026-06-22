@@ -137,32 +137,147 @@ func resolveFilePath(path, frag, currentDir, rootDir string, cfg Defaults, raw s
 // probePath checks whether abs exists, trying a markdown extension and an
 // index/README fallback for directories. It returns the resolved path, whether
 // it is markdown, and whether something was found.
+//
+// Resolution is tolerant in several ways so that links authored on a different
+// platform still work:
+//   - os.Stat follows symlinks, so a link that points at a symlinked file or
+//     directory is resolved to its target. A symlink loop makes the OS return
+//     an ELOOP error, which is treated as "missing" rather than hanging.
+//   - on case-sensitive filesystems (Linux) a link whose letter case differs
+//     from the real file is matched case-insensitively as a fallback.
+//   - a missing extension is filled in from the configured markdown extensions.
 func probePath(abs string, cfg Defaults) (resolved string, isMD bool, exists bool) {
+	// 1. Exact match (follows symlinks; loops surface as an error).
 	if info, err := os.Stat(abs); err == nil {
-		if info.IsDir() {
-			// Directory link: prefer README.md / index.md inside it.
-			for _, cand := range []string{"README.md", "readme.md", "index.md", "README.markdown"} {
-				p := filepath.Join(abs, cand)
-				if _, err := os.Stat(p); err == nil {
-					return p, true, true
-				}
-			}
-			return abs, false, true
-		}
-		return abs, IsMarkdownPath(abs, cfg), true
+		return classifyStat(abs, info, cfg)
 	}
 
-	// File missing: if it has no extension, try the markdown ones.
+	// 2. Missing extension: try the configured markdown extensions.
 	if filepath.Ext(abs) == "" {
 		for _, ext := range cfg.MarkdownExtensions {
 			p := abs + ext
-			if _, err := os.Stat(p); err == nil {
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
 				return p, true, true
 			}
 		}
 	}
 
+	// 3. Case-insensitive fallback for case-sensitive filesystems.
+	if ci, ok := resolveCaseInsensitive(abs); ok {
+		if info, err := os.Stat(ci); err == nil {
+			return classifyStat(ci, info, cfg)
+		}
+	}
+	// 4. Case-insensitive fallback with an inferred markdown extension.
+	if filepath.Ext(abs) == "" {
+		for _, ext := range cfg.MarkdownExtensions {
+			if ci, ok := resolveCaseInsensitive(abs + ext); ok {
+				if info, err := os.Stat(ci); err == nil && !info.IsDir() {
+					return ci, true, true
+				}
+			}
+		}
+	}
+
 	return abs, IsMarkdownPath(abs, cfg), false
+}
+
+// classifyStat turns a successful os.Stat into a probePath result, resolving a
+// directory to its README/index document when one exists.
+func classifyStat(abs string, info os.FileInfo, cfg Defaults) (resolved string, isMD bool, exists bool) {
+	if info.IsDir() {
+		if idx, ok := directoryIndex(abs, cfg); ok {
+			return idx, true, true
+		}
+		return abs, false, true
+	}
+	return abs, IsMarkdownPath(abs, cfg), true
+}
+
+// directoryIndex returns the README or index document inside dir, if any. It
+// reads the directory once and matches the "readme"/"index" stems
+// case-insensitively against the configured markdown extensions, preferring
+// README over index and earlier extensions over later ones. This makes a link
+// to a folder open its landing page (README.md, index.md, ...).
+func directoryIndex(dir string, cfg Defaults) (string, bool) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	pick := func(stem string) (string, bool) {
+		best, bestRank := "", len(cfg.MarkdownExtensions)
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			ext := strings.ToLower(filepath.Ext(name))
+			if strings.ToLower(strings.TrimSuffix(name, filepath.Ext(name))) != stem {
+				continue
+			}
+			for i, me := range cfg.MarkdownExtensions {
+				if ext == me && i < bestRank {
+					best, bestRank = name, i
+				}
+			}
+		}
+		if best != "" {
+			return filepath.Join(dir, best), true
+		}
+		return "", false
+	}
+	if p, ok := pick("readme"); ok {
+		return p, true
+	}
+	if p, ok := pick("index"); ok {
+		return p, true
+	}
+	return "", false
+}
+
+// resolveCaseInsensitive finds abs on disk when an exact match fails by matching
+// each path component case-insensitively. It is only useful on case-sensitive
+// filesystems (Linux); on case-insensitive ones the exact os.Stat already
+// succeeded. It walks the path component-by-component, so the traversal is
+// bounded by the path depth and is safe against symlink loops (it uses os.Lstat
+// and never re-follows a component). It returns the real, correctly-cased path.
+func resolveCaseInsensitive(abs string) (string, bool) {
+	vol := filepath.VolumeName(abs)
+	rest := abs[len(vol):]
+	sep := string(os.PathSeparator)
+	if !strings.HasPrefix(rest, sep) {
+		// Only absolute paths are supported; resolveFilePath always passes one.
+		return "", false
+	}
+	cur := vol + sep
+	for _, part := range strings.Split(strings.Trim(rest, sep), sep) {
+		if part == "" || part == "." {
+			continue
+		}
+		// Fast path: the component exists with the given case.
+		next := filepath.Join(cur, part)
+		if _, err := os.Lstat(next); err == nil {
+			cur = next
+			continue
+		}
+		// Scan the current directory for a case-insensitive match.
+		entries, err := os.ReadDir(cur)
+		if err != nil {
+			return "", false
+		}
+		found := ""
+		for _, e := range entries {
+			if strings.EqualFold(e.Name(), part) {
+				found = e.Name()
+				break
+			}
+		}
+		if found == "" {
+			return "", false
+		}
+		cur = filepath.Join(cur, found)
+	}
+	return cur, true
 }
 
 // ResolveWikilink resolves [[note]], [[note|alias]] and [[note#heading]] against
