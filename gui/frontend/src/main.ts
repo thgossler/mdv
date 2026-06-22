@@ -283,6 +283,19 @@ function rerenderMermaidForTheme(): void {
   if (currentPath) void openDocument(currentPath, false);
 }
 
+// reloadCurrent re-reads and re-renders the active document, preserving the
+// reader's place (openDocument otherwise resets the scroll to the top). It is
+// the single entry point for every manual or automatic reload, optionally
+// flashing a transient "Document changed" notice in the status bar.
+async function reloadCurrent(opts: { flash?: boolean } = {}): Promise<void> {
+  if (!currentPath) return;
+  const scroll = els.contentWrap.scrollTop;
+  await openDocument(currentPath, false);
+  els.contentWrap.scrollTop = scroll;
+  if (opts.flash) flashStatus("Document changed", true);
+}
+
+
 // --- wikilinks & ado toc ----------------------------------------------------
 
 function injectHeadingAnchors(): void {
@@ -1032,6 +1045,7 @@ function wireToolbar(): void {
   els.btnBack.addEventListener("click", goBack);
   els.btnForward.addEventListener("click", goForward);
   els.btnHistory.addEventListener("click", toggleHistoryMenu);
+  $("btn-reload").addEventListener("click", () => void reloadCurrent({ flash: true }));
   $("btn-sidebar").addEventListener("click", () => els.sidebar.classList.toggle("collapsed"));
   $("btn-toc").addEventListener("click", () => {
     const hidden = els.toc.classList.toggle("hidden");
@@ -1389,7 +1403,7 @@ function wireMenuEvents(): void {
   const on = (name: string, fn: () => void) => Events.On(name, fn);
   on("menu:back", goBack);
   on("menu:forward", goForward);
-  on("menu:reload", () => currentPath && openDocument(currentPath, false));
+  on("menu:reload", () => void reloadCurrent({ flash: true }));
   on("menu:toggle-sidebar", () => els.sidebar.classList.toggle("collapsed"));
   on("menu:toggle-toc", () => els.toc.classList.toggle("hidden"));
   on("menu:toggle-backlinks", () => els.toc.classList.toggle("hidden"));
@@ -1409,7 +1423,7 @@ function wireContextMenu(): void {
     const reload = {
       label: "Reload page",
       fn: () => {
-        if (currentPath) void openDocument(currentPath, false);
+        void reloadCurrent({ flash: true });
       },
     };
     if (a && isExternalLink(a)) {
@@ -1509,11 +1523,26 @@ function wireCodeCopy(): void {
 
 function wireLiveReload(): void {
   Events.On("file:changed", (ev: { data: string }) => {
-    if (ev.data === currentPath) {
-      const scroll = els.contentWrap.scrollTop;
-      void openDocument(currentPath, false).then(() => (els.contentWrap.scrollTop = scroll));
-    }
+    if (ev.data === currentPath) void reloadCurrent({ flash: true });
   });
+  // Structural changes in the workspace tree (markdown files or folders added,
+  // removed or renamed on disk) refresh the navigator in place, preserving its
+  // scroll position and the active selection.
+  Events.On("workspace:changed", () => void refreshWorkspaceFromDisk());
+}
+
+// refreshWorkspaceFromDisk re-fetches the workspace listing and re-renders the
+// navigator without disturbing the reader: the nav scroll position is kept and
+// the folder welcome counts are refreshed when no document is open.
+async function refreshWorkspaceFromDisk(): Promise<void> {
+  const navScroll = els.navList.scrollTop;
+  workspace = (await api.refreshWorkspace()) ?? [];
+  if (excludeEnabled && els.navExclude.value.trim() !== "") {
+    await applyExcludes();
+  } else {
+    refreshNav();
+  }
+  els.navList.scrollTop = navScroll;
 }
 
 // wireFileDrop listens for files/folders dropped onto the window (delivered by
@@ -1600,9 +1629,13 @@ function chooseTitle(name: string, h1?: string, fm?: Record<string, unknown> | n
   return fmTitle || h1 || name;
 }
 
-function flashStatus(msg: string): void {
+function flashStatus(msg: string, accent = false): void {
   els.statusMid.textContent = msg;
-  setTimeout(() => (els.statusMid.textContent = ""), 2500);
+  els.statusMid.classList.toggle("status-flash", accent);
+  setTimeout(() => {
+    els.statusMid.textContent = "";
+    els.statusMid.classList.remove("status-flash");
+  }, 2500);
 }
 
 function baseName(p: string): string {

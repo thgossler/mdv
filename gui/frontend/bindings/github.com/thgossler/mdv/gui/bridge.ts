@@ -72,6 +72,15 @@ export function ReadDocument(path: string): $CancellablePromise<$models.Document
 }
 
 /**
+ * RefreshWorkspace re-scans the workspace directory and returns the current
+ * markdown document listing, so the navigator can update after files are added,
+ * removed or renamed on disk.
+ */
+export function RefreshWorkspace(): $CancellablePromise<$models.DocFileDTO[] | null> {
+    return $Call.ByID(1335438411);
+}
+
+/**
  * Reinit re-resolves path as the program's input and refreshes the workspace
  * listing, so a file or folder dropped onto the window replaces what mdv is
  * viewing without restarting the process. It returns fresh bootstrap info (the

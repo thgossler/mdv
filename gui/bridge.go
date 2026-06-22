@@ -118,6 +118,7 @@ func (b *Bridge) Init() InitInfo {
 	if b.input.Kind == core.InputFolder {
 		kind = "folder"
 	}
+	b.armWorkspaceWatch()
 	return InitInfo{
 		Kind:      kind,
 		Path:      b.input.Path,
@@ -148,6 +149,7 @@ func (b *Bridge) Reinit(path string) InitInfo {
 	if b.input.Kind == core.InputFolder {
 		kind = "folder"
 	}
+	b.armWorkspaceWatch()
 	return InitInfo{
 		Kind:      kind,
 		Path:      b.input.Path,
@@ -471,6 +473,24 @@ func (b *Bridge) WatchFile(path string) {
 	if b.cfg.LiveReload && b.watcher != nil {
 		b.watcher.Watch(path)
 	}
+}
+
+// armWorkspaceWatch points the live-reload watcher at the current workspace root
+// so navigator updates track filesystem changes. It is a no-op when live reload
+// is disabled.
+func (b *Bridge) armWorkspaceWatch() {
+	if b.cfg.LiveReload && b.watcher != nil {
+		b.watcher.WatchWorkspace(b.input.Dir)
+	}
+}
+
+// RefreshWorkspace re-scans the workspace directory and returns the current
+// markdown document listing, so the navigator can update after files are added,
+// removed or renamed on disk.
+func (b *Bridge) RefreshWorkspace() []DocFileDTO {
+	b.workspace, _ = core.ListMarkdownFiles(b.input.Dir, b.cfg)
+	core.PopulateTitles(b.workspace)
+	return b.workspaceDTO()
 }
 
 // Backlinks returns documents that link to the given file.

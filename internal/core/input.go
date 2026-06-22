@@ -246,6 +246,33 @@ func ListMarkdownFiles(dir string, cfg Defaults) ([]DocFile, error) {
 	return files, nil
 }
 
+// IsSkippedDir reports whether a directory with the given base name should be
+// skipped when walking a workspace tree (hidden folders and known noise folders
+// such as node_modules). It is shared by ListMarkdownFiles and the GUI
+// live-reload watcher so both apply the same rules.
+func IsSkippedDir(name string) bool {
+	return skipDirs[name] || strings.HasPrefix(name, ".")
+}
+
+// WorkspaceDirs returns root and every subdirectory beneath it that
+// ListMarkdownFiles would descend into, applying the same skip rules. The GUI
+// live-reload watcher uses this to watch the entire document tree for changes.
+// Unreadable entries are tolerated and simply omitted.
+func WorkspaceDirs(root string) []string {
+	var dirs []string
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return nil
+		}
+		if path != root && IsSkippedDir(d.Name()) {
+			return filepath.SkipDir
+		}
+		dirs = append(dirs, path)
+		return nil
+	})
+	return dirs
+}
+
 func sortDocFiles(files []DocFile, root string) {
 	rank := func(f DocFile) (int, string, string) {
 		rel, _ := filepath.Rel(root, f.Path)

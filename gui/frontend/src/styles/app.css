@@ -582,6 +582,11 @@ body.mono .markdown-body {
   flex: none;
   color: var(--fg-muted);
 }
+.status-mid.status-flash {
+  color: var(--accent);
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
 .status-mid a {
   color: var(--accent);
 }

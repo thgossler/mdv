@@ -39,6 +39,7 @@ export const api = {
     Bridge.OpenInNewWindow(path, fragment),
   backlinks: (path: string): Promise<Backlink[] | null> => Bridge.Backlinks(path),
   watch: (path: string): Promise<void> => Bridge.WatchFile(path),
+  refreshWorkspace: (): Promise<DocFileDTO[] | null> => Bridge.RefreshWorkspace(),
   searchContent: (query: string, gen: number): Promise<void> => Bridge.SearchContent(query, gen),
   saveLayout: (sidebarWidth: number, tocWidth: number): Promise<void> =>
     Bridge.SaveLayout(sidebarWidth, tocWidth),

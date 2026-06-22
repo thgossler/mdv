@@ -59,7 +59,7 @@ func runGUI() error {
 		},
 	})
 
-	watcher := NewWatcher(app)
+	watcher := NewWatcher(app, cfg)
 	bridge := NewBridge(cfg, in)
 	bridge.watcher = watcher
 	bridge.app = app
