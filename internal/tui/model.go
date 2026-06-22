@@ -73,6 +73,13 @@ type Model struct {
 	rawMarkdown string
 	stdin       bool // content was piped in; there is no backing file path
 
+	// metaExpanded reports whether the front matter metadata section is showing
+	// its extra (non-headline) fields. It resets to collapsed on each new
+	// document. metaHidden caches the number of extra fields so the status bar
+	// can advertise the toggle without re-parsing YAML on every keystroke.
+	metaExpanded bool
+	metaHidden   int
+
 	// resolvedStyle is the concrete glamour style ("light"/"dark") chosen once at
 	// startup. Renders never use glamour's "auto" style, because auto-detection
 	// writes an OSC 11 background-colour query to the terminal and waits for the
@@ -248,6 +255,7 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 		m.rawMarkdown = string(in.Data)
 		m.stdin = true
 	}
+	m.refreshMeta()
 
 	m.entryPath = entryPointPath(m.workspace)
 
@@ -519,6 +527,9 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return *m, nil
 	case "x":
 		m.toggleExtendedSyntax()
+		return *m, nil
+	case "m":
+		m.toggleMeta()
 		return *m, nil
 	case "/":
 		m.focus = focusSearch
@@ -929,6 +940,7 @@ func (m *Model) openPath(path string, pushHistory bool) tea.Cmd {
 	m.currentDir = filepath.Dir(path)
 	m.rawMarkdown = string(data)
 	m.renderCache = nil
+	m.refreshMeta()
 	m.matches = nil
 	m.matchIdx = 0
 	m.searchQuery = ""
@@ -1012,7 +1024,6 @@ func (m *Model) toggleExtendedSyntax() {
 		m.statusMsg = "Extended syntax: OFF (applies in GUI)"
 	}
 }
-
 
 // per session. Title extraction opens and scans every markdown file, so it must
 // not run on content-independent UI actions (showing the navigator, toggling the
@@ -1217,19 +1228,66 @@ func (m *Model) layout() {
 
 func (m *Model) renderedRaw() string {
 	w := m.contentWidth()
-	key := fmt.Sprintf("%d|%s|%d", w, m.resolvedStyle, len(m.rawMarkdown))
+	key := fmt.Sprintf("%d|%s|%d|%t", w, m.resolvedStyle, len(m.rawMarkdown), m.metaExpanded)
 	if out, ok := m.renderCache[key]; ok {
 		return out
 	}
-	out, err := renderMarkdown(m.rawMarkdown, w-2, m.resolvedStyle, m.imageRenderer(), m.currentDir)
+	body, err := renderMarkdown(m.rawMarkdown, w-2, m.resolvedStyle, m.imageRenderer(), m.currentDir)
 	if err != nil {
-		out = m.rawMarkdown
+		body = m.rawMarkdown
 	}
+	out := m.frontmatterBlock(w-2) + body
 	if m.renderCache == nil {
 		m.renderCache = make(map[string]string)
 	}
 	m.renderCache[key] = out
 	return out
+}
+
+// refreshMeta recomputes the cached count of extra front matter fields and
+// collapses the metadata section, called whenever the current document changes.
+func (m *Model) refreshMeta() {
+	fm, _ := core.ExtractFrontmatter(m.rawMarkdown)
+	m.metaHidden = len(fm.Fields)
+	m.metaExpanded = false
+}
+
+// toggleMeta expands or collapses the extra front matter fields. It is a no-op
+// when the document has no extra fields to reveal.
+func (m *Model) toggleMeta() {
+	if m.metaHidden == 0 {
+		return
+	}
+	m.metaExpanded = !m.metaExpanded
+	m.rerender()
+}
+
+// frontmatterBlock formats the current document's front matter into an
+// unobtrusive ANSI block shown above the rendered body. The headline fields are
+// always shown; the extra fields appear only when expanded, with a faint hint
+// advertising the toggle. width is the body wrap column.
+func (m *Model) frontmatterBlock(width int) string {
+	fm, _ := core.ExtractFrontmatter(m.rawMarkdown)
+	if !fm.Has {
+		return ""
+	}
+	opt := mdfmt.FrontmatterOptions{
+		Width:      width,
+		Color:      os.Getenv("NO_COLOR") == "",
+		ShowFields: m.metaExpanded,
+	}
+	if n := len(fm.Fields); n > 0 {
+		if m.metaExpanded {
+			opt.Hint = "m: hide details"
+		} else {
+			plural := "s"
+			if n == 1 {
+				plural = ""
+			}
+			opt.Hint = fmt.Sprintf("m: show %d more field%s", n, plural)
+		}
+	}
+	return mdfmt.RenderFrontmatter(fm, opt)
 }
 
 func (m *Model) rerender() {
@@ -1394,14 +1452,18 @@ func (m Model) statusBar() string {
 	}
 
 	navActive := m.focus == focusList || m.focus == focusListFilter
+	metaHint := ""
+	if m.metaHidden > 0 {
+		metaHint = "m:meta  "
+	}
 	var hints string
 	switch {
 	case navActive:
 		hints = "^b:nav  tab:switch  enter:open  /:filter  //:content(all files)  t:titles  x:ext  q:quit"
 	case m.showList:
-		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  x:ext  q:quit"
+		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "x:ext  q:quit"
 	default:
-		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  x:ext  q:quit"
+		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "x:ext  q:quit"
 	}
 
 	status := m.statusMsg

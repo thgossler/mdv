@@ -20,6 +20,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/thgossler/mdv/internal/core"
 )
 
 // Sentinels marking the start and end of a hyperlink's visible text. They are
@@ -79,6 +80,11 @@ var (
 // into absolute file:// URIs anchored at baseDir, so OSC 8 hyperlinks resolve
 // against the document's location rather than the terminal's working directory.
 func Render(markdown string, width int, style string, hyperlinks bool, images ImageRenderer, baseDir string) (string, error) {
+	// Drop any leading YAML front matter so glamour never renders it as a
+	// thematic break plus setext heading. Surfaces that want to display the
+	// metadata format it themselves and prepend it to this output.
+	markdown = core.StripFrontmatter(markdown)
+
 	src, code := protectCode(markdown)
 
 	var imgSubs map[string]string

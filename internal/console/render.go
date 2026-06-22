@@ -80,8 +80,23 @@ func Render(w io.Writer, markdown, path string, opt Options) error {
 		return err
 	}
 
+	// Prepend a tidy, unobtrusive metadata block for any leading YAML front
+	// matter so it is presented nicely instead of being dropped. mdfmt.Render
+	// already strips the raw block from the body.
+	fm, _ := core.ExtractFrontmatter(markdown)
+	fmBlock := mdfmt.RenderFrontmatter(fm, mdfmt.FrontmatterOptions{
+		Width:      width,
+		Color:      hyperlinks,
+		ShowFields: true,
+	})
+
 	if opt.ShowHeader && path != "" {
 		fmt.Fprintf(w, "\x1b[2m── %s ──\x1b[0m\n", path)
+	}
+	if fmBlock != "" {
+		if _, err = io.WriteString(w, fmBlock); err != nil {
+			return err
+		}
 	}
 	_, err = io.WriteString(w, out)
 	return err

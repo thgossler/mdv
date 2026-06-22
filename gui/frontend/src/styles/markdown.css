@@ -200,6 +200,59 @@
   background: color-mix(in srgb, var(--tag-color) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--tag-color) 35%, transparent);
 }
+.fm-details {
+  margin-top: 12px;
+  font-size: 0.85em;
+}
+.fm-summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-muted);
+  list-style: none;
+  user-select: none;
+  width: fit-content;
+}
+.fm-summary::-webkit-details-marker {
+  display: none;
+}
+.fm-summary::before {
+  content: "▸";
+  font-size: 0.85em;
+  transition: transform 0.15s ease;
+}
+.fm-details[open] > .fm-summary::before {
+  transform: rotate(90deg);
+}
+.fm-summary:hover {
+  color: var(--fg);
+}
+.fm-count {
+  font-size: 0.85em;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: var(--fg-muted);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-muted);
+}
+.fm-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 10px 0 0;
+}
+.fm-key {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+.fm-value {
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
 
 /* Inline TOC (Azure DevOps [[_TOC_]]) */
 .inline-toc {

@@ -39,8 +39,9 @@ export function renderFrontmatter(data: Record<string, unknown> | null): string 
   const author = pick(data, "author", "authors");
   const date = pick(data, "date", "updated");
   const tags = normalizeTags(data["tags"] ?? data["keywords"]);
+  const extra = extraFields(data);
 
-  if (!title && !author && !date && tags.length === 0) return "";
+  if (!title && !author && !date && tags.length === 0 && extra.length === 0) return "";
 
   let html = '<div class="frontmatter">';
   if (title) html += `<div class="fm-title">${escapeHtml(title)}</div>`;
@@ -56,8 +57,53 @@ export function renderFrontmatter(data: Record<string, unknown> | null): string 
     }
     html += "</div>";
   }
+  if (extra.length) {
+    const count = extra.length;
+    html += '<details class="fm-details">';
+    html += `<summary class="fm-summary">Metadata <span class="fm-count">${count}</span></summary>`;
+    html += '<dl class="fm-kv">';
+    for (const [key, value] of extra) {
+      html += `<dt class="fm-key">${escapeHtml(key)}</dt>`;
+      html += `<dd class="fm-value">${escapeHtml(value)}</dd>`;
+    }
+    html += "</dl></details>";
+  }
   html += "</div>";
   return html;
+}
+
+// RECOGNIZED keys are surfaced as the prominent headline (title/author/date/
+// tags) and so are omitted from the collapsible field list to avoid repetition.
+const RECOGNIZED = new Set([
+  "title", "author", "authors", "date", "updated", "tags", "keywords",
+]);
+
+// extraFields returns the remaining top-level entries in document order, each
+// formatted as a [key, displayValue] pair. Object key insertion order is
+// preserved by JavaScript for string keys, matching the source YAML order.
+function extraFields(data: Record<string, unknown>): [string, string][] {
+  const out: [string, string][] = [];
+  for (const [key, value] of Object.entries(data)) {
+    if (RECOGNIZED.has(key.toLowerCase().trim())) continue;
+    const formatted = formatValue(value);
+    if (formatted === "") continue;
+    out.push([key, formatted]);
+  }
+  return out;
+}
+
+// formatValue renders an arbitrary YAML value to a compact single-line string:
+// scalars verbatim, arrays as "a, b, c", and objects as "k: v, k2: v2".
+function formatValue(v: unknown): string {
+  if (v == null) return "";
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (Array.isArray(v)) return v.map(formatValue).filter((s) => s !== "").join(", ");
+  if (typeof v === "object") {
+    return Object.entries(v as Record<string, unknown>)
+      .map(([k, val]) => `${k}: ${formatValue(val)}`)
+      .join(", ");
+  }
+  return String(v).trim();
 }
 
 function pick(data: Record<string, unknown>, ...keys: string[]): string {
