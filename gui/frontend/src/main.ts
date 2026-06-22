@@ -633,6 +633,7 @@ function renderSearchNav(): void {
     renderNav(visibleWorkspace());
     return;
   }
+  entryPointPath = computeEntryPoint(visibleWorkspace());
   // Build the rows off-DOM and swap them in once to minimise reflow.
   const frag = document.createDocumentFragment();
   for (const d of visibleWorkspace()) {
@@ -648,10 +649,55 @@ function renderSearchNav(): void {
   highlightActiveNav();
 }
 
+// entryPointPath holds the single most-likely documentation landing page in
+// the current workspace (see computeEntryPoint). It is emphasised in the
+// navigator so a reader immediately sees where to start.
+let entryPointPath = "";
+
+// Candidate file names and typical documentation folders, each in descending
+// priority order. A root-level page always wins; otherwise the best depth-1
+// page inside one of these folders is chosen.
+const ENTRY_POINT_NAMES = ["readme.md", "index.md", "home.md"];
+const ENTRY_POINT_FOLDERS = ["docs", "doc", "documentation", "wiki"];
+
+// computeEntryPoint returns the path of the single most-probable entry point,
+// or "" when none qualifies. Root README/index/home pages take precedence; if
+// none exist at the root, a matching page directly inside a typical docs folder
+// (depth 1 only) is used. Anything deeper never qualifies.
+function computeEntryPoint(items: DocFileDTO[]): string {
+  let best = "";
+  let bestScore = Infinity;
+  for (const d of items) {
+    const lower = (d.rel || d.name).replace(/^\/+/, "").toLowerCase();
+    const base = lower.slice(lower.lastIndexOf("/") + 1);
+    const nameRank = ENTRY_POINT_NAMES.indexOf(base);
+    if (nameRank < 0) continue;
+    const slash = lower.indexOf("/");
+    let score: number;
+    if (slash < 0) {
+      // Root level: highest priority, ordered by file-name rank.
+      score = nameRank;
+    } else if (lower.indexOf("/", slash + 1) < 0) {
+      // Depth 1: only inside a recognised documentation folder.
+      const folderRank = ENTRY_POINT_FOLDERS.indexOf(lower.slice(0, slash));
+      if (folderRank < 0) continue;
+      score = 10 + folderRank * ENTRY_POINT_NAMES.length + nameRank;
+    } else {
+      continue; // deeper than depth 1 never qualifies
+    }
+    if (score < bestScore) {
+      bestScore = score;
+      best = d.path;
+    }
+  }
+  return best;
+}
+
 // makeNavItem builds a document entry anchor (shared by both nav views).
 function makeNavItem(d: DocFileDTO): HTMLAnchorElement {
   const a = document.createElement("a");
   a.className = "nav-item";
+  if (d.path === entryPointPath) a.classList.add("entry");
   a.tabIndex = -1;
   a.dataset.path = d.path;
   a.textContent =
@@ -715,6 +761,7 @@ function makeNavMatch(d: DocFileDTO, m: ContentMatch): HTMLAnchorElement {
 }
 
 function renderNav(items: DocFileDTO[]): void {
+  entryPointPath = computeEntryPoint(visibleWorkspace());
   els.navList.innerHTML = "";
   for (const d of items) {
     els.navList.appendChild(makeNavItem(d));

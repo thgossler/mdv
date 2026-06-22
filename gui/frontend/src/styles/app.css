@@ -256,6 +256,15 @@ body.pane-resizing {
   background: var(--accent);
   color: var(--accent-fg);
 }
+/* Likely documentation entry points (README.md, index.md, …) stand out. */
+.nav-item.entry {
+  font-weight: 700;
+  color: var(--accent);
+}
+/* Keep an active entry readable against the accent background. */
+.nav-item.entry.active {
+  color: var(--accent-fg);
+}
 /* Content-search match rows are nested under their document entry. */
 .nav-match {
   display: block;
