@@ -72,9 +72,16 @@ func run() int {
 		return 0
 	}
 
+	pref := launcher.Preference{
+		ForceGUI:     *flagGUI,
+		ForceTUI:     *flagTUI,
+		ForceConsole: *flagConsole || *flagC,
+	}
+	mode := launcher.DetectMode(pref)
+
 	// Resolve input. A positional argument names a file or folder; with no
 	// argument but markdown piped on stdin, read that content into memory.
-	// Otherwise show usage and exit.
+	// With no input at all, fall through with an InputNone below.
 	var in core.Input
 	var err error
 	arg := flag.Arg(0)
@@ -91,24 +98,24 @@ func run() int {
 			fmt.Fprintf(os.Stderr, "error: reading stdin: %v\n", err)
 			return 1
 		}
-	default:
-		usage()
-		return 2
 	}
 	if in.Kind == core.InputNone {
+		// No file, folder, or piped content was given. When a GUI will be
+		// shown - e.g. launched by double-click from Finder/Explorer, or forced
+		// with --gui - open the graphical file picker instead of doing nothing.
+		// Only when no GUI will be shown (TUI/console) do we print usage.
+		if mode == launcher.ModeGUI {
+			if err := launcher.SpawnGUIPicker(); err == nil {
+				return 0
+			}
+			// GUI not bundled/available: fall through to usage.
+		}
 		usage()
 		return 2
 	}
 
 	// Begin an asynchronous update check; results are consumed best-effort.
 	updCh := startUpdateCheck(cfg)
-
-	pref := launcher.Preference{
-		ForceGUI:     *flagGUI,
-		ForceTUI:     *flagTUI,
-		ForceConsole: *flagConsole || *flagC,
-	}
-	mode := launcher.DetectMode(pref)
 
 	switch mode {
 	case launcher.ModeGUI:

@@ -1,6 +1,10 @@
 package launcher
 
-import "errors"
+import (
+	"errors"
+	"os"
+)
+
 
 // ErrNoEmbeddedGUI indicates the binary was built without the bundled GUI
 // helper (e.g. the console/TUI-only build, or during early development before
@@ -22,4 +26,24 @@ func SpawnGUI(inputPath string) error {
 		return ErrNoEmbeddedGUI
 	}
 	return spawnGUI(inputPath)
+}
+
+// MDVPickEnv is the environment variable the launcher sets to tell the spawned
+// GUI helper to present an "open file or folder" picker instead of loading a
+// path. It is used when mdv is started with no input but a GUI will be shown
+// (e.g. double-clicked from Finder/Explorer).
+const MDVPickEnv = "MDV_PICK"
+
+// SpawnGUIPicker launches the embedded GUI helper with no input path, signalling
+// it (via MDVPickEnv) to present a native file/folder picker on startup. It
+// returns ErrNoEmbeddedGUI when no helper is bundled. The environment variable
+// is inherited by the detached child process.
+func SpawnGUIPicker() error {
+	if !HasEmbeddedGUI() {
+		return ErrNoEmbeddedGUI
+	}
+	if err := os.Setenv(MDVPickEnv, "1"); err != nil {
+		return err
+	}
+	return spawnGUI("")
 }

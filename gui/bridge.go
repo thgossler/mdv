@@ -26,6 +26,12 @@ type Bridge struct {
 	watcher   *Watcher
 	layout    *LayoutStore
 	window    *application.WebviewWindow
+	app       *application.App
+
+	// pickOnInit requests that Init present a native "open file or folder"
+	// dialog before bootstrapping. It is set when mdv was started with no input
+	// but a GUI is shown (e.g. double-clicked from Finder/Explorer).
+	pickOnInit bool
 
 	// emit dispatches a named application event with structured data to the
 	// frontend. It is wired in main.go after the app is created.
@@ -92,6 +98,17 @@ type UpdateDTO struct {
 
 // Init returns the bootstrap information for the frontend.
 func (b *Bridge) Init() InitInfo {
+	if b.pickOnInit {
+		b.pickOnInit = false
+		if !b.promptForInput() {
+			// The user cancelled the picker: quit. The window is closing, so a
+			// minimal InitInfo is enough for the frontend that requested it.
+			if b.app != nil {
+				b.app.Quit()
+			}
+			return InitInfo{AppName: core.AppName, Version: core.Version, Config: b.cfg}
+		}
+	}
 	kind := "file"
 	if b.input.Kind == core.InputFolder {
 		kind = "folder"
@@ -156,6 +173,33 @@ func (b *Bridge) ResetLayout() LayoutDTO {
 		b.layout.ResetPanels()
 	}
 	return LayoutDTO{SidebarWidth: defaultSidebarWidth, TocWidth: defaultTocWidth}
+}
+
+// promptForInput presents a native dialog letting the user choose a markdown
+// file or a folder to view, then loads the selection into the bridge. The
+// dialog title carries the app name so the user can see which program is asking.
+// It returns false when the user cancels or the selection cannot be resolved.
+func (b *Bridge) promptForInput() bool {
+	if b.app == nil {
+		return false
+	}
+	path, err := b.app.Dialog.OpenFile().
+		CanChooseFiles(true).
+		CanChooseDirectories(true).
+		SetTitle(core.AppName + " \u2014 Open Markdown File or Folder").
+		AddFilter("Markdown", "*.md;*.markdown;*.mdown;*.mkd;*.mkdn;*.mdwn;*.mdtxt;*.mdtext;*.text").
+		PromptForSingleSelection()
+	if err != nil || strings.TrimSpace(path) == "" {
+		return false
+	}
+	in, err := core.ResolveInput(path)
+	if err != nil || in.Kind == core.InputNone {
+		return false
+	}
+	b.input = in
+	b.workspace, _ = core.ListMarkdownFiles(in.Dir, b.cfg)
+	core.PopulateTitles(b.workspace)
+	return true
 }
 
 // initExcludes seeds the in-memory exclusion state from the persisted layout.

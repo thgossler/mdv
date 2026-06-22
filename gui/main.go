@@ -25,6 +25,11 @@ var assets embed.FS
 //go:embed appicon.png
 var appIcon []byte
 
+// pickEnv is the environment variable the launcher sets to request that the GUI
+// present an "open file or folder" picker on startup. It must match
+// launcher.MDVPickEnv.
+const pickEnv = "MDV_PICK"
+
 func main() {
 	if err := runGUI(); err != nil {
 		log.Fatal(err)
@@ -57,6 +62,13 @@ func runGUI() error {
 	watcher := NewWatcher(app)
 	bridge := NewBridge(cfg, in)
 	bridge.watcher = watcher
+	bridge.app = app
+	// When started with no input but a GUI is shown, the launcher signals picker
+	// mode (resolveInput returns InputNone). Ask the bridge to present a native
+	// file/folder dialog on startup instead of opening nothing.
+	if in.Kind == core.InputNone {
+		bridge.pickOnInit = true
+	}
 	app.RegisterService(application.NewService(bridge))
 
 	app.Menu.Set(buildMenu(app))
@@ -155,6 +167,13 @@ func resolveInput(cfg core.Defaults) core.Input {
 	arg := ""
 	if len(os.Args) > 1 {
 		arg = os.Args[1]
+	}
+	// Picker mode: the launcher started the GUI with no input because mdv was
+	// invoked with no file/folder but a GUI is shown (e.g. double-clicked from
+	// Finder/Explorer). Return InputNone so the bridge presents a native open
+	// dialog on startup instead of silently falling back to the working dir.
+	if arg == "" && os.Getenv(pickEnv) == "1" {
+		return core.Input{Kind: core.InputNone}
 	}
 	if arg == "" {
 		if wd, err := os.Getwd(); err == nil {
