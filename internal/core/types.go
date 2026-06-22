@@ -7,7 +7,7 @@ package core
 const AppName = "mdv"
 
 // AppTagline is shown in help output.
-const AppTagline = "Markdown Document Viewer"
+const AppTagline = "Markdown Viewer"
 
 // Version is the current build version (SemVer, "v"-prefixed). The canonical
 // value lives in the repository-root VERSION file and is injected at build time

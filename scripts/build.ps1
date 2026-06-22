@@ -85,7 +85,7 @@ if ($Stage -eq "all" -or $Stage -eq "helper") {
     # Keep the embedded GUI icon (window/App-switcher icon) in sync, and embed
     # the .exe resource icon for Explorer / shortcuts / taskbar.
     Copy-Item images/icon.png gui/appicon.png -Force
-    New-WinResSyso -Package "gui" -Description "Markdown Document Viewer (GUI)"
+    New-WinResSyso -Package "gui" -Description "Markdown Viewer"
 
     Write-Host "==> [2/4] Generating bindings + compiling GUI helper"
     Push-Location gui
@@ -118,7 +118,7 @@ if ($Stage -eq "all" -or $Stage -eq "launcher") {
     Get-Item internal/launcher/assets/mdv-gui.gz | Select-Object Length
 
     Write-Host "==> [4/4] Compiling self-contained launcher"
-    New-WinResSyso -Package "cmd/mdv" -Description "Markdown Document Viewer"
+    New-WinResSyso -Package "cmd/mdv" -Description "Markdown Viewer"
     # -H windowsgui keeps Explorer from flashing a console window on a .md
     # double-click. The launcher reattaches to the parent console at startup
     # (see internal/console/console_windows.go) so terminal use still works.

@@ -1,4 +1,4 @@
-// Command mdv is the Markdown Document Viewer launcher. It is pure Go with no
+// Command mdv is the Markdown Viewer launcher. It is pure Go with no
 // webview linkage, so it always starts - even in a headless container. Based on
 // the environment and flags it renders to the console, runs the terminal UI, or
 // spawns the bundled GUI helper (falling back automatically if the GUI cannot

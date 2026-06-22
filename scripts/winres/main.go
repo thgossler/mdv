@@ -16,7 +16,7 @@
 // directory, e.g.:
 //
 //	go run . -icon ../../images/icon.png -out ../../gui/rsrc_windows_amd64.syso \
-//	    -version 0.7.2 -description "Markdown Document Viewer (GUI)"
+//	    -version 0.7.2 -description "Markdown Viewer"
 package main
 
 import (

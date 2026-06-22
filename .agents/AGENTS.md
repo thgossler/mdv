@@ -1,7 +1,7 @@
 # AGENTS.md - Working on `mdv`
 
 Guidance for AI coding agents (and humans) contributing to **mdv**, the
-Markdown Document Viewer. Read this first; it captures the goals, the
+Markdown Viewer. Read this first; it captures the goals, the
 non-negotiable constraints, and the exact commands to build, run, and test.
 
 ## What mdv is
