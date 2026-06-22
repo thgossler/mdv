@@ -155,6 +155,20 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 				<string>net.daringfireball.markdown</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>MDX document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<!-- .mdx has no system UTI, so declare it by extension. This is what
+			     puts mdv in Finder's "Open With" submenu for .mdx files. -->
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>mdx</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

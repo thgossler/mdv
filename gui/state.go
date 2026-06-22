@@ -38,7 +38,12 @@ type LayoutState struct {
 	ExcludePatterns string `json:"excludePatterns"`
 	// ExcludeEnabled toggles whether the exclusion patterns are applied.
 	ExcludeEnabled bool `json:"excludeEnabled"`
-	Valid          bool `json:"valid"`
+	// FileAssocVersion records the OS file-manager integration scheme version
+	// last registered by the launcher (see core.EnsureFileAssociations). The GUI
+	// never sets it, but carries it through here so rewriting state.jsonc does
+	// not drop the marker and trigger needless re-registration.
+	FileAssocVersion int  `json:"fileAssocVersion"`
+	Valid            bool `json:"valid"`
 }
 
 func layoutStatePath() (string, error) {
