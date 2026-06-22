@@ -137,6 +137,7 @@ async function boot(): Promise<void> {
   wireMenuEvents();
   wireContextMenu();
   wireLiveReload();
+  wireFileDrop();
 
   if (info.update?.available) {
     els.statusMid.innerHTML = `Update ${escapeHtml(info.update.latest)} available - <a href="#" id="upd-link">download</a>`;
@@ -1239,6 +1240,72 @@ function wireLiveReload(): void {
       void openDocument(currentPath, false).then(() => (els.contentWrap.scrollTop = scroll));
     }
   });
+}
+
+// wireFileDrop listens for files/folders dropped onto the window (delivered by
+// the Go side, which alone can resolve real OS paths) and reopens mdv on the
+// dropped item in place.
+function wireFileDrop(): void {
+  Events.On("files:dropped", (ev: { data: string }) => {
+    const path = ev?.data;
+    if (typeof path === "string" && path) void reopenInput(path);
+  });
+}
+
+// reopenInput re-initialises the viewer with a newly dropped file or folder.
+// The backend re-resolves the input and returns a fresh workspace; live UI
+// settings (theme, zoom, panel widths, label mode, exclusions, window geometry,
+// sidebar visibility) are intentionally left untouched so the switch feels
+// seamless rather than a restart. Only content-scoped state (navigation
+// history, the active search) is reset for the new input.
+async function reopenInput(path: string): Promise<void> {
+  const next = await api.reinit(path);
+  if (!next || (next.kind === "file" && !next.path)) return;
+  info = next;
+  workspace = next.workspace ?? [];
+
+  history = [];
+  resetContentSearch();
+  clearSearch();
+  els.navFilter.value = "";
+  currentPath = "";
+  currentDir = next.dir;
+
+  // Recompute the navigator exclusion set against the new workspace; the
+  // user's patterns (a live setting) are preserved and reapplied.
+  excludedPaths = new Set();
+  if (excludeEnabled && els.navExclude.value.trim() !== "") {
+    await applyExcludes();
+  } else {
+    renderNav(visibleWorkspace());
+  }
+
+  if (next.kind === "file") {
+    await openDocument(next.path, false);
+    if (next.fragment) scrollToSlug(next.fragment);
+  } else {
+    // A dropped folder is meant for browsing, so make sure the navigator is
+    // visible even if it was collapsed for the previously viewed file.
+    els.sidebar.classList.remove("collapsed");
+    showFolderWelcome();
+    updateChrome();
+    highlightActiveNav();
+  }
+}
+
+// resetContentSearch returns the navigator to plain name-filter mode and drops
+// any streamed content-search results, so a freshly opened input starts clean.
+function resetContentSearch(): void {
+  searchGen++;
+  searchResults.clear();
+  searchKeywords = [];
+  cancelSearchRender();
+  if (contentSearchMode) {
+    contentSearchMode = false;
+    els.btnContentSearch.classList.remove("active");
+    els.btnContentSearch.title = "Search document content (off)";
+    els.navFilter.placeholder = "Filter documents…";
+  }
 }
 
 // --- helpers ----------------------------------------------------------------

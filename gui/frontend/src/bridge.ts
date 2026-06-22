@@ -30,6 +30,7 @@ export interface DocSearchResult {
 
 export const api = {
   init: (): Promise<InitInfo> => Bridge.Init(),
+  reinit: (path: string): Promise<InitInfo> => Bridge.Reinit(path),
   read: (path: string): Promise<DocumentDTO> => Bridge.ReadDocument(path),
   resolveLink: (raw: string, dir: string): Promise<LinkTargetDTO> => Bridge.ResolveLink(raw, dir),
   resolveAsset: (src: string, dir: string): Promise<string> => Bridge.ResolveAsset(src, dir),

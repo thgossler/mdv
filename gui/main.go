@@ -96,6 +96,10 @@ func runGUI() error {
 		MinHeight:        360,
 		BackgroundColour: application.NewRGB(255, 255, 255),
 		URL:              "/",
+		// Accept files/folders dragged from the OS so they can be opened in place
+		// (handled below via WindowFilesDropped). The frontend marks the drop zone
+		// with the data-file-drop-target attribute.
+		EnableFileDrop: true,
 		Mac: application.MacWindow{
 			// Keep this 0. A non-zero InvisibleTitleBarHeight makes Wails install a
 			// native left-mouse monitor that calls performWindowDragWithEvent
@@ -150,6 +154,18 @@ func runGUI() error {
 	}
 	win.OnWindowEvent(events.Common.WindowDidMove, func(*application.WindowEvent) { saveGeometry() })
 	win.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) { saveGeometry() })
+
+	// A file or folder dropped onto the window re-opens mdv on that input in
+	// place: the frontend calls Bridge.Reinit and reloads the content while
+	// keeping all live UI settings. Only the first item of a multi-file drop is
+	// used, since mdv views a single document or folder at a time.
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+		files := e.Context().DroppedFiles()
+		if len(files) == 0 {
+			return
+		}
+		app.Event.Emit("files:dropped", files[0])
+	})
 
 	if err := app.Run(); err != nil {
 		return err

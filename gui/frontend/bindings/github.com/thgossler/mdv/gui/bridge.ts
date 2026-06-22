@@ -69,6 +69,17 @@ export function ReadDocument(path: string): $CancellablePromise<$models.Document
 }
 
 /**
+ * Reinit re-resolves path as the program's input and refreshes the workspace
+ * listing, so a file or folder dropped onto the window replaces what mdv is
+ * viewing without restarting the process. It returns fresh bootstrap info (the
+ * network update check is skipped); live UI settings are preserved by the
+ * frontend. An unreadable selection leaves the current input unchanged.
+ */
+export function Reinit(path: string): $CancellablePromise<$models.InitInfo> {
+    return $Call.ByID(4013319924, path);
+}
+
+/**
  * ResetLayout restores the window to its default size (centered) and the side
  * panels to their default widths, persisting the result. It returns the default
  * panel widths so the frontend can update its CSS variables.

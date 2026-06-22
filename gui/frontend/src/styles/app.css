@@ -33,6 +33,19 @@ body {
   visibility: hidden;
 }
 
+/* Drag-and-drop hint: the Wails runtime adds `file-drop-target-active` to the
+   drop target (the #app element) while a file/folder is dragged over the window.
+   Show an inset accent border so the user knows a drop will reopen mdv on it. */
+#app.file-drop-target-active::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+  border: 3px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 /* Native window-resize handles -------------------------------------------- */
 /* Secondary guard for the JS drag path: the `--wails-draggable: drag` toolbar
    would otherwise let a mousemove starting in the top few pixels move the window

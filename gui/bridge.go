@@ -127,6 +127,34 @@ func (b *Bridge) Init() InitInfo {
 	}
 }
 
+// Reinit re-resolves path as the program's input and refreshes the workspace
+// listing, so a file or folder dropped onto the window replaces what mdv is
+// viewing without restarting the process. It returns fresh bootstrap info (the
+// network update check is skipped); live UI settings are preserved by the
+// frontend. An unreadable selection leaves the current input unchanged.
+func (b *Bridge) Reinit(path string) InitInfo {
+	if in, err := core.ResolveInput(path); err == nil && in.Kind != core.InputNone {
+		b.input = in
+		b.workspace, _ = core.ListMarkdownFiles(in.Dir, b.cfg)
+		core.PopulateTitles(b.workspace)
+	}
+	kind := "file"
+	if b.input.Kind == core.InputFolder {
+		kind = "folder"
+	}
+	return InitInfo{
+		Kind:      kind,
+		Path:      b.input.Path,
+		Dir:       b.input.Dir,
+		Fragment:  b.input.Fragment,
+		AppName:   core.AppName,
+		Version:   core.Version,
+		Config:    b.cfg,
+		Workspace: b.workspaceDTO(),
+		Layout:    b.layoutDTO(),
+	}
+}
+
 // layoutDTO returns the persisted side-panel widths, substituting defaults for
 // any unset (zero) value.
 func (b *Bridge) layoutDTO() LayoutDTO {
