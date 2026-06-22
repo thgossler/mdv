@@ -23,6 +23,17 @@
   </p>
 </div>
 
+> **For non-developers**
+>
+> Open Markdown like any other document - cleanly, safely, and without editing
+> tools getting in the way.
+
+> **For developers**
+>
+> Browse an entire local Markdown documentation set like a website, with linked
+> navigation, rich rendering, and cross-document search - without building or
+> serving anything.
+
 `mdv` adapts to wherever it runs:
 
 - **GUI** - a native-webview window with full rendering (default on desktops).
