@@ -76,6 +76,18 @@ let excludeEnabled = false;
 let excludedPaths = new Set<string>();
 let excludeDebounce: number | undefined;
 
+// --- security state ---------------------------------------------------------
+// Remote (http/https) images are blocked by default so a document received from
+// someone else cannot silently phone home (tracking pixels, IP/User-Agent
+// leakage) on open. The toolbar button flips this for the current session only;
+// it is intentionally NOT persisted, so every restart starts blocked again.
+let remoteImagesEnabled = false;
+// When the user ticks "allow for this session" in the external-link prompt we
+// stop asking for the rest of the session (also reset on restart).
+let sessionAllowExternal = false;
+// Resolver for the currently open external-link confirmation prompt, if any.
+let pendingExternalResolve: ((ok: boolean) => void) | null = null;
+
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const els = {
@@ -100,6 +112,7 @@ const els = {
   btnForward: $<HTMLButtonElement>("btn-forward"),
   btnHistory: $<HTMLButtonElement>("btn-history"),
   btnExtended: $<HTMLButtonElement>("btn-extended"),
+  btnRemoteImg: $<HTMLButtonElement>("btn-remote-img"),
   historyMenu: $("history-menu"),
   contextMenu: $("context-menu"),
   searchBar: $("search-bar"),
@@ -305,8 +318,18 @@ async function resolveAssets(): Promise<void> {
     nodes.map(async (el) => {
       const attr = el.tagName === "VIDEO" ? "poster" : "src";
       const ref = el.getAttribute(attr) || "";
-      if (!ref || /^[a-z][a-z0-9+.-]+:/i.test(ref) || ref.startsWith("//") || ref.startsWith("#")) {
-        return; // absolute URL, data URI or empty - nothing to resolve
+      if (!ref || ref.startsWith("#")) {
+        return; // empty or in-document fragment - nothing to resolve
+      }
+      if (isRemoteRef(ref)) {
+        // Remote media is deferred to the per-session policy: stash the original
+        // URL and only set src when the user has opted in for this session.
+        el.setAttribute("data-remote-src", ref);
+        applyRemotePolicyTo(el, attr);
+        return;
+      }
+      if (/^[a-z][a-z0-9+.-]+:/i.test(ref)) {
+        return; // data:, blob:, file: - already inline/local, nothing to fetch
       }
       try {
         const dataUri = await api.resolveAsset(ref, currentDir);
@@ -316,6 +339,99 @@ async function resolveAssets(): Promise<void> {
       }
     })
   );
+  updateRemoteImgIndicator();
+}
+
+// isRemoteRef reports whether a media reference points at the network: an
+// http(s) URL or a protocol-relative URL (//host/…). data:/blob:/file: and
+// relative paths are local.
+function isRemoteRef(ref: string): boolean {
+  return /^https?:/i.test(ref) || ref.startsWith("//");
+}
+
+// applyRemotePolicyTo shows or hides a single remote media element according to
+// the current session policy. Blocked elements keep their URL in
+// data-remote-src so toggling the toolbar button can reveal them without a
+// re-render.
+function applyRemotePolicyTo(el: HTMLElement, attr: string): void {
+  const remote = el.getAttribute("data-remote-src");
+  if (!remote) return;
+  if (remoteImagesEnabled) {
+    el.setAttribute(attr, remote);
+    el.classList.remove("remote-blocked");
+  } else {
+    el.removeAttribute(attr);
+    el.classList.add("remote-blocked");
+    if (el.tagName === "IMG" && !(el.getAttribute("alt") || "").trim()) {
+      el.setAttribute("alt", "Remote image blocked \u2014 click the \u25a6 toolbar button to load");
+    }
+  }
+}
+
+// applyRemoteImagePolicy re-applies the current session policy to every deferred
+// remote media element in the document (used when the toolbar toggle changes).
+function applyRemoteImagePolicy(): void {
+  const nodes = Array.from(els.content.querySelectorAll<HTMLElement>("[data-remote-src]"));
+  for (const el of nodes) {
+    const attr = el.tagName === "VIDEO" ? "poster" : "src";
+    applyRemotePolicyTo(el, attr);
+  }
+}
+
+// toggleRemoteImages flips remote-image loading for the current session only
+// (reset on restart, never persisted).
+function toggleRemoteImages(): void {
+  remoteImagesEnabled = !remoteImagesEnabled;
+  els.btnRemoteImg.classList.toggle("active", remoteImagesEnabled);
+  applyRemoteImagePolicy();
+  updateRemoteImgIndicator();
+  flashStatus(
+    remoteImagesEnabled ? "Remote images enabled for this session" : "Remote images blocked"
+  );
+}
+
+// updateRemoteImgIndicator reflects whether the current document actually has
+// blocked remote media: when it does (and loading is still off) the toolbar
+// button switches to an alert state (red + "!" badge) so the user notices that
+// something was withheld, rather than silently seeing a document with gaps.
+function updateRemoteImgIndicator(): void {
+  const blocked = !remoteImagesEnabled && els.content.querySelector(".remote-blocked") !== null;
+  els.btnRemoteImg.classList.toggle("alert", blocked);
+  if (blocked) {
+    els.btnRemoteImg.title =
+      "Remote images are BLOCKED in this document. Click to load them for this session (reset on restart).";
+  } else if (remoteImagesEnabled) {
+    els.btnRemoteImg.title = "Remote images are loaded for this session. Click to block them again.";
+  } else {
+    els.btnRemoteImg.title =
+      "Remote images are blocked. Click to load remote images for this session (reset on restart).";
+  }
+}
+
+// confirmExternal asks the user to confirm before an external link is opened in
+// another application. Resolves true when the user approves. Once the user opts
+// to allow external links for the session, it resolves immediately.
+function confirmExternal(url: string): Promise<boolean> {
+  if (sessionAllowExternal) return Promise.resolve(true);
+  const modal = $("external-modal");
+  $("external-modal-url").textContent = url;
+  modal.classList.remove("hidden");
+  ($("external-modal-open") as HTMLButtonElement).focus();
+  return new Promise<boolean>((resolve) => {
+    pendingExternalResolve = resolve;
+  });
+}
+
+// closeExternalModal hides the prompt and settles the pending confirmation.
+function closeExternalModal(ok: boolean): void {
+  if (pendingExternalResolve === null) return;
+  const remember = $<HTMLInputElement>("external-modal-remember");
+  if (ok && remember.checked) sessionAllowExternal = true;
+  $("external-modal").classList.add("hidden");
+  remember.checked = false;
+  const resolve = pendingExternalResolve;
+  pendingExternalResolve = null;
+  resolve(ok);
 }
 
 function fillAdoTocPlaceholders(headings: { level: number; text: string; slug: string }[]): void {
@@ -375,7 +491,9 @@ els.content.addEventListener("click", async (e) => {
     case "http":
     case "mailto":
     case "file":
-      await api.openExternal(res.resolved);
+      if (await confirmExternal(res.resolved)) {
+        await api.openExternal(res.resolved);
+      }
       break;
     case "broken":
       flashStatus(`Broken link: ${res.raw}`);
@@ -914,6 +1032,14 @@ function wireToolbar(): void {
   $("btn-mono").addEventListener("click", () => document.body.classList.toggle("mono"));
   $("btn-width").addEventListener("click", toggleContentWidth);
   els.btnExtended.addEventListener("click", () => void toggleExtendedSyntax());
+  els.btnRemoteImg.addEventListener("click", toggleRemoteImages);
+
+  // External-link confirmation prompt wiring.
+  $("external-modal-open").addEventListener("click", () => closeExternalModal(true));
+  $("external-modal-cancel").addEventListener("click", () => closeExternalModal(false));
+  $("external-modal").addEventListener("click", (e) => {
+    if (e.target === $("external-modal")) closeExternalModal(false);
+  });
 
   // Double-clicking the title-bar area performs the OS window action (zoom on
   // macOS, maximise/restore elsewhere), matching native window behaviour.
@@ -1511,6 +1637,12 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     showSearch(els.searchBar, els.searchInput);
   } else if (e.key === "Escape") {
+    // An open external-link prompt takes priority and is treated as Cancel.
+    if (!$("external-modal").classList.contains("hidden")) {
+      e.preventDefault();
+      closeExternalModal(false);
+      return;
+    }
     els.contextMenu.classList.add("hidden");
     els.historyMenu.classList.add("hidden");
   } else if (

@@ -531,6 +531,8 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "m":
 		m.toggleMeta()
 		return *m, nil
+	case "i":
+		return m.toggleRemoteImages()
 	case "/":
 		m.focus = focusSearch
 		m.searchInput = ""
@@ -1025,6 +1027,24 @@ func (m *Model) toggleExtendedSyntax() {
 	}
 }
 
+// toggleRemoteImages flips fetching of remote (http(s)) images for the current
+// session only. It is intentionally not persisted, so every launch starts with
+// remote images blocked; a document from an untrusted source therefore cannot
+// silently fetch remote content until the user opts in with the 'i' key.
+func (m *Model) toggleRemoteImages() (tea.Model, tea.Cmd) {
+	m.cfg.ImagesRemote = !m.cfg.ImagesRemote
+	if m.imgRenderer != nil {
+		m.imgRenderer.SetAllowRemote(m.cfg.ImagesRemote)
+	}
+	if m.cfg.ImagesRemote {
+		m.statusMsg = "Remote images: ON (this session)"
+	} else {
+		m.statusMsg = "Remote images: OFF"
+	}
+	m.rerender()
+	return *m, m.prewarmImagesCmd()
+}
+
 // per session. Title extraction opens and scans every markdown file, so it must
 // not run on content-independent UI actions (showing the navigator, toggling the
 // label mode back and forth): repeating that file scan is what an external
@@ -1461,9 +1481,9 @@ func (m Model) statusBar() string {
 	case navActive:
 		hints = "^b:nav  tab:switch  enter:open  /:filter  //:content(all files)  t:titles  x:ext  q:quit"
 	case m.showList:
-		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "x:ext  q:quit"
+		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  x:ext  q:quit"
 	default:
-		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "x:ext  q:quit"
+		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  x:ext  q:quit"
 	}
 
 	status := m.statusMsg

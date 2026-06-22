@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' 'unsafe-inline' data: blob:; img-src 'self' data: blob: file: http: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+      content="default-src 'self' data: blob:; img-src 'self' data: blob: file: http: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-src 'none';"
     />
     <title>mdv</title>
   </head>
@@ -30,6 +30,7 @@
         </div>
         <div id="doc-title" class="doc-title"></div>
         <div class="toolbar-right">
+          <button id="btn-remote-img" class="tb-btn" title="Remote images are blocked. Click to load remote images for this session (reset on restart).">▦</button>
           <button id="btn-extended" class="tb-btn" title="Toggle extended Markdown syntax (math, sub/sup, highlight)">∑</button>
           <button id="btn-mono" class="tb-btn" title="Toggle monospace">M</button>
           <button id="btn-width" class="tb-btn" title="Toggle full width">↔</button>
@@ -117,6 +118,22 @@
       </footer>
 
       <div id="context-menu" class="context-menu hidden"></div>
+
+      <div id="external-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="external-modal-title">
+        <div class="modal-box">
+          <div id="external-modal-title" class="modal-title">Open external link?</div>
+          <div class="modal-text">This will open the following destination in an external application:</div>
+          <div id="external-modal-url" class="modal-url"></div>
+          <label class="modal-remember">
+            <input id="external-modal-remember" type="checkbox" />
+            Allow external links for this session without asking
+          </label>
+          <div class="modal-actions">
+            <button id="external-modal-cancel" class="modal-btn">Cancel</button>
+            <button id="external-modal-open" class="modal-btn modal-btn-primary">Open</button>
+          </div>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -31,9 +31,10 @@ type Defaults struct {
 	//   "blocks"   force the Unicode half-block renderer
 	//   "off"      show alt text only
 	Images string `json:"images"`
-	// ImagesRemote allows fetching http(s) images in the console/TUI. On by
-	// default; failures (no network, restricted environments) fall back to alt
-	// text. Set to false to disable remote fetches entirely.
+	// ImagesRemote allows fetching http(s) images in the console/TUI. Off by
+	// default so a document from an untrusted source cannot silently fetch remote
+	// content (tracking pixels, IP/User-Agent leakage); enable it explicitly here
+	// or toggle it for the session in the TUI with the 'i' key.
 	ImagesRemote bool `json:"imagesRemote"`
 
 	// Updates.
@@ -84,7 +85,7 @@ func DefaultSettings() Defaults {
 		MaxZoom:        3.0,
 
 		Images:       "auto",
-		ImagesRemote: true,
+		ImagesRemote: false,
 
 		CheckForUpdates:  true,
 		UpdateRepo:       "thgossler/mdv",

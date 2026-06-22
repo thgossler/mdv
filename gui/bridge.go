@@ -429,11 +429,41 @@ func (b *Bridge) ResolveLink(raw, currentDir string) LinkTargetDTO {
 }
 
 // OpenExternal opens a URL or non-markdown file with the OS default handler.
+// As a defense-in-depth backstop (the frontend already confirms with the user),
+// only a small allow-list of schemes is permitted so a crafted document cannot
+// hand an arbitrary scheme (e.g. an app-launching custom protocol) to the OS.
 func (b *Bridge) OpenExternal(target string) string {
+	if !isAllowedExternalTarget(target) {
+		return "blocked: unsupported link type"
+	}
 	if err := core.OpenInOS(target); err != nil {
 		return err.Error()
 	}
 	return ""
+}
+
+// isAllowedExternalTarget reports whether target is safe to hand to the OS
+// handler: a local filesystem path, or a URL using an http/https/mailto/file
+// scheme. Anything else (custom app schemes, javascript:, etc.) is rejected.
+func isAllowedExternalTarget(target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		// Unparseable but non-empty: treat as a local path (e.g. Windows paths).
+		return !strings.Contains(target, "://")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "", "file":
+		// No scheme => relative/absolute local path; file:// => local file.
+		return true
+	case "http", "https", "mailto":
+		return true
+	default:
+		return false
+	}
 }
 
 // WatchFile switches the live-reload watcher to the given document.

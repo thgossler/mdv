@@ -3,6 +3,9 @@
 .markdown-body {
   color: var(--fg);
   word-wrap: break-word;
+  /* "Box with outgoing arrow" glyph used as a mask for the external-link icon
+     (recoloured to currentColor via mask). */
+  --external-link-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='black' d='M9 2h5v5h-1.5V4.56L6.53 10.53 5.47 9.47 11.44 3.5H9V2Z'/%3E%3Cpath fill='black' d='M3 4h4v1.5H4.5v6H10.5V9H12v4H3V4Z'/%3E%3C/svg%3E");
 }
 
 .markdown-body > *:first-child {
@@ -79,6 +82,20 @@
 }
 .markdown-body a:hover {
   text-decoration: underline;
+}
+/* External links (http(s)/mailto/protocol-relative) get a small leading icon so
+   it is obvious at a glance which links leave the local workspace. */
+.markdown-body a.external-link::before {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.25em;
+  vertical-align: -0.02em;
+  background-color: currentColor;
+  -webkit-mask: var(--external-link-icon) center / contain no-repeat;
+  mask: var(--external-link-icon) center / contain no-repeat;
+  opacity: 0.85;
 }
 .markdown-body a.wikilink-broken,
 .markdown-body a.broken {

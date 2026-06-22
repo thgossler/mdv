@@ -78,9 +78,36 @@ function build(extended: boolean): MarkdownIt {
 
   // Infrastructure plugins (heading slugs/TOC + source-line mapping) must run
   // last and are always present.
-  instance.use(anchorsPlugin).use(sourceLinesPlugin);
+  instance.use(anchorsPlugin).use(externalLinkPlugin).use(sourceLinesPlugin);
 
   return instance;
+}
+
+// externalLinkPlugin tags links that point at an external destination (an
+// absolute http(s)/mailto/protocol-relative URL) with a marker class so the
+// stylesheet can render a small "external" icon, making it obvious at a glance
+// which links leave the local workspace.
+function externalLinkPlugin(md: MarkdownIt): void {
+  const defaultRender =
+    md.renderer.rules.link_open ||
+    ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+  md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const href = token.attrGet("href") || "";
+    if (isExternalHref(href)) {
+      const existing = token.attrGet("class");
+      token.attrSet("class", existing ? `${existing} external-link` : "external-link");
+    }
+    return defaultRender(tokens, idx, options, env, self);
+  };
+}
+
+// isExternalHref reports whether a link target leaves the local workspace: an
+// absolute URL with a scheme (http:, https:, mailto:, ftp:, …) or a
+// protocol-relative URL (//host/…). Relative paths and in-document fragments
+// (#anchor) are local.
+function isExternalHref(href: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("//");
 }
 
 // highlightCode renders fenced code with highlight.js, leaving mermaid/csv/tsv
@@ -115,13 +142,23 @@ configurePurify();
 
 const ALLOWED_TAGS_EXTRA = [
   "kbd", "sub", "sup", "mark", "ins", "del", "details", "summary",
-  "video", "source", "iframe", "input", "abbr", "figure", "figcaption",
+  "video", "source", "input", "abbr", "figure", "figcaption",
 ];
 const ALLOWED_ATTR_EXTRA = [
   "class", "id", "data-slug", "data-lang", "data-wikilink", "data-external",
-  "data-ado-toc", "data-source-line", "align", "controls", "preload", "frameborder",
+  "data-ado-toc", "data-source-line", "align", "controls", "preload",
   "allowfullscreen", "loading", "type", "checked", "disabled", "colspan", "rowspan",
 ];
+// Tags that must never survive sanitisation, even if some plugin or future
+// allow-list change would otherwise admit them. <iframe>/<object>/<embed> can
+// load and execute arbitrary remote content; <script>/<style> can run code or
+// exfiltrate via CSS; <form>/<base> can redirect actions or rewrite relative
+// URLs. This is the core "no JavaScript / no unsafe HTML" guarantee for
+// documents that may come from an untrusted source.
+const FORBID_TAGS = ["script", "style", "iframe", "object", "embed", "base", "form"];
+// srcdoc would let an allowed element smuggle an inline document; on* handlers
+// are stripped by DOMPurify already but listed here as belt-and-braces.
+const FORBID_ATTR = ["srcdoc"];
 
 // render parses markdown and returns sanitised HTML plus extracted metadata.
 // When `extended` is true the opt-in inline extensions (math, sub/sup, mark,
@@ -134,6 +171,8 @@ export function render(markdown: string, extended = false): RenderResult {
   const clean = DOMPurify.sanitize(rawHtml, {
     ADD_TAGS: ALLOWED_TAGS_EXTRA,
     ADD_ATTR: ALLOWED_ATTR_EXTRA,
+    FORBID_TAGS,
+    FORBID_ATTR,
     ALLOW_DATA_ATTR: true,
     ADD_URI_SAFE_ATTR: ["data-wikilink"],
   });

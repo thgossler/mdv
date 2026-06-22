@@ -114,9 +114,10 @@ export interface Defaults {
     "images": string;
 
     /**
-     * ImagesRemote allows fetching http(s) images in the console/TUI. On by
-     * default; failures (no network, restricted environments) fall back to alt
-     * text. Set to false to disable remote fetches entirely.
+     * ImagesRemote allows fetching http(s) images in the console/TUI. Off by
+     * default so a document from an untrusted source cannot silently fetch remote
+     * content (tracking pixels, IP/User-Agent leakage); enable it explicitly here
+     * or toggle it for the session in the TUI with the 'i' key.
      */
     "imagesRemote": boolean;
 

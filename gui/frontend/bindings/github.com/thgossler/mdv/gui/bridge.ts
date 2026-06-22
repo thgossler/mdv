@@ -46,6 +46,9 @@ export function Init(): $CancellablePromise<$models.InitInfo> {
 
 /**
  * OpenExternal opens a URL or non-markdown file with the OS default handler.
+ * As a defense-in-depth backstop (the frontend already confirms with the user),
+ * only a small allow-list of schemes is permitted so a crafted document cannot
+ * hand an arbitrary scheme (e.g. an app-launching custom protocol) to the OS.
  */
 export function OpenExternal(target: string): $CancellablePromise<string> {
     return $Call.ByID(1764564136, target);

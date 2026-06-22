@@ -88,6 +88,38 @@ func (r *Renderer) SetDeferLoad(v bool) {
 	r.mu.Unlock()
 }
 
+// SetAllowRemote toggles fetching of http(s) images at runtime. When remote
+// loading is turned on, cached remote entries (which may hold a "blocked"
+// failure from while it was off) are dropped so a follow-up Prefetch/render can
+// load them. The TUI uses this for its session-only remote-image toggle.
+func (r *Renderer) SetAllowRemote(v bool) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.allowRemote == v {
+		return
+	}
+	r.allowRemote = v
+	for key := range r.cache {
+		if isRemoteSrc(key) {
+			delete(r.cache, key)
+		}
+	}
+}
+
+// AllowRemote reports whether remote (http(s)) image fetching is currently
+// enabled.
+func (r *Renderer) AllowRemote() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.allowRemote
+}
+
 // cacheKey returns the cache key for src. Remote URLs and data URIs are
 // self-identifying and shared across documents; file paths are namespaced by
 // the current base directory so the same relative name in different folders
@@ -116,13 +148,14 @@ func (r *Renderer) decode(src string) (Decoded, error) {
 	}
 	deferLoad := r.deferLoad
 	baseDir := r.baseDir
+	allowRemote := r.allowRemote
 	r.mu.Unlock()
 
 	if deferLoad && !strings.HasPrefix(src, "data:") {
 		return Decoded{}, errDeferred
 	}
 
-	dec, err := LoadDecoded(src, LoadOptions{BaseDir: baseDir, AllowRemote: r.allowRemote})
+	dec, err := LoadDecoded(src, LoadOptions{BaseDir: baseDir, AllowRemote: allowRemote})
 
 	r.mu.Lock()
 	r.cache[key] = cacheEntry{dec: dec, err: err}
@@ -269,6 +302,7 @@ func (r *Renderer) Prefetch(srcs []string) {
 		r.mu.Lock()
 		_, done := r.cache[key]
 		baseDir := r.baseDir
+		allowRemote := r.allowRemote
 		r.mu.Unlock()
 		if done {
 			continue
@@ -276,14 +310,14 @@ func (r *Renderer) Prefetch(srcs []string) {
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(src, key, baseDir string) {
+		go func(src, key, baseDir string, allowRemote bool) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			dec, err := LoadDecoded(src, LoadOptions{BaseDir: baseDir, AllowRemote: r.allowRemote})
+			dec, err := LoadDecoded(src, LoadOptions{BaseDir: baseDir, AllowRemote: allowRemote})
 			r.mu.Lock()
 			r.cache[key] = cacheEntry{dec: dec, err: err}
 			r.mu.Unlock()
-		}(s, key, baseDir)
+		}(s, key, baseDir, allowRemote)
 	}
 	wg.Wait()
 }
