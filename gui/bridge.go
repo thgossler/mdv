@@ -76,6 +76,11 @@ type InitInfo struct {
 	Workspace []DocFileDTO  `json:"workspace"`
 	Update    UpdateDTO     `json:"update"`
 	Layout    LayoutDTO     `json:"layout"`
+	// ExtendedSyntax is the effective state of the opt-in "extended" inline
+	// Markdown syntax (math, sub/sup, highlight, inserted): the persisted runtime
+	// choice from state.jsonc if the user ever toggled it, otherwise the
+	// settings.jsonc default.
+	ExtendedSyntax bool `json:"extendedSyntax"`
 }
 
 // LayoutDTO carries the persisted side-panel widths (in pixels) so the frontend
@@ -124,6 +129,7 @@ func (b *Bridge) Init() InitInfo {
 		Workspace: b.workspaceDTO(),
 		Update:    b.checkUpdate(),
 		Layout:    b.layoutDTO(),
+		ExtendedSyntax: b.effectiveExtendedSyntax(),
 	}
 }
 
@@ -152,6 +158,7 @@ func (b *Bridge) Reinit(path string) InitInfo {
 		Config:    b.cfg,
 		Workspace: b.workspaceDTO(),
 		Layout:    b.layoutDTO(),
+		ExtendedSyntax: b.effectiveExtendedSyntax(),
 	}
 }
 
@@ -183,6 +190,27 @@ func (b *Bridge) layoutDTO() LayoutDTO {
 func (b *Bridge) SaveLayout(sidebarWidth, tocWidth int) {
 	if b.layout != nil {
 		b.layout.UpdatePanels(sidebarWidth, tocWidth)
+	}
+}
+
+// effectiveExtendedSyntax resolves the extended-syntax toggle: the persisted
+// runtime choice from state.jsonc takes precedence when present, otherwise the
+// settings.jsonc default is used.
+func (b *Bridge) effectiveExtendedSyntax() bool {
+	if b.layout != nil {
+		if p := b.layout.Get().ExtendedSyntax; p != nil {
+			return *p
+		}
+	}
+	return b.cfg.EnableExtendedSyntax
+}
+
+// SaveExtendedSyntax persists the user's runtime choice for the extended inline
+// Markdown syntax toggle to state.jsonc so it is restored on the next launch
+// and shared with the terminal UI.
+func (b *Bridge) SaveExtendedSyntax(enabled bool) {
+	if b.layout != nil {
+		b.layout.UpdateExtendedSyntax(enabled)
 	}
 }
 

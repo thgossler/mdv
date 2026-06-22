@@ -45,6 +45,13 @@ let detachScrollSpy: (() => void) | null = null;
 let currentDocName = "";
 let currentDocTitle = "";
 
+// Extended ("character-stealing") inline Markdown syntax (math, sub/sup, mark,
+// ins). Off by default; toggled live from the toolbar and persisted in
+// state.jsonc. `lastRendered` keeps the current document's source so toggling
+// can re-render it without a round-trip to the backend.
+let extendedSyntax = false;
+let lastRendered: { markdown: string; name: string; path: string } | null = null;
+
 // --- content-search state ---------------------------------------------------
 // When enabled, the navigator filter box searches document *content* (not just
 // names): each matching document is shown with its in-document matches nested
@@ -92,6 +99,7 @@ const els = {
   btnBack: $<HTMLButtonElement>("btn-back"),
   btnForward: $<HTMLButtonElement>("btn-forward"),
   btnHistory: $<HTMLButtonElement>("btn-history"),
+  btnExtended: $<HTMLButtonElement>("btn-extended"),
   historyMenu: $("history-menu"),
   contextMenu: $("context-menu"),
   searchBar: $("search-bar"),
@@ -106,6 +114,8 @@ async function boot(): Promise<void> {
   labelMode = info.config.navLabelMode === "title" ? "title" : "filename";
 
   applyConfigStyles();
+  extendedSyntax = info.extendedSyntax === true;
+  els.btnExtended.classList.toggle("active", extendedSyntax);
   applyLayout(info.layout);
   initTheme((info.config.theme as ThemeMode) || "system");
   onThemeChange(() => rerenderMermaidForTheme());
@@ -205,6 +215,7 @@ async function openDocument(
 
 async function renderInto(markdown: string, name: string, path: string): Promise<void> {
   clearSearch();
+  lastRendered = { markdown, name, path };
 
   // `.mmd` files render as a standalone diagram.
   if (/\.mmd$/i.test(path)) {
@@ -217,7 +228,7 @@ async function renderInto(markdown: string, name: string, path: string): Promise
   }
 
   const fm = extractFrontmatter(markdown);
-  const result = render(fm.body);
+  const result = render(fm.body, extendedSyntax);
   els.content.innerHTML = renderFrontmatter(fm.data) + result.html;
 
   currentDocName = name;
@@ -902,6 +913,7 @@ function wireToolbar(): void {
   $("btn-labels").addEventListener("click", toggleLabels);
   $("btn-mono").addEventListener("click", () => document.body.classList.toggle("mono"));
   $("btn-width").addEventListener("click", toggleContentWidth);
+  els.btnExtended.addEventListener("click", () => void toggleExtendedSyntax());
 
   // Double-clicking the title-bar area performs the OS window action (zoom on
   // macOS, maximise/restore elsewhere), matching native window behaviour.
@@ -1188,6 +1200,21 @@ function toggleContentWidth(): void {
   const btn = $("btn-width");
   btn.classList.toggle("active", full);
   btn.title = full ? "Limit content width" : "Toggle full width";
+}
+
+// toggleExtendedSyntax flips the opt-in "extended" inline Markdown syntax
+// (math, sub/sup, highlight, inserted), re-renders the current document with
+// the new setting, and persists the choice to state.jsonc so it is restored on
+// the next launch (and shared with the terminal UI).
+async function toggleExtendedSyntax(): Promise<void> {
+  extendedSyntax = !extendedSyntax;
+  els.btnExtended.classList.toggle("active", extendedSyntax);
+  void api.saveExtendedSyntax(extendedSyntax);
+  if (lastRendered) {
+    const scroll = els.contentWrap.scrollTop;
+    await renderInto(lastRendered.markdown, lastRendered.name, lastRendered.path);
+    els.contentWrap.scrollTop = scroll;
+  }
 }
 
 function currentFilter(): DocFileDTO[] {

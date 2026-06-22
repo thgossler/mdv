@@ -50,6 +50,16 @@ type Defaults struct {
 	EnableAlerts      bool `json:"enableAlerts"`
 	EnableAzureDevOps bool `json:"enableAzureDevOps"`
 
+	// EnableExtendedSyntax turns on the "character-stealing" inline extensions
+	// that are off by default because they can silently transform ordinary
+	// prose: math ($...$, $$...$$, ```math), subscript (~x~), superscript (^x^),
+	// highlight (==x==) and inserted (++x++). All other extensions stay on. This
+	// is the default value; users can flip it live (GUI toolbar button / TUI 'x'
+	// shortcut), in which case the runtime choice is persisted in state.jsonc and
+	// takes precedence over this setting. Only affects the GUI renderer; the
+	// terminal engine cannot render these constructs.
+	EnableExtendedSyntax bool `json:"enableExtendedSyntax"`
+
 	// Files recognised as markdown documents in folder navigation.
 	MarkdownExtensions []string `json:"markdownExtensions"`
 }
@@ -87,6 +97,8 @@ func DefaultSettings() Defaults {
 		EnableFootnotes:   true,
 		EnableAlerts:      true,
 		EnableAzureDevOps: true,
+
+		EnableExtendedSyntax: false,
 
 		MarkdownExtensions: []string{".md", ".markdown", ".mdown", ".mkd", ".mmd"},
 	}

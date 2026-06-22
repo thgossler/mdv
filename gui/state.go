@@ -38,6 +38,12 @@ type LayoutState struct {
 	ExcludePatterns string `json:"excludePatterns"`
 	// ExcludeEnabled toggles whether the exclusion patterns are applied.
 	ExcludeEnabled bool `json:"excludeEnabled"`
+	// ExtendedSyntax is the user's runtime choice for the opt-in "extended"
+	// inline Markdown syntax (math, sub/sup, highlight, inserted), shared with the
+	// terminal UI. A nil pointer means "never toggled" so the settings.jsonc
+	// default applies; a non-nil value overrides it. omitempty keeps it out of
+	// the file until the user actually flips the toggle.
+	ExtendedSyntax *bool `json:"extendedSyntax,omitempty"`
 	// FileAssocVersion records the OS file-manager integration scheme version
 	// last registered by the launcher (see core.EnsureFileAssociations). The GUI
 	// never sets it, but carries it through here so rewriting state.jsonc does
@@ -151,6 +157,15 @@ func (s *LayoutStore) UpdateExcludes(patterns string, enabled bool) {
 	s.mu.Lock()
 	s.st.ExcludePatterns = patterns
 	s.st.ExcludeEnabled = enabled
+	s.scheduleLocked()
+	s.mu.Unlock()
+}
+
+// UpdateExtendedSyntax records the user's extended-syntax toggle choice and
+// schedules a save.
+func (s *LayoutStore) UpdateExtendedSyntax(enabled bool) {
+	s.mu.Lock()
+	s.st.ExtendedSyntax = &enabled
 	s.scheduleLocked()
 	s.mu.Unlock()
 }

@@ -109,6 +109,15 @@ export function ResolveLink(raw: string, currentDir: string): $CancellablePromis
 }
 
 /**
+ * SaveExtendedSyntax persists the user's runtime choice for the extended inline
+ * Markdown syntax toggle to state.jsonc so it is restored on the next launch
+ * and shared with the terminal UI.
+ */
+export function SaveExtendedSyntax(enabled: boolean): $CancellablePromise<void> {
+    return $Call.ByID(1123759844, enabled);
+}
+
+/**
  * SaveLayout records the current side-panel widths (in pixels). The store
  * debounces the write, so the frontend may call this freely on every drag.
  */

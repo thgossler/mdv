@@ -43,6 +43,14 @@ export interface InitInfo {
     "workspace": DocFileDTO[] | null;
     "update": UpdateDTO;
     "layout": LayoutDTO;
+
+    /**
+     * ExtendedSyntax is the effective state of the opt-in "extended" inline
+     * Markdown syntax (math, sub/sup, highlight, inserted): the persisted runtime
+     * choice from state.jsonc if the user ever toggled it, otherwise the
+     * settings.jsonc default.
+     */
+    "extendedSyntax": boolean;
 }
 
 /**

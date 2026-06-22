@@ -222,6 +222,17 @@ const defaultConfigTemplate = `// mdv - Markdown Viewer - user settings (JSONC).
 
   "liveReload": true,
 
+  // Enable "extended" inline Markdown syntax that is off by default because it
+  // can silently transform ordinary prose (e.g. "$5 to $10" as math):
+  //   math ($...$, $$...$$, ` + "```" + `math), subscript (~x~), superscript (^x^),
+  //   highlight (==x==), inserted (++x++).
+  // All other extensions (tables, task lists, footnotes, alerts, mermaid,
+  // emoji, wikilinks, ...) are always on. You can also toggle this live in the
+  // GUI (toolbar button) or TUI ('x'); the runtime choice is remembered in
+  // state.jsonc and overrides this setting. GUI only — the terminal engine
+  // cannot render these constructs.
+  "enableExtendedSyntax": false,
+
   "checkForUpdates": true,
   "updateCheckHours": 24
 }

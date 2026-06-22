@@ -147,6 +147,18 @@ export interface Defaults {
     "enableAzureDevOps": boolean;
 
     /**
+     * EnableExtendedSyntax turns on the "character-stealing" inline extensions
+     * that are off by default because they can silently transform ordinary
+     * prose: math ($...$, $$...$$, ```math), subscript (~x~), superscript (^x^),
+     * highlight (==x==) and inserted (++x++). All other extensions stay on. This
+     * is the default value; users can flip it live (GUI toolbar button / TUI 'x'
+     * shortcut), in which case the runtime choice is persisted in state.jsonc and
+     * takes precedence over this setting. Only affects the GUI renderer; the
+     * terminal engine cannot render these constructs.
+     */
+    "enableExtendedSyntax": boolean;
+
+    /**
      * Files recognised as markdown documents in folder navigation.
      */
     "markdownExtensions": string[] | null;

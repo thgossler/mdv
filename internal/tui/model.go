@@ -120,6 +120,12 @@ type Model struct {
 	statusMsg string
 	update    core.UpdateInfo
 
+	// extendedSyntax mirrors the shared GUI/TUI "extended" inline syntax toggle
+	// (math, sub/sup, highlight, inserted). The terminal renderer cannot display
+	// these constructs, so toggling it here only updates and persists the shared
+	// preference (state.jsonc) for the GUI; the TUI render output is unaffected.
+	extendedSyntax bool
+
 	width  int
 	height int
 	ready  bool
@@ -209,6 +215,13 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 		resolvedStyle: resolveStyle(cfg.Theme),
 		update:        upd,
 		focus:         focusContent,
+	}
+
+	// The extended-syntax toggle is shared with the GUI: a persisted runtime
+	// choice in state.jsonc overrides the settings.jsonc default.
+	m.extendedSyntax = cfg.EnableExtendedSyntax
+	if v, ok := core.LoadViewerExtendedSyntax(); ok {
+		m.extendedSyntax = v
 	}
 
 	if in.Kind == core.InputFolder {
@@ -504,6 +517,9 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "t":
 		m.toggleLabelMode()
 		return *m, nil
+	case "x":
+		m.toggleExtendedSyntax()
+		return *m, nil
 	case "/":
 		m.focus = focusSearch
 		m.searchInput = ""
@@ -546,6 +562,9 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return *m, nil
 	case "t":
 		m.toggleLabelMode()
+		return *m, nil
+	case "x":
+		m.toggleExtendedSyntax()
 		return *m, nil
 	}
 	var cmd tea.Cmd
@@ -980,7 +999,21 @@ func (m *Model) toggleLabelMode() {
 	m.syncListSelection()
 }
 
-// ensureTitles extracts document titles from the workspace files exactly once
+// toggleExtendedSyntax flips the shared "extended" inline-syntax preference and
+// persists it to state.jsonc (shared with the GUI). The terminal renderer cannot
+// display math/sub/sup/highlight/inserted, so the content view is left unchanged;
+// only the persisted preference and a status note are updated.
+func (m *Model) toggleExtendedSyntax() {
+	m.extendedSyntax = !m.extendedSyntax
+	core.SaveViewerExtendedSyntax(m.extendedSyntax)
+	if m.extendedSyntax {
+		m.statusMsg = "Extended syntax: ON (applies in GUI)"
+	} else {
+		m.statusMsg = "Extended syntax: OFF (applies in GUI)"
+	}
+}
+
+
 // per session. Title extraction opens and scans every markdown file, so it must
 // not run on content-independent UI actions (showing the navigator, toggling the
 // label mode back and forth): repeating that file scan is what an external
@@ -1364,11 +1397,11 @@ func (m Model) statusBar() string {
 	var hints string
 	switch {
 	case navActive:
-		hints = "^b:nav  tab:switch  enter:open  /:filter  //:content(all files)  t:titles  q:quit"
+		hints = "^b:nav  tab:switch  enter:open  /:filter  //:content(all files)  t:titles  x:ext  q:quit"
 	case m.showList:
-		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  q:quit"
+		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  x:ext  q:quit"
 	default:
-		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  q:quit"
+		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  x:ext  q:quit"
 	}
 
 	status := m.statusMsg

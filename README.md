@@ -223,7 +223,9 @@ in the list. The search runs entirely in-memory with no external dependencies.
 
 - GitHub Flavored Markdown (tables, task lists, strikethrough, autolinks)
 - GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`)
-- Math via KaTeX (`$inline$` and `$$block$$`)
+- Extended inline syntax (opt-in): math via KaTeX (`$inline$`, `$$block$$`,
+  ` ```math ` blocks), subscript `~x~`, superscript `^x^`, highlight `==x==`,
+  inserted `++x++` - off by default; see [Extended syntax](#extended-syntax)
 - Mermaid diagrams (theme-aware)
 - Syntax highlighting with 6 themes (Glyph, GitHub, Monokai, Nord, Solarized Light/Dark)
 - Inline images in the console and terminal UI
@@ -258,11 +260,37 @@ defaults. On Windows/macOS the location follows `XDG_CONFIG_HOME` if set.
   "contentWidthPx": 860,
   "navLabelMode": "filename", // or "title"
   "liveReload": true,
+  "enableExtendedSyntax": false, // math, sub/sup, highlight, inserted (GUI only)
   "checkForUpdates": true,
   "images": "auto", // "auto" | "graphics" | "blocks" | "off"
   "imagesRemote": true, // fetch http(s) images in console/TUI (falls back to alt text)
 }
 ```
+
+### Extended syntax
+
+A handful of inline extensions reuse characters that appear in ordinary prose,
+so enabling them globally can silently misrender plain text - for example `$5
+to $10` becoming math, or `~note~` becoming a subscript. These are therefore
+**off by default** and grouped behind a single "extended syntax" toggle:
+
+- Math via KaTeX: `$inline$`, `$$block$$`, and ` ```math ` fenced blocks
+- Subscript `~x~`, superscript `^x^`
+- Highlight `==x==`, inserted `++x++`
+
+All other constructs (tables, alerts, wikilinks, footnotes, emoji, CSV blocks,
+Azure DevOps syntax, etc.) use distinctive delimiters and stay on at all times.
+
+Enable extended syntax in one of three ways:
+
+- Set `"enableExtendedSyntax": true` in `settings.jsonc` (default for new windows)
+- In the GUI, click the **∑** toolbar button to toggle it live
+- In the terminal UI, press **`x`** to toggle it
+
+The runtime choice is remembered in `~/.config/mdv/state.jsonc` and shared
+between the GUI and TUI. Note that the terminal renderer cannot display these
+constructs, so the TUI toggle only updates the shared preference for the GUI;
+the terminal output is unchanged.
 
 ## Building from source
 

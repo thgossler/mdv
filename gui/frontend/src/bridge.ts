@@ -45,4 +45,5 @@ export const api = {
   resetLayout: (): Promise<LayoutDTO> => Bridge.ResetLayout(),
   applyExcludes: (text: string, enabled: boolean): Promise<string[] | null> =>
     Bridge.ApplyExcludes(text, enabled),
+  saveExtendedSyntax: (enabled: boolean): Promise<void> => Bridge.SaveExtendedSyntax(enabled),
 };

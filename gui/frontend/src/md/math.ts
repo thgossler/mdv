@@ -3,8 +3,9 @@ import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
 import type StateBlock from "markdown-it/lib/rules_block/state_block.mjs";
 import katex from "katex";
 
-// mathPlugin adds inline `$...$` and block `$$...$$` math, rendered with KaTeX.
-// Rendering happens at parse time so the output HTML is self-contained.
+// mathPlugin adds inline `$...$` and block `$$...$$` math, plus GitLab-style
+// ```math fenced blocks, all rendered with KaTeX. Rendering happens at parse
+// time so the output HTML is self-contained.
 export function mathPlugin(md: MarkdownIt): void {
   md.inline.ruler.after("escape", "math_inline", inlineMath);
   md.block.ruler.after("blockquote", "math_block", blockMath, {
@@ -13,6 +14,19 @@ export function mathPlugin(md: MarkdownIt): void {
 
   md.renderer.rules.math_inline = (tokens, idx) => renderKatex(tokens[idx].content, false);
   md.renderer.rules.math_block = (tokens, idx) => renderKatex(tokens[idx].content, true) + "\n";
+
+  // GitLab-style ```math fenced blocks. Override the fence renderer so a `math`
+  // info string is rendered with KaTeX instead of as a highlighted code block.
+  const defaultFence =
+    md.renderer.rules.fence ||
+    ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const info = (tokens[idx].info || "").trim().toLowerCase();
+    if (info === "math") {
+      return renderKatex(tokens[idx].content, true) + "\n";
+    }
+    return defaultFence(tokens, idx, options, env, self);
+  };
 }
 
 function renderKatex(tex: string, displayMode: boolean): string {

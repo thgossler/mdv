@@ -26,9 +26,25 @@ export interface RenderResult {
   frontmatter: Record<string, unknown> | null;
 }
 
-let md: MarkdownIt | null = null;
+// Instances are cached per "extended" mode so toggling the extended-syntax
+// option at runtime is cheap (no re-parsing of the plugin chain on every
+// render).
+const instances = new Map<boolean, MarkdownIt>();
 
-function build(): MarkdownIt {
+function getInstance(extended: boolean): MarkdownIt {
+  let instance = instances.get(extended);
+  if (!instance) {
+    instance = build(extended);
+    instances.set(extended, instance);
+  }
+  return instance;
+}
+
+// build assembles a markdown-it instance. The "safe" extensions are always on;
+// the "extended" character-stealing inline extensions (math, subscript,
+// superscript, highlight, inserted) are only enabled when `extended` is true,
+// because they can silently transform ordinary prose (e.g. "$5 to $10").
+function build(extended: boolean): MarkdownIt {
   const instance = new MarkdownIt({
     html: true,
     linkify: true,
@@ -37,23 +53,32 @@ function build(): MarkdownIt {
     highlight: highlightCode,
   });
 
+  // Always-on extensions: distinctive delimiters, no false positives on plain
+  // CommonMark/GitHub/GitLab prose.
   instance
     .use(footnote)
     .use(taskLists, { enabled: true, label: true })
     .use(deflist)
-    .use(sub)
-    .use(sup)
-    .use(mark)
-    .use(ins)
     .use(emoji)
-    .use(mathPlugin)
     .use(alertsPlugin)
     .use(wikilinkPlugin)
     .use(csvPlugin)
     .use(adoPlugin)
-    .use(imgsizePlugin)
-    .use(anchorsPlugin)
-    .use(sourceLinesPlugin);
+    .use(imgsizePlugin);
+
+  // Opt-in "extended" inline syntax.
+  if (extended) {
+    instance
+      .use(sub)
+      .use(sup)
+      .use(mark)
+      .use(ins)
+      .use(mathPlugin);
+  }
+
+  // Infrastructure plugins (heading slugs/TOC + source-line mapping) must run
+  // last and are always present.
+  instance.use(anchorsPlugin).use(sourceLinesPlugin);
 
   return instance;
 }
@@ -99,8 +124,10 @@ const ALLOWED_ATTR_EXTRA = [
 ];
 
 // render parses markdown and returns sanitised HTML plus extracted metadata.
-export function render(markdown: string): RenderResult {
-  if (!md) md = build();
+// When `extended` is true the opt-in inline extensions (math, sub/sup, mark,
+// ins) are enabled.
+export function render(markdown: string, extended = false): RenderResult {
+  const md = getInstance(extended);
   const env: { headings?: HeadingInfo[] } = {};
   const rawHtml = md.render(markdown, env);
 
