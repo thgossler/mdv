@@ -20,7 +20,16 @@ import { fuzzyPhraseMatch } from "./fuzzy";
 
 interface HistoryEntry {
   path: string;
+  // Fallback scroll offset, used only when the entry has no resolvable anchor
+  // (e.g. a position above the first heading).
   scroll: number;
+  // Title text of the document section nearest the top of the viewport when the
+  // entry was recorded, shown in the history dropdown after a " - " separator.
+  section: string;
+  // Slug/id of that section heading. Restoring navigates to this anchor by id so
+  // the position stays correct even after the document is re-rendered or edited;
+  // the scroll offset is only a fallback when no anchor is available.
+  anchor: string;
 }
 
 let info: InitInfo;
@@ -28,6 +37,7 @@ let workspace: DocFileDTO[] = [];
 let currentPath = "";
 let currentDir = "";
 let history: HistoryEntry[] = [];
+let forward: HistoryEntry[] = [];
 let labelMode: "filename" | "title" = "filename";
 let detachScrollSpy: (() => void) | null = null;
 // The current document's filename and resolved title, kept so the toolbar title
@@ -80,6 +90,7 @@ const els = {
   statusMid: $("status-mid"),
   statusRight: $("status-right"),
   btnBack: $<HTMLButtonElement>("btn-back"),
+  btnForward: $<HTMLButtonElement>("btn-forward"),
   btnHistory: $<HTMLButtonElement>("btn-history"),
   historyMenu: $("history-menu"),
   contextMenu: $("context-menu"),
@@ -171,7 +182,9 @@ async function openDocument(
   }
 
   if (pushHistory && currentPath) {
-    history.push({ path: currentPath, scroll: els.contentWrap.scrollTop });
+    history.push(makeEntry());
+    // A fresh navigation invalidates the forward stack, matching browser behaviour.
+    forward = [];
   }
   currentPath = doc.path;
   currentDir = doc.dir;
@@ -381,7 +394,8 @@ function scrollToSlug(slug: string, record = false): void {
   if (target) {
     // Record the current position so Back returns to the previous section.
     if (record && currentPath) {
-      history.push({ path: currentPath, scroll: els.contentWrap.scrollTop });
+      history.push(makeEntry());
+      forward = [];
       updateChrome();
     }
     target.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -395,15 +409,60 @@ function scrollToSlug(slug: string, record = false): void {
 function goBack(): void {
   const entry = history.pop();
   if (!entry) return;
-  // Same-document entries (in-page navigation) just restore the scroll position.
+  // Record the current position so Forward can return here.
+  forward.push(makeEntry());
+  // Same-document entries (in-page navigation) just restore the position.
   if (entry.path === currentPath) {
-    els.contentWrap.scrollTo({ top: entry.scroll, behavior: "smooth" });
+    scrollToEntry(entry, true);
     updateChrome();
     return;
   }
   void openDocument(entry.path, false, { focusContent: false }).then(() => {
-    els.contentWrap.scrollTop = entry.scroll;
+    scrollToEntry(entry, false);
   });
+}
+
+function goForward(): void {
+  const entry = forward.pop();
+  if (!entry) return;
+  // Record the current position so Back can return here.
+  history.push(makeEntry());
+  // Same-document entries (in-page navigation) just restore the position.
+  if (entry.path === currentPath) {
+    scrollToEntry(entry, true);
+    updateChrome();
+    return;
+  }
+  void openDocument(entry.path, false, { focusContent: false }).then(() => {
+    scrollToEntry(entry, false);
+  });
+}
+
+// makeEntry captures the current document position as a history entry, anchored
+// to the nearest section heading so it survives later re-renders of the document.
+function makeEntry(): HistoryEntry {
+  const h = activeHeading();
+  return {
+    path: currentPath,
+    scroll: els.contentWrap.scrollTop,
+    section: h ? headingText(h) : "",
+    anchor: h?.id ?? "",
+  };
+}
+
+// scrollToEntry restores a history entry's position. It prefers the recorded
+// section anchor (resolved by id, so it stays correct after the document
+// changes) and falls back to the stored scroll offset when no anchor resolves.
+function scrollToEntry(entry: HistoryEntry, smooth: boolean): void {
+  const behavior: ScrollBehavior = smooth ? "smooth" : "auto";
+  if (entry.anchor) {
+    const target = els.content.querySelector<HTMLElement>(`[id="${cssEscape(entry.anchor)}"]`);
+    if (target) {
+      target.scrollIntoView({ behavior, block: "start" });
+      return;
+    }
+  }
+  els.contentWrap.scrollTo({ top: entry.scroll, behavior });
 }
 
 // --- sidebar ----------------------------------------------------------------
@@ -825,12 +884,14 @@ async function loadBacklinks(): Promise<void> {
 
 function updateChrome(): void {
   els.btnBack.disabled = history.length === 0;
+  els.btnForward.disabled = forward.length === 0;
   els.btnHistory.disabled = history.length === 0;
   els.statusLeft.textContent = currentPath;
 }
 
 function wireToolbar(): void {
   els.btnBack.addEventListener("click", goBack);
+  els.btnForward.addEventListener("click", goForward);
   els.btnHistory.addEventListener("click", toggleHistoryMenu);
   $("btn-sidebar").addEventListener("click", () => els.sidebar.classList.toggle("collapsed"));
   $("btn-toc").addEventListener("click", () => {
@@ -1147,7 +1208,9 @@ function toggleHistoryMenu(): void {
     const entry = history[i];
     const item = document.createElement("div");
     item.className = "history-item";
-    item.textContent = baseName(entry.path);
+    item.textContent = entry.section
+      ? `${baseName(entry.path)} - ${entry.section}`
+      : baseName(entry.path);
     item.addEventListener("click", () => {
       history = history.slice(0, i);
       menu.classList.add("hidden");
@@ -1162,6 +1225,7 @@ function toggleHistoryMenu(): void {
 function wireMenuEvents(): void {
   const on = (name: string, fn: () => void) => Events.On(name, fn);
   on("menu:back", goBack);
+  on("menu:forward", goForward);
   on("menu:reload", () => currentPath && openDocument(currentPath, false));
   on("menu:toggle-sidebar", () => els.sidebar.classList.toggle("collapsed"));
   on("menu:toggle-toc", () => els.toc.classList.toggle("hidden"));
@@ -1382,6 +1446,30 @@ function baseName(p: string): string {
   return p.split(/[\\/]/).pop() || p;
 }
 
+// activeHeading returns the heading element nearest the top of the content
+// viewport, used to anchor history entries to a document section. Returns null
+// when no heading sits at or above the viewport top (e.g. the document intro).
+function activeHeading(): HTMLElement | null {
+  const headings = Array.from(
+    els.content.querySelectorAll<HTMLElement>("h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]")
+  );
+  let active: HTMLElement | null = null;
+  const top = els.contentWrap.getBoundingClientRect().top + 80;
+  for (const h of headings) {
+    if (h.getBoundingClientRect().top <= top) active = h;
+    else break;
+  }
+  return active;
+}
+
+// headingText extracts a heading's plain text, excluding the injected "#"
+// hover-anchor link.
+function headingText(h: HTMLElement): string {
+  const clone = h.cloneNode(true) as HTMLElement;
+  clone.querySelector(".heading-anchor")?.remove();
+  return clone.textContent?.trim() ?? "";
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -1406,9 +1494,11 @@ document.addEventListener("keydown", (e) => {
     !isTypingTarget(e.target)
   ) {
     // Backspace anywhere (outside editable fields, where it deletes text)
-    // navigates the content view back to the previous history entry.
+    // navigates the content view back to the previous history entry;
+    // Shift+Backspace navigates forward again.
     e.preventDefault();
-    goBack();
+    if (e.shiftKey) goForward();
+    else goBack();
   }
 });
 

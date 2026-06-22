@@ -78,6 +78,9 @@ func buildMenu(app *application.App) *application.Menu {
 	navMenu.Add("Back").SetAccelerator("CmdOrCtrl+Left").OnClick(func(*application.Context) {
 		app.Event.Emit("menu:back", "")
 	})
+	navMenu.Add("Forward").SetAccelerator("CmdOrCtrl+Right").OnClick(func(*application.Context) {
+		app.Event.Emit("menu:forward", "")
+	})
 	navMenu.Add("Find…").SetAccelerator("CmdOrCtrl+F").OnClick(func(*application.Context) {
 		app.Event.Emit("menu:find", "")
 	})

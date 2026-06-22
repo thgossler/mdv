@@ -7,6 +7,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -96,10 +97,12 @@ type Model struct {
 	imgRenderer *termimg.Renderer
 
 	history      []histEntry
+	forward      []histEntry
 	focus        focus
 	showList     bool
 	labelMode    string // "filename" | "title"
 	titlesLoaded bool   // workspace titles extracted (one-time file scan)
+	entryPath    string // most-likely documentation entry point (emphasised in nav)
 
 	searchInput string
 	matches     []matchPos
@@ -233,7 +236,9 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 		m.stdin = true
 	}
 
-	fileList := list.New(docItemsFrom(m.workspace, m.labelMode), list.NewDefaultDelegate(), 0, 0)
+	m.entryPath = entryPointPath(m.workspace)
+
+	fileList := list.New(docItemsFrom(m.workspace, m.labelMode), newDocDelegate(m.entryPath), 0, 0)
 	fileList.Title = "Documents"
 	fileList.SetShowHelp(false)
 	fileList.SetShowStatusBar(false)
@@ -253,6 +258,103 @@ func docItemsFrom(files []core.DocFile, labelMode string) []list.Item {
 		items[i] = docItem{doc: f, labelMode: labelMode}
 	}
 	return items
+}
+
+// entryPointNames and entryPointFolders list the recognised landing-page file
+// names and typical documentation folders, each in descending priority order.
+var (
+	entryPointNames   = []string{"readme.md", "index.md", "home.md"}
+	entryPointFolders = []string{"docs", "doc", "documentation", "wiki"}
+)
+
+// entryPointPath returns the absolute path of the single most-probable
+// documentation entry point in files, or "" when none qualifies. A root-level
+// README/index/home page always wins; otherwise a matching page directly inside
+// a typical documentation folder (depth 1 only) is chosen. Anything deeper never
+// qualifies. Mirrors the GUI's computeEntryPoint logic.
+func entryPointPath(files []core.DocFile) string {
+	best := ""
+	bestScore := -1 << 30
+	for _, d := range files {
+		rel := strings.ToLower(strings.TrimLeft(d.Rel, "/"))
+		if rel == "" {
+			rel = strings.ToLower(d.Name)
+		}
+		base := rel
+		if i := strings.LastIndex(rel, "/"); i >= 0 {
+			base = rel[i+1:]
+		}
+		nameRank := indexOf(entryPointNames, base)
+		if nameRank < 0 {
+			continue
+		}
+		slash := strings.Index(rel, "/")
+		var score int
+		switch {
+		case slash < 0:
+			// Root level: highest priority, ordered by file-name rank.
+			score = len(entryPointNames) - nameRank
+		case strings.Index(rel[slash+1:], "/") < 0:
+			// Depth 1: only inside a recognised documentation folder.
+			folderRank := indexOf(entryPointFolders, rel[:slash])
+			if folderRank < 0 {
+				continue
+			}
+			score = -1 - (folderRank*len(entryPointNames) + nameRank)
+		default:
+			continue // deeper than depth 1 never qualifies
+		}
+		if score > bestScore {
+			bestScore = score
+			best = d.Path
+		}
+	}
+	return best
+}
+
+func indexOf(list []string, s string) int {
+	for i, v := range list {
+		if v == s {
+			return i
+		}
+	}
+	return -1
+}
+
+// docDelegate renders the document navigator, emphasising the single entry-point
+// document (bold + accent colour) so a reader immediately sees where to start.
+type docDelegate struct {
+	list.DefaultDelegate
+	entryPath string
+}
+
+// newDocDelegate builds the navigator delegate for the given entry-point path.
+func newDocDelegate(entryPath string) docDelegate {
+	return docDelegate{DefaultDelegate: list.NewDefaultDelegate(), entryPath: entryPath}
+}
+
+// Render emphasises the entry-point document; all other rows fall through to the
+// default rendering.
+func (d docDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	var path string
+	switch it := item.(type) {
+	case docItem:
+		path = it.doc.Path
+	case navItem:
+		if it.kind == navDoc {
+			path = it.doc.Path
+		}
+	}
+	if d.entryPath != "" && path == d.entryPath {
+		accent := lipgloss.Color("12") // bright blue, matches the GUI accent
+		dd := d.DefaultDelegate
+		dd.Styles.NormalTitle = dd.Styles.NormalTitle.Bold(true).Foreground(accent)
+		dd.Styles.SelectedTitle = dd.Styles.SelectedTitle.Bold(true).Foreground(accent)
+		dd.Styles.DimmedTitle = dd.Styles.DimmedTitle.Bold(true).Foreground(accent)
+		dd.Render(w, m, index, item)
+		return
+	}
+	d.DefaultDelegate.Render(w, m, index, item)
 }
 
 // resolveStyle picks a concrete glamour style ("light"/"dark") once, so renders
@@ -394,6 +496,8 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return *m, nil
 	case "b", "backspace", "left", "alt+left":
 		return *m, m.goBack()
+	case "f", "right", "alt+right":
+		return *m, m.goForward()
 	case "enter", "l":
 		m.openLinkPicker()
 		return *m, nil
@@ -799,6 +903,8 @@ func (m *Model) openPath(path string, pushHistory bool) tea.Cmd {
 	}
 	if pushHistory && m.currentPath != "" {
 		m.history = append(m.history, histEntry{path: m.currentPath, yOffset: m.viewport.YOffset})
+		// A fresh navigation invalidates the forward stack.
+		m.forward = nil
 	}
 	m.currentPath = path
 	m.currentDir = filepath.Dir(path)
@@ -842,8 +948,24 @@ func (m *Model) goBack() tea.Cmd {
 	}
 	last := m.history[len(m.history)-1]
 	m.history = m.history[:len(m.history)-1]
+	// Record the current position so Forward can return here.
+	m.forward = append(m.forward, histEntry{path: m.currentPath, yOffset: m.viewport.YOffset})
 	cmd := m.openPath(last.path, false)
 	m.viewport.SetYOffset(last.yOffset)
+	return cmd
+}
+
+func (m *Model) goForward() tea.Cmd {
+	if len(m.forward) == 0 {
+		m.statusMsg = "No forward history"
+		return nil
+	}
+	next := m.forward[len(m.forward)-1]
+	m.forward = m.forward[:len(m.forward)-1]
+	// Record the current position so Back can return here.
+	m.history = append(m.history, histEntry{path: m.currentPath, yOffset: m.viewport.YOffset})
+	cmd := m.openPath(next.path, false)
+	m.viewport.SetYOffset(next.yOffset)
 	return cmd
 }
 
@@ -1244,9 +1366,9 @@ func (m Model) statusBar() string {
 	case navActive:
 		hints = "^b:nav  tab:switch  enter:open  /:filter  //:content(all files)  t:titles  q:quit"
 	case m.showList:
-		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  l:links  q:quit"
+		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  q:quit"
 	default:
-		hints = "^b:nav  /:content  //:content(all files)  b:back  l:links  q:quit"
+		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  q:quit"
 	}
 
 	status := m.statusMsg
