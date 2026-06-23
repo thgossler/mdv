@@ -30,11 +30,6 @@ type Bridge struct {
 	window    *application.WebviewWindow
 	app       *application.App
 
-	// pickOnInit requests that Init present a native "open file or folder"
-	// dialog before bootstrapping. It is set when mdv was started with no input
-	// but a GUI is shown (e.g. double-clicked from Finder/Explorer).
-	pickOnInit bool
-
 	// emit dispatches a named application event with structured data to the
 	// frontend. It is wired in main.go after the app is created.
 	emit func(name string, data any)
@@ -115,15 +110,24 @@ type UpdateDTO struct {
 
 // Init returns the bootstrap information for the frontend.
 func (b *Bridge) Init() InitInfo {
-	if b.pickOnInit {
-		b.pickOnInit = false
-		if !b.promptForInput() {
-			// The user cancelled the picker: quit. The window is closing, so a
-			// minimal InitInfo is enough for the frontend that requested it.
-			if b.app != nil {
-				b.app.Quit()
-			}
-			return InitInfo{AppName: core.AppName, Version: core.Version, Config: b.cfg}
+	if b.input.Kind == core.InputNone {
+		// Started with no file or folder: present an empty GUI (collapsed
+		// navigator, empty panels and content view) so the user can pick a
+		// recently opened item from the toolbar drop-down or use File ▸ Open,
+		// instead of forcing a file dialog on startup.
+		return InitInfo{
+			Kind:           "none",
+			AppName:        core.AppName,
+			Version:        core.Version,
+			Author:         core.AppAuthor,
+			Copyright:      core.AppCopyright,
+			RepoURL:        "https://github.com/" + core.DefaultSettings().UpdateRepo,
+			Config:         b.cfg,
+			Workspace:      b.workspaceDTO(),
+			Update:         b.checkUpdate(),
+			Layout:         b.layoutDTO(),
+			Recent:         b.recentList(),
+			ExtendedSyntax: b.effectiveExtendedSyntax(),
 		}
 	}
 	kind := "file"
@@ -253,31 +257,48 @@ func (b *Bridge) ResetLayout() LayoutDTO {
 	return LayoutDTO{SidebarWidth: defaultSidebarWidth, TocWidth: defaultTocWidth}
 }
 
-// promptForInput presents a native dialog letting the user choose a markdown
-// file or a folder to view, then loads the selection into the bridge. The
-// dialog title carries the app name so the user can see which program is asking.
-// It returns false when the user cancels or the selection cannot be resolved.
-func (b *Bridge) promptForInput() bool {
+// markdownDialogFilter is the file-type filter applied to the native "open
+// file" dialog so only markdown documents are selectable.
+const markdownDialogFilter = "*.md;*.markdown;*.mdown;*.mkd;*.mkdn;*.mdwn;*.mdtxt;*.mdtext;*.text"
+
+// PickFile presents a native open dialog restricted to markdown files and
+// returns the chosen path, or "" when the user cancels or no app is attached.
+// The frontend re-opens mdv on the result via Reinit, so this only resolves a
+// path and leaves the bridge state untouched. It is kept separate from
+// PickFolder because Windows uses distinct native dialogs for files and folders,
+// so the File menu offers both items consistently across platforms.
+func (b *Bridge) PickFile() string {
 	if b.app == nil {
-		return false
+		return ""
 	}
 	path, err := b.app.Dialog.OpenFile().
 		CanChooseFiles(true).
-		CanChooseDirectories(true).
-		SetTitle(core.AppName+" \u2014 Open Markdown File or Folder").
-		AddFilter("Markdown", "*.md;*.markdown;*.mdown;*.mkd;*.mkdn;*.mdwn;*.mdtxt;*.mdtext;*.text").
+		CanChooseDirectories(false).
+		SetTitle(core.AppName+" \u2014 Open Markdown File").
+		AddFilter("Markdown", markdownDialogFilter).
 		PromptForSingleSelection()
-	if err != nil || strings.TrimSpace(path) == "" {
-		return false
+	if err != nil {
+		return ""
 	}
-	in, err := core.ResolveInput(path)
-	if err != nil || in.Kind == core.InputNone {
-		return false
+	return strings.TrimSpace(path)
+}
+
+// PickFolder presents a native open dialog restricted to folders and returns
+// the chosen path, or "" when the user cancels or no app is attached. As with
+// PickFile, the frontend re-opens mdv on the result via Reinit.
+func (b *Bridge) PickFolder() string {
+	if b.app == nil {
+		return ""
 	}
-	b.input = in
-	b.workspace, _ = core.ListMarkdownFiles(in.Dir, b.cfg)
-	core.PopulateTitles(b.workspace)
-	return true
+	path, err := b.app.Dialog.OpenFile().
+		CanChooseFiles(false).
+		CanChooseDirectories(true).
+		SetTitle(core.AppName+" \u2014 Open Folder").
+		PromptForSingleSelection()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(path)
 }
 
 // initExcludes seeds the in-memory exclusion state from the persisted layout.

@@ -176,9 +176,10 @@ async function boot(): Promise<void> {
   wireToolbar();
   wireResizers();
   // The navigator is most useful when browsing a folder, so start it collapsed
-  // when a single file was opened and expanded when a folder was given. Done
-  // before the UI is revealed so the sidebar never flashes the wrong state.
-  els.sidebar.classList.toggle("collapsed", info.kind === "file");
+  // for a single file or when nothing is open yet, and expanded when a folder
+  // was given. Done before the UI is revealed so the sidebar never flashes the
+  // wrong state.
+  els.sidebar.classList.toggle("collapsed", info.kind !== "folder");
   // Layout (panel widths) is now applied; reveal the UI so the panes never
   // flash at their default width before jumping to the persisted size.
   $("app").classList.remove("layout-pending");
@@ -201,8 +202,10 @@ async function boot(): Promise<void> {
   if (info.kind === "file") {
     await openDocument(info.path, false);
     if (info.fragment) scrollToSlug(info.fragment);
-  } else {
+  } else if (info.kind === "folder") {
     showFolderWelcome();
+  } else {
+    showEmpty();
   }
 }
 
@@ -1088,6 +1091,18 @@ function showFolderWelcome(): void {
   els.backlinksList.innerHTML = "";
 }
 
+// showEmpty renders the no-input startup state: an empty content view with empty
+// side panels and a collapsed navigator. mdv lands here when started with no
+// file or folder, so the user can pick a recently opened item from the toolbar
+// drop-down or use File ▸ Open without a file dialog popping up first.
+function showEmpty(): void {
+  els.content.innerHTML = "";
+  els.docTitle.textContent = "";
+  els.tocList.innerHTML = "";
+  els.backlinksList.innerHTML = "";
+  updateChrome();
+}
+
 // --- backlinks --------------------------------------------------------------
 
 async function loadBacklinks(): Promise<void> {
@@ -1757,7 +1772,18 @@ function wireMenuEvents(): void {
   on("menu:zoom-reset", zoomReset);
   on("menu:find", () => showSearch(els.searchBar, els.searchInput));
   on("menu:new-window", () => currentPath && api.openNewWindow(currentPath));
+  on("menu:open-file", () => void openFromDialog("file"));
+  on("menu:open-folder", () => void openFromDialog("folder"));
   on("menu:about", showAbout);
+}
+
+// openFromDialog presents the native open dialog (file- or folder-only) via the
+// backend and, when the user picks something, re-opens mdv on it in place using
+// the same flow as a drag-and-drop or recents selection. File and folder use
+// separate items because Windows has distinct native dialogs for each.
+async function openFromDialog(kind: "file" | "folder"): Promise<void> {
+  const path = kind === "file" ? await api.pickFile() : await api.pickFolder();
+  if (path) await reopenInput(path);
 }
 
 function wireContextMenu(): void {

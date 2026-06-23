@@ -53,9 +53,6 @@ func buildMenu(app *application.App) *application.Menu {
 		})
 	}
 
-	// Edit menu (Copy/Paste/Select All roles).
-	menu.AddRole(application.EditMenu)
-
 	// View menu.
 	viewMenu := menu.AddSubmenu("View")
 	viewMenu.Add("Toggle Sidebar").SetAccelerator("CmdOrCtrl+B").OnClick(func(*application.Context) {

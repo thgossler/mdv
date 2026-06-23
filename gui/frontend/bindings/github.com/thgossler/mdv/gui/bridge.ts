@@ -124,6 +124,27 @@ export function PDFNativeAvailable(): $CancellablePromise<boolean> {
 }
 
 /**
+ * PickFile presents a native open dialog restricted to markdown files and
+ * returns the chosen path, or "" when the user cancels or no app is attached.
+ * The frontend re-opens mdv on the result via Reinit, so this only resolves a
+ * path and leaves the bridge state untouched. It is kept separate from
+ * PickFolder because Windows uses distinct native dialogs for files and folders,
+ * so the File menu offers both items consistently across platforms.
+ */
+export function PickFile(): $CancellablePromise<string> {
+    return $Call.ByID(736016460);
+}
+
+/**
+ * PickFolder presents a native open dialog restricted to folders and returns
+ * the chosen path, or "" when the user cancels or no app is attached. As with
+ * PickFile, the frontend re-opens mdv on the result via Reinit.
+ */
+export function PickFolder(): $CancellablePromise<string> {
+    return $Call.ByID(636520786);
+}
+
+/**
  * ReadDocument loads a markdown document from disk, enforcing the shared
  * maximum document size so the webview never tries to render an oversized file.
  */

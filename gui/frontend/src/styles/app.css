@@ -14,6 +14,11 @@ body {
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Suppress the native WebKit editing context menu (Undo/Redo/Paste/Delete/
+     AutoFill/Dictation/Emoji …) everywhere. mdv is a viewer, so those items do
+     not apply; clipboard actions on its input fields remain available via the
+     standard keyboard shortcuts, and the content area uses its own custom menu. */
+  --default-contextmenu: hide;
 }
 
 ::selection {

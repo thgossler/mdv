@@ -77,11 +77,9 @@ func runGUI() error {
 	bridge.watcher = watcher
 	bridge.app = app
 	// When started with no input but a GUI is shown, the launcher signals picker
-	// mode (resolveInput returns InputNone). Ask the bridge to present a native
-	// file/folder dialog on startup instead of opening nothing.
-	if in.Kind == core.InputNone {
-		bridge.pickOnInit = true
-	}
+	// mode (resolveInput returns InputNone). The bridge then bootstraps an empty
+	// GUI (collapsed navigator, empty content view) so the user can pick a
+	// recently opened item from the toolbar drop-down or use File ▸ Open.
 	app.RegisterService(application.NewService(bridge))
 
 	app.Menu.Set(buildMenu(app))
