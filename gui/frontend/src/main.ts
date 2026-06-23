@@ -113,6 +113,7 @@ const els = {
   btnHistory: $<HTMLButtonElement>("btn-history"),
   btnExtended: $<HTMLButtonElement>("btn-extended"),
   btnRemoteImg: $<HTMLButtonElement>("btn-remote-img"),
+  btnOpenExternal: $<HTMLButtonElement>("btn-open-external"),
   historyMenu: $("history-menu"),
   contextMenu: $("context-menu"),
   searchBar: $("search-bar"),
@@ -226,6 +227,7 @@ async function openDocument(
     els.contentWrap.focus({ preventScroll: true });
   }
   updateChrome();
+  void updateOpenExternalButton(currentPath);
   highlightActiveNav();
 }
 
@@ -1041,6 +1043,27 @@ function updateChrome(): void {
   els.statusLeft.textContent = currentPath;
 }
 
+// Cache of "is mdv the OS default app for this extension" answers, keyed by
+// lowercase extension. The result only depends on the file type, so it is
+// queried once per extension rather than on every navigation.
+const defaultHandlerCache = new Map<string, boolean>();
+
+// updateOpenExternalButton shows the "open in the associated app" toolbar button
+// only when mdv is not the OS default handler for the current file's type - i.e.
+// when another program would open it, making the button useful.
+async function updateOpenExternalButton(path: string): Promise<void> {
+  const dot = path.lastIndexOf(".");
+  const ext = dot >= 0 ? path.slice(dot).toLowerCase() : "";
+  let isDefault = defaultHandlerCache.get(ext);
+  if (isDefault === undefined) {
+    isDefault = await api.isDefaultHandler(path);
+    defaultHandlerCache.set(ext, isDefault);
+  }
+  // Guard against a stale async result after a quick navigation to another type.
+  if (currentPath !== path) return;
+  els.btnOpenExternal.classList.toggle("hidden", isDefault);
+}
+
 function wireToolbar(): void {
   els.btnBack.addEventListener("click", goBack);
   els.btnForward.addEventListener("click", goForward);
@@ -1057,6 +1080,9 @@ function wireToolbar(): void {
   $("btn-width").addEventListener("click", toggleContentWidth);
   els.btnExtended.addEventListener("click", () => void toggleExtendedSyntax());
   els.btnRemoteImg.addEventListener("click", toggleRemoteImages);
+  els.btnOpenExternal.addEventListener("click", () => {
+    if (currentPath) void api.openExternal(currentPath);
+  });
 
   // External-link confirmation prompt wiring.
   $("external-modal-open").addEventListener("click", () => closeExternalModal(true));

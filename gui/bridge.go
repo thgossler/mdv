@@ -444,6 +444,14 @@ func (b *Bridge) OpenExternal(target string) string {
 	return ""
 }
 
+// IsDefaultHandler reports whether mdv is the operating system's default
+// application for the type of the file at path. The GUI uses it to decide
+// whether to show the "open in the associated app" toolbar button: that button
+// is only useful when something other than mdv would open the file.
+func (b *Bridge) IsDefaultHandler(path string) bool {
+	return isDefaultHandler(path)
+}
+
 // isAllowedExternalTarget reports whether target is safe to hand to the OS
 // handler: a local filesystem path, or a URL using an http/https/mailto/file
 // scheme. Anything else (custom app schemes, javascript:, etc.) is rejected.

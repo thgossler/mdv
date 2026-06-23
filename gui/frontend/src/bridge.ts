@@ -35,6 +35,7 @@ export const api = {
   resolveLink: (raw: string, dir: string): Promise<LinkTargetDTO> => Bridge.ResolveLink(raw, dir),
   resolveAsset: (src: string, dir: string): Promise<string> => Bridge.ResolveAsset(src, dir),
   openExternal: (target: string): Promise<string> => Bridge.OpenExternal(target),
+  isDefaultHandler: (path: string): Promise<boolean> => Bridge.IsDefaultHandler(path),
   openNewWindow: (path: string, fragment = ""): Promise<string> =>
     Bridge.OpenInNewWindow(path, fragment),
   backlinks: (path: string): Promise<Backlink[] | null> => Bridge.Backlinks(path),

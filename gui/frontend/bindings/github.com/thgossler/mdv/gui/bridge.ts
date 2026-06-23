@@ -45,6 +45,16 @@ export function Init(): $CancellablePromise<$models.InitInfo> {
 }
 
 /**
+ * IsDefaultHandler reports whether mdv is the operating system's default
+ * application for the type of the file at path. The GUI uses it to decide
+ * whether to show the "open in the associated app" toolbar button: that button
+ * is only useful when something other than mdv would open the file.
+ */
+export function IsDefaultHandler(path: string): $CancellablePromise<boolean> {
+    return $Call.ByID(1041764512, path);
+}
+
+/**
  * OpenExternal opens a URL or non-markdown file with the OS default handler.
  * As a defense-in-depth backstop (the frontend already confirms with the user),
  * only a small allow-list of schemes is permitted so a crafted document cannot
