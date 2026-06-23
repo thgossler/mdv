@@ -52,6 +52,11 @@ let currentDocTitle = "";
 let extendedSyntax = false;
 let lastRendered: { markdown: string; name: string; path: string } | null = null;
 
+// Read-only "raw Markdown" view mode. When on, the content view shows the
+// document's verbatim Markdown source (wrapped) instead of the rendered output
+// so the reader can select and copy parts of it. Session-only, not persisted.
+let rawMode = false;
+
 // Runtime auto-reload toggle for the active document. Starts from config
 // (liveReload) and is flipped from the toolbar watch button. While off, the
 // backend watches nothing, so editing the open file on disk does not refresh it.
@@ -118,6 +123,7 @@ const els = {
   btnHistory: $<HTMLButtonElement>("btn-history"),
   btnRecent: $<HTMLButtonElement>("btn-recent"),
   btnExtended: $<HTMLButtonElement>("btn-extended"),
+  btnRaw: $<HTMLButtonElement>("btn-raw"),
   btnRemoteImg: $<HTMLButtonElement>("btn-remote-img"),
   btnOpenExternal: $<HTMLButtonElement>("btn-open-external"),
   btnWatch: $<HTMLButtonElement>("btn-watch"),
@@ -245,6 +251,13 @@ async function renderInto(markdown: string, name: string, path: string): Promise
   clearSearch();
   lastRendered = { markdown, name, path };
 
+  // Raw-Markdown view shows the verbatim source for copy & paste; it replaces
+  // both the rendered output and the mermaid path below.
+  if (rawMode) {
+    renderRaw(markdown, name);
+    return;
+  }
+
   // `.mmd` files render as a standalone diagram.
   if (/\.mmd$/i.test(path)) {
     await renderMermaidSource(els.content, markdown, isDark());
@@ -271,6 +284,29 @@ async function renderInto(markdown: string, name: string, path: string): Promise
   } catch (err) {
     console.error("mdv: post-processing failed", err);
   }
+}
+
+// renderRaw shows the document's raw Markdown source as read-only, wrapping
+// text so the reader can select and copy any part verbatim. It replaces the
+// rendered view entirely and empties the TOC/backlinks panels, which carry no
+// meaning in this mode.
+function renderRaw(markdown: string, name: string): void {
+  detachScrollSpy?.();
+  detachScrollSpy = null;
+
+  const pre = document.createElement("pre");
+  pre.className = "raw-markdown";
+  pre.textContent = markdown;
+  els.content.replaceChildren(pre);
+
+  const fm = extractFrontmatter(markdown);
+  currentDocName = name;
+  currentDocTitle = chooseTitle(name, undefined, fm.data);
+  applyDocTitle();
+
+  els.tocList.innerHTML = '<div class="toc-empty">Raw view</div>';
+  els.backlinksList.innerHTML = "";
+  refreshZoom();
 }
 
 async function postProcess(headings: { level: number; text: string; slug: string }[]): Promise<void> {
@@ -1131,6 +1167,7 @@ function wireToolbar(): void {
   $("btn-mono").addEventListener("click", () => document.body.classList.toggle("mono"));
   $("btn-width").addEventListener("click", toggleContentWidth);
   els.btnExtended.addEventListener("click", () => void toggleExtendedSyntax());
+  els.btnRaw.addEventListener("click", () => void toggleRawMarkdown());
   els.btnRemoteImg.addEventListener("click", toggleRemoteImages);
   els.btnOpenExternal.addEventListener("click", () => {
     if (currentPath) void api.openExternal(currentPath);
@@ -1455,7 +1492,21 @@ async function toggleExtendedSyntax(): Promise<void> {
   }
 }
 
-// updateWatchButton reflects the current auto-reload state on the toolbar button.
+// toggleRawMarkdown switches the content view between the rendered document and
+// a read-only raw-Markdown view that shows the source text verbatim (wrapped)
+// so the reader can select and copy any part of it. The mode is session-only
+// and is not persisted; it stays active across navigation until toggled off.
+async function toggleRawMarkdown(): Promise<void> {
+  rawMode = !rawMode;
+  els.btnRaw.classList.toggle("active", rawMode);
+  els.btnRaw.title = rawMode ? "View rendered Markdown" : "View raw Markdown";
+  document.body.classList.toggle("raw-mode", rawMode);
+  if (lastRendered) {
+    const scroll = els.contentWrap.scrollTop;
+    await renderInto(lastRendered.markdown, lastRendered.name, lastRendered.path);
+    els.contentWrap.scrollTop = scroll;
+  }
+}
 function updateWatchButton(): void {
   els.btnWatch.classList.toggle("active", watchEnabled);
   els.btnWatch.title = watchEnabled

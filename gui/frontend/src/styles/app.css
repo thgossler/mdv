@@ -491,6 +491,23 @@ body.mono .markdown-body {
   font-family: var(--font-mono);
 }
 
+/* Raw-Markdown view: read-only verbatim source, wrapped so any part can be
+   selected and copied. Lives inside .markdown-body, so it inherits the column
+   width, centering and zoom-aware padding. */
+.raw-markdown {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: calc(var(--font-size) * var(--zoom) * 0.92);
+  line-height: var(--line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  tab-size: 4;
+  color: var(--fg);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* TOC + backlinks ---------------------------------------------------------- */
 .toc {
   width: var(--toc-width);
