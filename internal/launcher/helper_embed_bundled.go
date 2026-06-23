@@ -26,12 +26,17 @@ import (
 //go:embed all:assets
 var assets embed.FS
 
-// helperName is the on-disk name of the extracted helper.
+// helperName is the on-disk name of the extracted helper. It is deliberately
+// "mdv" (not "mdv-gui"): on macOS an unbundled binary's process name is what
+// AppKit shows as the bold application name in the menu bar, and on
+// Windows/Linux it is the process image name. Naming it "mdv" makes the running
+// GUI present itself as "mdv" everywhere. The launcher and helper live in
+// separate directories, so the shared basename never collides on disk.
 func helperName() string {
 	if runtime.GOOS == "windows" {
-		return "mdv-gui.exe"
+		return "mdv.exe"
 	}
-	return "mdv-gui"
+	return "mdv"
 }
 
 // embeddedGUIAvailable reports whether a usable (non-placeholder) GUI helper is

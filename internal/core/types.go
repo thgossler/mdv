@@ -9,6 +9,12 @@ const AppName = "mdv"
 // AppTagline is shown in help output.
 const AppTagline = "Markdown Viewer"
 
+// AppAuthor is the program's author, shown in the GUI About box.
+const AppAuthor = "Thomas Gossler"
+
+// AppCopyright is the copyright notice shown in the GUI About box.
+const AppCopyright = "© 2026 Thomas Gossler"
+
 // Version is the current build version (SemVer, "v"-prefixed). The canonical
 // value lives in the repository-root VERSION file and is injected at build time
 // via -ldflags "-X github.com/thgossler/mdv/internal/core.Version=vX.Y.Z". This

@@ -459,6 +459,29 @@ function closeExternalModal(ok: boolean): void {
   resolve(ok);
 }
 
+// showAbout populates and reveals the About dialog with the program name,
+// version, copyright and repository URL provided by the backend at startup.
+function showAbout(): void {
+  $("about-modal-title").textContent = info.appName || "mdv";
+  $("about-version").textContent = info.version ? `Version ${info.version}` : "";
+  $("about-copyright").textContent = info.copyright || "";
+  const repo = $<HTMLAnchorElement>("about-repo");
+  if (info.repoURL) {
+    repo.textContent = info.repoURL.replace(/^https?:\/\//, "");
+    repo.href = info.repoURL;
+    repo.style.display = "";
+  } else {
+    repo.style.display = "none";
+  }
+  $("about-modal").classList.remove("hidden");
+  ($("about-modal-close") as HTMLButtonElement).focus();
+}
+
+// closeAbout hides the About dialog.
+function closeAbout(): void {
+  $("about-modal").classList.add("hidden");
+}
+
 function fillAdoTocPlaceholders(headings: { level: number; text: string; slug: string }[]): void {
   const holders = Array.from(els.content.querySelectorAll<HTMLElement>("[data-ado-toc]"));
   if (holders.length === 0) return;
@@ -1091,6 +1114,16 @@ function wireToolbar(): void {
     if (e.target === $("external-modal")) closeExternalModal(false);
   });
 
+  // About dialog wiring.
+  $("about-modal-close").addEventListener("click", closeAbout);
+  $("about-modal").addEventListener("click", (e) => {
+    if (e.target === $("about-modal")) closeAbout();
+  });
+  $("about-repo").addEventListener("click", (e) => {
+    e.preventDefault();
+    if (info.repoURL) void api.openExternal(info.repoURL);
+  });
+
   // Double-clicking the title-bar area performs the OS window action (zoom on
   // macOS, maximise/restore elsewhere), matching native window behaviour.
   els.toolbar.addEventListener("dblclick", (e) => {
@@ -1441,6 +1474,7 @@ function wireMenuEvents(): void {
   on("menu:zoom-reset", zoomReset);
   on("menu:find", () => showSearch(els.searchBar, els.searchInput));
   on("menu:new-window", () => currentPath && api.openNewWindow(currentPath));
+  on("menu:about", showAbout);
 }
 
 function wireContextMenu(): void {
@@ -1710,6 +1744,11 @@ document.addEventListener("keydown", (e) => {
     if (!$("external-modal").classList.contains("hidden")) {
       e.preventDefault();
       closeExternalModal(false);
+      return;
+    }
+    if (!$("about-modal").classList.contains("hidden")) {
+      e.preventDefault();
+      closeAbout();
       return;
     }
     els.contextMenu.classList.add("hidden");

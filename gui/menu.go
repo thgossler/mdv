@@ -13,7 +13,22 @@ func buildMenu(app *application.App) *application.Menu {
 	menu := app.NewMenu()
 
 	if runtime.GOOS == "darwin" {
-		menu.AddRole(application.AppMenu)
+		// Build the application menu manually instead of using the AppMenu role so
+		// the "About" item opens our own cross-platform About dialog. The native
+		// standard about panel pulls from a bundle Info.plist, which the unbundled
+		// GUI helper does not have, so it would show no useful information.
+		appMenu := menu.AddSubmenu(core.AppName)
+		appMenu.Add("About " + core.AppName).OnClick(func(*application.Context) {
+			app.Event.Emit("menu:about", "")
+		})
+		appMenu.AddSeparator()
+		appMenu.AddRole(application.ServicesMenu)
+		appMenu.AddSeparator()
+		appMenu.AddRole(application.Hide)
+		appMenu.AddRole(application.HideOthers)
+		appMenu.AddRole(application.UnHide)
+		appMenu.AddSeparator()
+		appMenu.AddRole(application.Quit)
 	}
 
 	// File menu.
@@ -94,6 +109,12 @@ func buildMenu(app *application.App) *application.Menu {
 	helpMenu.Add(core.AppName + " on GitHub").OnClick(func(*application.Context) {
 		_ = core.OpenInOS("https://github.com/" + core.DefaultSettings().UpdateRepo)
 	})
+	if runtime.GOOS != "darwin" {
+		helpMenu.AddSeparator()
+		helpMenu.Add("About " + core.AppName).OnClick(func(*application.Context) {
+			app.Event.Emit("menu:about", "")
+		})
+	}
 
 	return menu
 }

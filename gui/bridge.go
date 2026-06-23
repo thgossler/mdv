@@ -72,6 +72,9 @@ type InitInfo struct {
 	Fragment  string        `json:"fragment"`
 	AppName   string        `json:"appName"`
 	Version   string        `json:"version"`
+	Author    string        `json:"author"`
+	Copyright string        `json:"copyright"`
+	RepoURL   string        `json:"repoURL"`
 	Config    core.Defaults `json:"config"`
 	Workspace []DocFileDTO  `json:"workspace"`
 	Update    UpdateDTO     `json:"update"`
@@ -126,6 +129,9 @@ func (b *Bridge) Init() InitInfo {
 		Fragment:  b.input.Fragment,
 		AppName:   core.AppName,
 		Version:   core.Version,
+		Author:    core.AppAuthor,
+		Copyright: core.AppCopyright,
+		RepoURL:   "https://github.com/" + core.DefaultSettings().UpdateRepo,
 		Config:    b.cfg,
 		Workspace: b.workspaceDTO(),
 		Update:    b.checkUpdate(),
@@ -157,6 +163,9 @@ func (b *Bridge) Reinit(path string) InitInfo {
 		Fragment:  b.input.Fragment,
 		AppName:   core.AppName,
 		Version:   core.Version,
+		Author:    core.AppAuthor,
+		Copyright: core.AppCopyright,
+		RepoURL:   "https://github.com/" + core.DefaultSettings().UpdateRepo,
 		Config:    b.cfg,
 		Workspace: b.workspaceDTO(),
 		Layout:    b.layoutDTO(),

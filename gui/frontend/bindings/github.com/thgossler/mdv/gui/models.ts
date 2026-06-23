@@ -39,6 +39,9 @@ export interface InitInfo {
     "fragment": string;
     "appName": string;
     "version": string;
+    "author": string;
+    "copyright": string;
+    "repoURL": string;
     "config": core$0.Defaults;
     "workspace": DocFileDTO[] | null;
     "update": UpdateDTO;
