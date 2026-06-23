@@ -127,6 +127,23 @@ body {
   height: 16px;
   display: block;
 }
+/* The chevron-down glyph sits visually high in its box; nudge it down so it
+   lines up with the back/forward arrows on either side. */
+#btn-history svg {
+  position: relative;
+  top: 2px;
+}
+/* These glyph icons read a little small at the base toolbar size; bump them up
+   so they match the visual weight of the SVG icons on high-res displays. */
+#btn-recent,
+#btn-reload,
+#btn-watch {
+  font-size: 19px;
+}
+/* The reload glyph reads smaller than its neighbours at the shared size. */
+#btn-reload {
+  font-size: 22px;
+}
 .tb-btn:hover {
   background: var(--hover);
   color: var(--fg);
