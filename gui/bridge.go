@@ -132,20 +132,20 @@ func (b *Bridge) Init() InitInfo {
 	}
 	b.recordRecent()
 	return InitInfo{
-		Kind:      kind,
-		Path:      b.input.Path,
-		Dir:       b.input.Dir,
-		Fragment:  b.input.Fragment,
-		AppName:   core.AppName,
-		Version:   core.Version,
-		Author:    core.AppAuthor,
-		Copyright: core.AppCopyright,
-		RepoURL:   "https://github.com/" + core.DefaultSettings().UpdateRepo,
-		Config:    b.cfg,
-		Workspace: b.workspaceDTO(),
-		Update:    b.checkUpdate(),
-		Layout:    b.layoutDTO(),
-		Recent:    b.recentList(),
+		Kind:           kind,
+		Path:           b.input.Path,
+		Dir:            b.input.Dir,
+		Fragment:       b.input.Fragment,
+		AppName:        core.AppName,
+		Version:        core.Version,
+		Author:         core.AppAuthor,
+		Copyright:      core.AppCopyright,
+		RepoURL:        "https://github.com/" + core.DefaultSettings().UpdateRepo,
+		Config:         b.cfg,
+		Workspace:      b.workspaceDTO(),
+		Update:         b.checkUpdate(),
+		Layout:         b.layoutDTO(),
+		Recent:         b.recentList(),
 		ExtendedSyntax: b.effectiveExtendedSyntax(),
 	}
 }
@@ -167,19 +167,19 @@ func (b *Bridge) Reinit(path string) InitInfo {
 	}
 	b.recordRecent()
 	return InitInfo{
-		Kind:      kind,
-		Path:      b.input.Path,
-		Dir:       b.input.Dir,
-		Fragment:  b.input.Fragment,
-		AppName:   core.AppName,
-		Version:   core.Version,
-		Author:    core.AppAuthor,
-		Copyright: core.AppCopyright,
-		RepoURL:   "https://github.com/" + core.DefaultSettings().UpdateRepo,
-		Config:    b.cfg,
-		Workspace: b.workspaceDTO(),
-		Layout:    b.layoutDTO(),
-		Recent:    b.recentList(),
+		Kind:           kind,
+		Path:           b.input.Path,
+		Dir:            b.input.Dir,
+		Fragment:       b.input.Fragment,
+		AppName:        core.AppName,
+		Version:        core.Version,
+		Author:         core.AppAuthor,
+		Copyright:      core.AppCopyright,
+		RepoURL:        "https://github.com/" + core.DefaultSettings().UpdateRepo,
+		Config:         b.cfg,
+		Workspace:      b.workspaceDTO(),
+		Layout:         b.layoutDTO(),
+		Recent:         b.recentList(),
 		ExtendedSyntax: b.effectiveExtendedSyntax(),
 	}
 }
@@ -264,7 +264,7 @@ func (b *Bridge) promptForInput() bool {
 	path, err := b.app.Dialog.OpenFile().
 		CanChooseFiles(true).
 		CanChooseDirectories(true).
-		SetTitle(core.AppName + " \u2014 Open Markdown File or Folder").
+		SetTitle(core.AppName+" \u2014 Open Markdown File or Folder").
 		AddFilter("Markdown", "*.md;*.markdown;*.mdown;*.mkd;*.mkdn;*.mdwn;*.mdtxt;*.mdtext;*.text").
 		PromptForSingleSelection()
 	if err != nil || strings.TrimSpace(path) == "" {

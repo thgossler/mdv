@@ -12,8 +12,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/thgossler/mdv/internal/core"
 	gmpdf "github.com/stephenafamo/goldmark-pdf"
+	"github.com/thgossler/mdv/internal/core"
 	"github.com/yuin/goldmark"
 )
 
@@ -338,4 +338,3 @@ func (s rasterOnlyFS) Open(name string) (http.File, error) {
 		return nil, fs.ErrNotExist
 	}
 }
-

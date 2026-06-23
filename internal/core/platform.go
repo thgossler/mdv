@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"runtime"
 )
+
 // hostOSArch returns lowercase OS and arch tokens used to match release assets.
 func hostOSArch() (string, string) {
 	goos := runtime.GOOS

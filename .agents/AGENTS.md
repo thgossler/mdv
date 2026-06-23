@@ -34,7 +34,10 @@ environment:
   `otool -L build/mdv | grep -i webkit` (macOS) must print nothing.
 - **Do not modify `LICENSE.md`.** The project is MIT-licensed; the license text
   and copyright stay as-is.
-- **All Go code must be `gofmt`-clean** and pass `go vet`.
+- **All Go code must be `gofmt`-clean** and pass `go vet`. **Always check
+  formatting before considering a change complete** - run `gofmt -w .` (Go) and
+  `npx tsc --noEmit` in `gui/frontend` (TypeScript), and confirm
+  `gofmt -l $(git ls-files '*.go')` prints nothing. CI fails on unformatted code.
 - **Tests must pass with no errors or warnings** before any change is
   considered done (`go test ./...`).
 - **Don't add heavy dependencies** without strong justification - minimalism is

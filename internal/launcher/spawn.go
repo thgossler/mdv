@@ -5,7 +5,6 @@ import (
 	"os"
 )
 
-
 // ErrNoEmbeddedGUI indicates the binary was built without the bundled GUI
 // helper (e.g. the console/TUI-only build, or during early development before
 // the Wails frontend exists). Callers should fall back to TUI or console.
