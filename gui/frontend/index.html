@@ -23,11 +23,13 @@
       <header id="toolbar" class="toolbar">
         <div class="toolbar-left">
           <button id="btn-back" class="tb-btn" title="Back (Cmd/Ctrl+Left)" disabled>‹</button>
-          <button id="btn-forward" class="tb-btn" title="Forward (Cmd/Ctrl+Right)" disabled>›</button>
           <div id="history-menu" class="history-menu hidden"></div>
-          <button id="btn-history" class="tb-btn" title="History" disabled>▾</button>
+          <button id="btn-history" class="tb-btn" title="History" aria-label="History" disabled><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3.14598 5.85423L7.64598 10.3542C7.84098 10.5492 8.15798 10.5492 8.35298 10.3542L12.853 5.85423C13.048 5.65923 13.048 5.34223 12.853 5.14723C12.658 4.95223 12.341 4.95223 12.146 5.14723L7.99998 9.29323L3.85398 5.14723C3.65898 4.95223 3.34198 4.95223 3.14698 5.14723C2.95198 5.34223 2.95098 5.65923 3.14598 5.85423Z"/></svg></button>
+          <button id="btn-forward" class="tb-btn" title="Forward (Cmd/Ctrl+Right)" disabled>›</button>
+          <div id="recent-menu" class="recent-menu hidden"></div>
+          <button id="btn-recent" class="tb-btn" title="Recently opened files &amp; folders" disabled>◷</button>
           <button id="btn-reload" class="tb-btn" title="Reload document (Cmd/Ctrl+R)">⟳</button>
-          <button id="btn-sidebar" class="tb-btn" title="Toggle sidebar (Cmd/Ctrl+B)">☰</button>
+          <button id="btn-watch" class="tb-btn" title="Auto-reload active document when it changes on disk (off)">⊙</button>
           <button id="btn-open-external" class="tb-btn hidden" title="Open in the associated app">↗</button>
         </div>
         <div id="doc-title" class="doc-title"></div>
@@ -36,8 +38,9 @@
           <button id="btn-extended" class="tb-btn" title="Toggle extended Markdown syntax (math, sub/sup, highlight)">∑</button>
           <button id="btn-mono" class="tb-btn" title="Toggle monospace">M</button>
           <button id="btn-width" class="tb-btn" title="Toggle full width">↔</button>
-          <button id="btn-toc" class="tb-btn" title="Toggle table of contents">⊟</button>
           <button id="btn-theme" class="tb-btn" title="Toggle theme (Cmd/Ctrl+J)">◐</button>
+          <button id="btn-sidebar" class="tb-btn" title="Toggle left panel (Cmd/Ctrl+B)" aria-label="Toggle left panel"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M12.5 1C13.881 1 15 2.119 15 3.5V12.5C15 13.881 13.881 15 12.5 15H3.5C2.119 15 1 13.881 1 12.5V3.5C1 2.119 2.119 1 3.5 1H12.5ZM12.5 14C13.328 14 14 13.328 14 12.5V3.5C14 2.672 13.328 2 12.5 2H7V14H12.5Z"/></svg></button>
+          <button id="btn-toc" class="tb-btn" title="Toggle right panel" aria-label="Toggle right panel"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M12.5 1C13.881 1 15 2.119 15 3.5V12.5C15 13.881 13.881 15 12.5 15H3.5C2.119 15 1 13.881 1 12.5V3.5C1 2.119 2.119 1 3.5 1H12.5ZM9 14V2H3.5C2.672 2 2 2.672 2 3.5V12.5C2 13.328 2.672 14 3.5 14H9Z"/></svg></button>
         </div>
       </header>
 

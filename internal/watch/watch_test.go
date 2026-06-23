@@ -52,6 +52,39 @@ func TestWatcherFileChanged(t *testing.T) {
 	}
 }
 
+// TestWatcherUnwatchStopsFileEvents verifies that Unwatch releases the active
+// document so later edits no longer produce FileChanged events. This backs the
+// runtime auto-reload toggle in both front-ends.
+func TestWatcherUnwatchStopsFileEvents(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "doc.md")
+	if err := os.WriteFile(file, []byte("# One"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	events := make(chan Event, 16)
+	w := New(core.DefaultSettings(), func(ev Event) { events <- ev })
+	if w == nil {
+		t.Skip("filesystem watcher unavailable on this platform")
+	}
+	defer w.Close()
+	w.Watch(file)
+	w.Unwatch()
+
+	if err := os.WriteFile(file, []byte("# One\n\n# Two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case ev := <-events:
+		if ev.Kind == FileChanged {
+			t.Errorf("FileChanged emitted after Unwatch")
+		}
+	case <-time.After(600 * time.Millisecond):
+		// No event: the expected outcome.
+	}
+}
+
 func TestWatcherWorkspaceChanged(t *testing.T) {
 	dir := t.TempDir()
 

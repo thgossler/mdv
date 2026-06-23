@@ -5,6 +5,10 @@ temp/
 /build/
 /dist/
 
+# Compiled GUI binary (produced by `go build`/`wails3` inside the gui package,
+# named after its directory; the real release binary lives under /build/)
+/gui/gui
+
 # Frontend
 gui/frontend/node_modules/
 gui/frontend/dist/assets/

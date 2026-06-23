@@ -48,6 +48,12 @@ export interface InitInfo {
     "layout": LayoutDTO;
 
     /**
+     * Recent is the rolling list of recently opened files and folders (mixed,
+     * most recent first), surfaced in the toolbar's recents drop-down.
+     */
+    "recent": RecentItem[] | null;
+
+    /**
      * ExtendedSyntax is the effective state of the opt-in "extended" inline
      * Markdown syntax (math, sub/sup, highlight, inserted): the persisted runtime
      * choice from state.jsonc if the user ever toggled it, otherwise the
@@ -81,6 +87,16 @@ export interface LinkTargetDTO {
     "fragment": string;
     "display": string;
     "raw": string;
+}
+
+/**
+ * RecentItem is a single entry in the rolling list of recently opened inputs.
+ * Files and folders share one list; Kind ("file" or "folder") only affects how
+ * the entry is labelled in the toolbar's recents drop-down.
+ */
+export interface RecentItem {
+    "path": string;
+    "kind": string;
 }
 
 /**

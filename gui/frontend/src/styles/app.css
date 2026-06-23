@@ -122,6 +122,11 @@ body {
   align-items: center;
   justify-content: center;
 }
+.tb-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
 .tb-btn:hover {
   background: var(--hover);
   color: var(--fg);
@@ -646,6 +651,7 @@ body.mono .markdown-body {
 
 /* History + context menus -------------------------------------------------- */
 .history-menu,
+.recent-menu,
 .context-menu {
   position: absolute;
   z-index: 50;
@@ -663,7 +669,16 @@ body.mono .markdown-body {
   max-height: 320px;
   overflow-y: auto;
 }
+.recent-menu {
+  top: var(--tb-height);
+  left: 8px;
+  min-width: 240px;
+  max-width: 460px;
+  max-height: 360px;
+  overflow-y: auto;
+}
 .history-menu.hidden,
+.recent-menu.hidden,
 .context-menu.hidden {
   display: none;
 }
@@ -679,6 +694,53 @@ body.mono .markdown-body {
 }
 .history-item:hover,
 .ctx-item:hover {
+  background: var(--hover);
+}
+
+/* Recently-opened dropdown ------------------------------------------------- */
+.recent-item {
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  overflow: hidden;
+}
+.recent-item:hover {
+  background: var(--hover);
+}
+.recent-name {
+  display: block;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-path {
+  display: block;
+  font-size: 11px;
+  color: var(--fg-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-empty {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--fg-subtle);
+}
+.recent-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+.recent-clear {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--fg-subtle);
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.recent-clear:hover {
   background: var(--hover);
 }
 

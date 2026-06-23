@@ -220,7 +220,11 @@ const defaultConfigTemplate = `// mdv - Markdown Viewer - user settings (JSONC).
   // Folder navigation label: "filename" | "title"
   "navLabelMode": "filename",
 
-  "liveReload": true,
+  // Initial state of the active-document auto-reload toggle. When false (the
+  // default) the viewer does not watch the open file; turn watching on at
+  // runtime from the GUI toolbar button or with the TUI 'w' key. Set to true to
+  // start with auto-reload already enabled.
+  "liveReload": false,
 
   // Enable "extended" inline Markdown syntax that is off by default because it
   // can silently transform ordinary prose (e.g. "$5 to $10" as math):

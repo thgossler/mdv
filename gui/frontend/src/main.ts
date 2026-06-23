@@ -5,7 +5,7 @@ import "./styles/app.css";
 import "./styles/markdown.css";
 import "./styles/alerts.css";
 import "./styles/code.css";
-import { api, type InitInfo, type DocFileDTO, type ContentMatch } from "./bridge";
+import { api, type InitInfo, type DocFileDTO, type ContentMatch, type RecentItem } from "./bridge";
 import { render } from "./render";
 import { extractFrontmatter, renderFrontmatter } from "./frontmatter";
 import { renderMermaid, renderMermaidSource } from "./mermaidRunner";
@@ -51,6 +51,11 @@ let currentDocTitle = "";
 // can re-render it without a round-trip to the backend.
 let extendedSyntax = false;
 let lastRendered: { markdown: string; name: string; path: string } | null = null;
+
+// Runtime auto-reload toggle for the active document. Starts from config
+// (liveReload) and is flipped from the toolbar watch button. While off, the
+// backend watches nothing, so editing the open file on disk does not refresh it.
+let watchEnabled = false;
 
 // --- content-search state ---------------------------------------------------
 // When enabled, the navigator filter box searches document *content* (not just
@@ -111,10 +116,13 @@ const els = {
   btnBack: $<HTMLButtonElement>("btn-back"),
   btnForward: $<HTMLButtonElement>("btn-forward"),
   btnHistory: $<HTMLButtonElement>("btn-history"),
+  btnRecent: $<HTMLButtonElement>("btn-recent"),
   btnExtended: $<HTMLButtonElement>("btn-extended"),
   btnRemoteImg: $<HTMLButtonElement>("btn-remote-img"),
   btnOpenExternal: $<HTMLButtonElement>("btn-open-external"),
+  btnWatch: $<HTMLButtonElement>("btn-watch"),
   historyMenu: $("history-menu"),
+  recentMenu: $("recent-menu"),
   contextMenu: $("context-menu"),
   searchBar: $("search-bar"),
   searchInput: $<HTMLInputElement>("search-input"),
@@ -133,6 +141,8 @@ async function boot(): Promise<void> {
   els.content.setAttribute("dir", "auto");
   extendedSyntax = info.extendedSyntax === true;
   els.btnExtended.classList.toggle("active", extendedSyntax);
+  watchEnabled = info.config.liveReload === true;
+  updateWatchButton();
   applyLayout(info.layout);
   initTheme((info.config.theme as ThemeMode) || "system");
   onThemeChange(() => rerenderMermaidForTheme());
@@ -295,6 +305,22 @@ async function reloadCurrent(opts: { flash?: boolean } = {}): Promise<void> {
   await openDocument(currentPath, false);
   els.contentWrap.scrollTop = scroll;
   if (opts.flash) flashStatus("Document changed", true);
+}
+
+// reloadAll is the manual ("hard") refresh behind the toolbar reload button, the
+// View > Reload menu item and the context-menu "Reload page" action. Because
+// only the active document is watched now, an explicit reload is the user's way
+// to pick up changes elsewhere in the tree: it re-scans the workspace listing
+// (refreshing the navigator) and then re-renders the active document. It is
+// never driven by a watcher - only by a deliberate user action.
+async function reloadAll(): Promise<void> {
+  await refreshWorkspaceFromDisk();
+  if (currentPath) {
+    const scroll = els.contentWrap.scrollTop;
+    await openDocument(currentPath, false);
+    els.contentWrap.scrollTop = scroll;
+  }
+  flashStatus("Reloaded", true);
 }
 
 
@@ -1063,6 +1089,7 @@ function updateChrome(): void {
   els.btnBack.disabled = history.length === 0;
   els.btnForward.disabled = forward.length === 0;
   els.btnHistory.disabled = history.length === 0;
+  els.btnRecent.disabled = recentItems().length === 0;
   els.statusLeft.textContent = currentPath;
 }
 
@@ -1091,7 +1118,9 @@ function wireToolbar(): void {
   els.btnBack.addEventListener("click", goBack);
   els.btnForward.addEventListener("click", goForward);
   els.btnHistory.addEventListener("click", toggleHistoryMenu);
-  $("btn-reload").addEventListener("click", () => void reloadCurrent({ flash: true }));
+  els.btnRecent.addEventListener("click", toggleRecentMenu);
+  $("btn-reload").addEventListener("click", () => void reloadAll());
+  els.btnWatch.addEventListener("click", () => void toggleWatch());
   $("btn-sidebar").addEventListener("click", () => els.sidebar.classList.toggle("collapsed"));
   $("btn-toc").addEventListener("click", () => {
     const hidden = els.toc.classList.toggle("hidden");
@@ -1127,7 +1156,7 @@ function wireToolbar(): void {
   // Double-clicking the title-bar area performs the OS window action (zoom on
   // macOS, maximise/restore elsewhere), matching native window behaviour.
   els.toolbar.addEventListener("dblclick", (e) => {
-    if ((e.target as HTMLElement).closest("button, input, a, .history-menu")) return;
+    if ((e.target as HTMLElement).closest("button, input, a, .history-menu, .recent-menu")) return;
     void titleBarAction();
   });
 
@@ -1308,7 +1337,7 @@ async function restoreWindow(): Promise<void> {
 // first click of a double-click still toggles via titleBarAction.
 function onTitleBarMouseDown(e: MouseEvent): void {
   if (!isMac || !winMaximized || e.button !== 0) return;
-  if ((e.target as HTMLElement).closest("button, input, a, .history-menu")) return;
+  if ((e.target as HTMLElement).closest("button, input, a, .history-menu, .recent-menu")) return;
 
   const start = { cx: e.clientX, cy: e.clientY, sx: e.screenX, sy: e.screenY };
   let armed = true;
@@ -1426,6 +1455,22 @@ async function toggleExtendedSyntax(): Promise<void> {
   }
 }
 
+// updateWatchButton reflects the current auto-reload state on the toolbar button.
+function updateWatchButton(): void {
+  els.btnWatch.classList.toggle("active", watchEnabled);
+  els.btnWatch.title = watchEnabled
+    ? "Auto-reload active document when it changes on disk (on)"
+    : "Auto-reload active document when it changes on disk (off)";
+}
+
+// toggleWatch flips the active-document auto-reload watcher on or off. Turning it
+// on arms the watcher for the current document; turning it off releases it.
+async function toggleWatch(): Promise<void> {
+  watchEnabled = await api.setWatchEnabled(!watchEnabled, currentPath);
+  updateWatchButton();
+  flashStatus(watchEnabled ? "Auto-reload on" : "Auto-reload off", true);
+}
+
 function currentFilter(): DocFileDTO[] {
   const base = visibleWorkspace();
   const q = els.navFilter.value.trim();
@@ -1456,13 +1501,81 @@ function toggleHistoryMenu(): void {
   }
 }
 
-// --- menu + context menu ----------------------------------------------------
+// recentItems returns the rolling list of recently opened files and folders
+// (most-recent first), as delivered by the backend in the init/reinit payload
+// and persisted in state.jsonc.
+function recentItems(): RecentItem[] {
+  return info?.recent ?? [];
+}
+
+// parentDir returns the directory portion of a path, shown as the dropdown's
+// muted secondary line so entries with the same base name stay distinguishable.
+function parentDir(p: string): string {
+  const cut = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return cut > 0 ? p.slice(0, cut) : cut === 0 ? "/" : "";
+}
+
+// toggleRecentMenu shows/hides the toolbar's "recently opened" dropdown, which
+// mixes files and folders in one most-recent-first list. Selecting an entry
+// reopens it; a trailing action clears the whole list.
+function toggleRecentMenu(): void {
+  const menu = els.recentMenu;
+  menu.classList.toggle("hidden");
+  if (menu.classList.contains("hidden")) return;
+  els.historyMenu.classList.add("hidden");
+  menu.innerHTML = "";
+
+  const items = recentItems();
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "recent-empty";
+    empty.textContent = "No recently opened items";
+    menu.appendChild(empty);
+    return;
+  }
+
+  for (const it of items) {
+    const row = document.createElement("div");
+    row.className = "recent-item";
+    row.title = it.path;
+
+    const name = document.createElement("span");
+    name.className = "recent-name";
+    name.textContent = it.kind === "folder" ? baseName(it.path) + "/" : baseName(it.path);
+
+    const path = document.createElement("span");
+    path.className = "recent-path";
+    path.textContent = parentDir(it.path);
+
+    row.appendChild(name);
+    row.appendChild(path);
+    row.addEventListener("click", () => {
+      menu.classList.add("hidden");
+      void reopenInput(it.path);
+    });
+    menu.appendChild(row);
+  }
+
+  const sep = document.createElement("div");
+  sep.className = "recent-sep";
+  menu.appendChild(sep);
+
+  const clear = document.createElement("div");
+  clear.className = "recent-clear";
+  clear.textContent = "Clear recently opened";
+  clear.addEventListener("click", async () => {
+    info.recent = (await api.clearRecent()) ?? [];
+    menu.classList.add("hidden");
+    updateChrome();
+  });
+  menu.appendChild(clear);
+}
 
 function wireMenuEvents(): void {
   const on = (name: string, fn: () => void) => Events.On(name, fn);
   on("menu:back", goBack);
   on("menu:forward", goForward);
-  on("menu:reload", () => void reloadCurrent({ flash: true }));
+  on("menu:reload", () => void reloadAll());
   on("menu:toggle-sidebar", () => els.sidebar.classList.toggle("collapsed"));
   on("menu:toggle-toc", () => els.toc.classList.toggle("hidden"));
   on("menu:toggle-backlinks", () => els.toc.classList.toggle("hidden"));
@@ -1483,7 +1596,7 @@ function wireContextMenu(): void {
     const reload = {
       label: "Reload page",
       fn: () => {
-        void reloadCurrent({ flash: true });
+        void reloadAll();
       },
     };
     if (a && isExternalLink(a)) {
@@ -1504,6 +1617,12 @@ function wireContextMenu(): void {
     openMenu(e, [{ label: "Copy", fn: () => copyText(sel) }, reload]);
   });
   document.addEventListener("click", () => els.contextMenu.classList.add("hidden"));
+  // Close the recents dropdown when clicking anywhere outside it or its button.
+  document.addEventListener("click", (e) => {
+    if (!(e.target as HTMLElement).closest("#recent-menu, #btn-recent")) {
+      els.recentMenu.classList.add("hidden");
+    }
+  });
 }
 
 // wireTocContextMenus attaches a custom context menu to each in-page nav entry,
@@ -1753,6 +1872,7 @@ document.addEventListener("keydown", (e) => {
     }
     els.contextMenu.classList.add("hidden");
     els.historyMenu.classList.add("hidden");
+    els.recentMenu.classList.add("hidden");
   } else if (
     e.key === "Backspace" &&
     !e.ctrlKey &&
@@ -1801,3 +1921,4 @@ window.addEventListener("error", (e) => reportUnexpected(e.error ?? e.message));
 window.addEventListener("unhandledrejection", (e) => reportUnexpected(e.reason));
 
 void boot();
+

@@ -46,11 +46,15 @@ type Bridge struct {
 	excludeMu       sync.Mutex
 	excludePatterns []string
 	excludeEnabled  bool
+
+	// watchEnabled is the runtime auto-reload toggle for the active document. It
+	// starts from cfg.LiveReload and can be flipped from the toolbar at runtime.
+	watchEnabled bool
 }
 
 // NewBridge builds a Bridge for the given input and configuration.
 func NewBridge(cfg core.Defaults, in core.Input) *Bridge {
-	b := &Bridge{cfg: cfg, input: in}
+	b := &Bridge{cfg: cfg, input: in, watchEnabled: cfg.LiveReload}
 	b.workspace, _ = core.ListMarkdownFiles(in.Dir, cfg)
 	core.PopulateTitles(b.workspace)
 	return b
@@ -79,6 +83,9 @@ type InitInfo struct {
 	Workspace []DocFileDTO  `json:"workspace"`
 	Update    UpdateDTO     `json:"update"`
 	Layout    LayoutDTO     `json:"layout"`
+	// Recent is the rolling list of recently opened files and folders (mixed,
+	// most recent first), surfaced in the toolbar's recents drop-down.
+	Recent []RecentItem `json:"recent"`
 	// ExtendedSyntax is the effective state of the opt-in "extended" inline
 	// Markdown syntax (math, sub/sup, highlight, inserted): the persisted runtime
 	// choice from state.jsonc if the user ever toggled it, otherwise the
@@ -121,7 +128,7 @@ func (b *Bridge) Init() InitInfo {
 	if b.input.Kind == core.InputFolder {
 		kind = "folder"
 	}
-	b.armWorkspaceWatch()
+	b.recordRecent()
 	return InitInfo{
 		Kind:      kind,
 		Path:      b.input.Path,
@@ -136,6 +143,7 @@ func (b *Bridge) Init() InitInfo {
 		Workspace: b.workspaceDTO(),
 		Update:    b.checkUpdate(),
 		Layout:    b.layoutDTO(),
+		Recent:    b.recentList(),
 		ExtendedSyntax: b.effectiveExtendedSyntax(),
 	}
 }
@@ -155,7 +163,7 @@ func (b *Bridge) Reinit(path string) InitInfo {
 	if b.input.Kind == core.InputFolder {
 		kind = "folder"
 	}
-	b.armWorkspaceWatch()
+	b.recordRecent()
 	return InitInfo{
 		Kind:      kind,
 		Path:      b.input.Path,
@@ -169,6 +177,7 @@ func (b *Bridge) Reinit(path string) InitInfo {
 		Config:    b.cfg,
 		Workspace: b.workspaceDTO(),
 		Layout:    b.layoutDTO(),
+		Recent:    b.recentList(),
 		ExtendedSyntax: b.effectiveExtendedSyntax(),
 	}
 }
@@ -485,20 +494,58 @@ func isAllowedExternalTarget(target string) bool {
 	}
 }
 
-// WatchFile switches the live-reload watcher to the given document.
+// WatchFile switches the live-reload watcher to the given document. It is a
+// no-op while auto-reload is disabled (the default).
 func (b *Bridge) WatchFile(path string) {
-	if b.cfg.LiveReload && b.watcher != nil {
+	if b.watchEnabled && b.watcher != nil {
 		b.watcher.Watch(path)
 	}
 }
 
-// armWorkspaceWatch points the live-reload watcher at the current workspace root
-// so navigator updates track filesystem changes. It is a no-op when live reload
-// is disabled.
-func (b *Bridge) armWorkspaceWatch() {
-	if b.cfg.LiveReload && b.watcher != nil {
-		b.watcher.WatchWorkspace(b.input.Dir)
+// SetWatchEnabled turns the active-document auto-reload watcher on or off at
+// runtime. When enabling, path (the currently displayed document) is armed
+// immediately; when disabling, the active-document watch is released. It returns
+// the resulting enabled state.
+func (b *Bridge) SetWatchEnabled(enabled bool, path string) bool {
+	b.watchEnabled = enabled
+	if b.watcher == nil {
+		return false
 	}
+	if enabled {
+		if path != "" {
+			b.watcher.Watch(path)
+		}
+	} else {
+		b.watcher.Unwatch()
+	}
+	return b.watchEnabled
+}
+
+// recordRecent adds the current input to the rolling recently-opened list so it
+// surfaces in the toolbar's recents drop-down. Picker/none inputs are ignored.
+func (b *Bridge) recordRecent() {
+	if b.layout == nil || b.input.Kind == core.InputNone || strings.TrimSpace(b.input.Path) == "" {
+		return
+	}
+	b.layout.AddRecent(recentItemFor(b.input))
+}
+
+// recentList returns the current rolling recents (most recent first), or nil
+// when no layout store is attached.
+func (b *Bridge) recentList() []RecentItem {
+	if b.layout == nil {
+		return nil
+	}
+	return b.layout.Recent()
+}
+
+// ClearRecent empties the rolling recently-opened list and returns the (now
+// empty) list so the frontend can refresh the toolbar drop-down.
+func (b *Bridge) ClearRecent() []RecentItem {
+	if b.layout != nil {
+		b.layout.ClearRecent()
+	}
+	return b.recentList()
 }
 
 // RefreshWorkspace re-scans the workspace directory and returns the current

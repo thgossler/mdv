@@ -93,7 +93,7 @@ export interface Defaults {
     "followExternal": boolean;
 
     /**
-     * watch & auto-refresh
+     * initial state of the active-document auto-reload toggle
      */
     "liveReload": boolean;
 

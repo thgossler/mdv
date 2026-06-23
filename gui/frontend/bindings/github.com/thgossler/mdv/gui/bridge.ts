@@ -38,6 +38,14 @@ export function Backlinks(path: string): $CancellablePromise<core$0.Backlink[] |
 }
 
 /**
+ * ClearRecent empties the rolling recently-opened list and returns the (now
+ * empty) list so the frontend can refresh the toolbar drop-down.
+ */
+export function ClearRecent(): $CancellablePromise<$models.RecentItem[] | null> {
+    return $Call.ByID(3389475587);
+}
+
+/**
  * Init returns the bootstrap information for the frontend.
  */
 export function Init(): $CancellablePromise<$models.InitInfo> {
@@ -160,7 +168,18 @@ export function SearchContent(query: string, gen: number): $CancellablePromise<v
 }
 
 /**
- * WatchFile switches the live-reload watcher to the given document.
+ * SetWatchEnabled turns the active-document auto-reload watcher on or off at
+ * runtime. When enabling, path (the currently displayed document) is armed
+ * immediately; when disabling, the active-document watch is released. It returns
+ * the resulting enabled state.
+ */
+export function SetWatchEnabled(enabled: boolean, path: string): $CancellablePromise<boolean> {
+    return $Call.ByID(2697151537, enabled, path);
+}
+
+/**
+ * WatchFile switches the live-reload watcher to the given document. It is a
+ * no-op while auto-reload is disabled (the default).
  */
 export function WatchFile(path: string): $CancellablePromise<void> {
     return $Call.ByID(1121063624, path);

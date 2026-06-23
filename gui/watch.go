@@ -39,6 +39,14 @@ func (w *Watcher) Watch(path string) {
 	w.w.Watch(path)
 }
 
+// Unwatch releases the active-document watch (turns auto-reload off).
+func (w *Watcher) Unwatch() {
+	if w == nil {
+		return
+	}
+	w.w.Unwatch()
+}
+
 // WatchWorkspace (re)arms the recursive watch on the workspace document tree.
 func (w *Watcher) WatchWorkspace(root string) {
 	if w == nil {

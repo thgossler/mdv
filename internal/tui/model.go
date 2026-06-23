@@ -134,6 +134,9 @@ type Model struct {
 	// its navigator in sync. nil when live reload is disabled or unavailable.
 	watcher *watch.Watcher
 	watchCh chan watch.Event
+	// watchEnabled is the runtime auto-reload toggle for the active document. It
+	// starts from cfg.LiveReload and is flipped with the 'w' key.
+	watchEnabled bool
 	// statusGen tags each transient status message so a scheduled expiry only
 	// clears the message it was issued for, never a newer one.
 	statusGen int
@@ -293,28 +296,27 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 	linkList.SetShowHelp(false)
 	m.links = linkList
 
-	// Live reload: watch the active document for content changes and the
-	// workspace tree for structural changes. The emit callback runs on the
-	// watcher's goroutine and hands events to the update loop via a buffered
-	// channel. Stdin content has no backing file, but the workspace directory is
-	// still worth watching so the navigator tracks new documents.
-	if cfg.LiveReload {
-		ch := make(chan watch.Event, 8)
-		m.watchCh = ch
-		m.watcher = watch.New(cfg, func(ev watch.Event) {
-			select {
-			case ch <- ev:
-			default:
-			}
-		})
-		if m.watcher != nil {
-			m.watcher.WatchWorkspace(in.Dir)
-			if m.currentPath != "" {
-				m.watcher.Watch(m.currentPath)
-			}
-		} else {
-			m.watchCh = nil
+	// Live reload: watch only the active document for content changes. The emit
+	// callback runs on the watcher's goroutine and hands events to the update
+	// loop via a buffered channel. The workspace tree is deliberately not watched
+	// (it can be huge); structural changes are picked up on demand via the manual
+	// reload key instead. The watcher is always created so auto-reload can be
+	// toggled at runtime with the 'w' key, but the active document is only armed
+	// when watching is enabled (off by default). Stdin content has no backing
+	// file, so nothing is armed until a real document becomes active.
+	m.watchEnabled = cfg.LiveReload
+	ch := make(chan watch.Event, 8)
+	m.watchCh = ch
+	m.watcher = watch.New(cfg, func(ev watch.Event) {
+		select {
+		case ch <- ev:
+		default:
 		}
+	})
+	if m.watcher == nil {
+		m.watchCh = nil
+	} else if m.watchEnabled && m.currentPath != "" {
+		m.watcher.Watch(m.currentPath)
 	}
 
 	return m
@@ -494,8 +496,21 @@ func openControllingTerminal() (*os.File, error) {
 
 const sidebarWidth = 34
 
-// Update implements tea.Model.
+// Update implements tea.Model. It dispatches the message to routeMsg and then
+// re-syncs the content height: a status bar that wraps to two lines (or shrinks
+// back to one) changes how many rows are left for the document, so the viewport
+// must follow even when no window-resize event occurred.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.routeMsg(msg)
+	if nm, ok := next.(Model); ok {
+		nm.syncChromeHeight()
+		return nm, cmd
+	}
+	return next, cmd
+}
+
+// routeMsg dispatches a single message to the relevant handler.
+func (m Model) routeMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -602,7 +617,13 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "f", "right", "alt+right":
 		return *m, m.goForward()
 	case "r":
+		// Manual reload is the only way structural workspace changes are picked
+		// up now that only the active document is watched, so re-scan the tree
+		// (refreshing the navigator) before re-rendering the document.
+		m.refreshWorkspace()
 		return *m, m.reloadCurrent("Reloaded")
+	case "w":
+		return *m, m.toggleWatch()
 	case "enter", "l":
 		m.openLinkPicker()
 		return *m, nil
@@ -1034,7 +1055,9 @@ func (m *Model) openPath(path string, pushHistory bool) tea.Cmd {
 	m.rerender()
 	m.viewport.GotoTop()
 	m.syncListSelection()
-	m.watcher.Watch(path)
+	if m.watchEnabled {
+		m.watcher.Watch(path)
+	}
 	return m.prewarmImagesCmd()
 }
 
@@ -1193,10 +1216,31 @@ func (m *Model) toggleRemoteImages() (tea.Model, tea.Cmd) {
 	return *m, m.prewarmImagesCmd()
 }
 
-// per session. Title extraction opens and scans every markdown file, so it must
-// not run on content-independent UI actions (showing the navigator, toggling the
-// label mode back and forth): repeating that file scan is what an external
-// malware scanner can stall on.
+// toggleWatch flips the active-document auto-reload watcher on or off at
+// runtime. Turning it on arms the watcher for the current document; turning it
+// off releases it so on-disk edits no longer trigger a reload. The choice is not
+// persisted, mirroring the GUI toolbar toggle, and starts from cfg.LiveReload.
+func (m *Model) toggleWatch() tea.Cmd {
+	if m.watcher == nil {
+		m.watchEnabled = false
+		return m.flashStatus("Auto-reload unavailable")
+	}
+	m.watchEnabled = !m.watchEnabled
+	if m.watchEnabled {
+		if m.currentPath != "" {
+			m.watcher.Watch(m.currentPath)
+		}
+		return m.flashStatus("Auto-reload: ON")
+	}
+	m.watcher.Unwatch()
+	return m.flashStatus("Auto-reload: OFF")
+}
+
+// ensureTitles populates document titles lazily, scanning each markdown file at
+// most once per session. Title extraction opens and scans every markdown file,
+// so it must not run on content-independent UI actions (showing the navigator,
+// toggling the label mode back and forth): repeating that file scan is what an
+// external malware scanner can stall on.
 func (m *Model) ensureTitles() {
 	if m.titlesLoaded {
 		return
@@ -1376,7 +1420,7 @@ func (m *Model) contentWidth() int {
 }
 
 func (m *Model) layout() {
-	contentH := m.height - 3 // header + focus bar + status bar
+	contentH := m.height - 2 - m.statusBarHeight() // header + focus bar + status bar
 	if contentH < 3 {
 		contentH = 3
 	}
@@ -1386,6 +1430,31 @@ func (m *Model) layout() {
 		m.viewport.Width = m.contentWidth()
 		m.viewport.Height = contentH
 	}
+	if m.showList {
+		m.list.SetSize(sidebarWidth, contentH)
+		m.links.SetSize(sidebarWidth, contentH)
+	} else {
+		m.links.SetSize(m.width/2, contentH)
+	}
+}
+
+// syncChromeHeight resizes the viewport (and sidebar lists) when the status
+// bar's line count has changed since the last full layout, e.g. because a
+// transient notification appeared on a narrow terminal and pushed the shortcut
+// hints onto a second row. It is a no-op until the first window size is known
+// and when the height is already correct.
+func (m *Model) syncChromeHeight() {
+	if !m.ready || m.height == 0 {
+		return
+	}
+	contentH := m.height - 2 - m.statusBarHeight()
+	if contentH < 3 {
+		contentH = 3
+	}
+	if m.viewport.Height == contentH {
+		return
+	}
+	m.viewport.Height = contentH
 	if m.showList {
 		m.list.SetSize(sidebarWidth, contentH)
 		m.links.SetSize(sidebarWidth, contentH)
@@ -1614,52 +1683,145 @@ func (m Model) statusBar() string {
 			Render(" /" + m.listFilterInput + "▏ (" + hint + ") ")
 	}
 
+	left, status, hints, flash := m.statusParts()
+	bar := lipgloss.NewStyle().Reverse(true)
+
+	// The bar is reverse-video; render the transient status in the primary
+	// accent (blue) so it stands out the way the GUI's flash notification does.
+	// Using Reverse+Background keeps the segment's background identical to the
+	// rest of the bar (the terminal's default foreground), so only the glyphs
+	// turn blue instead of sitting in an inverted dark block.
+	styleStatus := func(s string) string {
+		if s == "" {
+			return ""
+		}
+		if flash {
+			return lipgloss.NewStyle().Reverse(true).Background(lipgloss.Color("12")).Bold(true).Render(s)
+		}
+		return bar.Render(s)
+	}
+
+	right := " " + hints + " "
+	// One line when the percentage, notification and shortcut hints all fit;
+	// otherwise stack the percentage+notification above the hints so a narrow
+	// terminal never truncates the shortcuts or a "Document changed" flash.
+	if lipgloss.Width(left)+lipgloss.Width(status)+1+lipgloss.Width(right) <= m.width {
+		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - lipgloss.Width(status)
+		if gap < 1 {
+			gap = 1
+		}
+		line := bar.Render(left) + styleStatus(status) + bar.Render(strings.Repeat(" ", gap)+right)
+		return lipgloss.NewStyle().MaxWidth(m.width).Render(line)
+	}
+
+	topPad := m.width - lipgloss.Width(left) - lipgloss.Width(status)
+	if topPad < 0 {
+		topPad = 0
+	}
+	rows := []string{lipgloss.NewStyle().MaxWidth(m.width).
+		Render(bar.Render(left) + styleStatus(status) + bar.Render(strings.Repeat(" ", topPad)))}
+
+	// Wrap the shortcut hints across as many rows as needed so a narrow terminal
+	// never truncates them; each wrapped row fills the full width.
+	for _, h := range wrapHints(hints, m.width) {
+		hintsLine := " " + h + " "
+		botPad := m.width - lipgloss.Width(hintsLine)
+		if botPad < 0 {
+			botPad = 0
+		}
+		rows = append(rows, lipgloss.NewStyle().MaxWidth(m.width).
+			Render(bar.Render(hintsLine+strings.Repeat(" ", botPad))))
+	}
+	return strings.Join(rows, "\n")
+}
+
+// wrapHints splits the double-space-separated shortcut groups into the fewest
+// lines that each fit within width (accounting for the one-space padding the
+// status bar adds on either side). A group wider than width is left on its own
+// line rather than being broken mid-token.
+func wrapHints(hints string, width int) []string {
+	if width <= 0 {
+		return []string{hints}
+	}
+	var lines []string
+	cur := ""
+	for _, g := range strings.Split(hints, "  ") {
+		if g == "" {
+			continue
+		}
+		candidate := g
+		if cur != "" {
+			candidate = cur + "  " + g
+		}
+		if cur == "" || lipgloss.Width(" "+candidate+" ") <= width {
+			cur = candidate
+			continue
+		}
+		lines = append(lines, cur)
+		cur = g
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	return lines
+}
+
+// statusParts computes the three segments of the main (content/navigator) status
+// bar: the scroll percentage (left), the transient status / update notification
+// (status), and the keyboard-shortcut hints. flash reports whether status is a
+// transient user-facing message that should be highlighted in the accent colour.
+func (m Model) statusParts() (left, status, hints string, flash bool) {
 	pct := 0
 	if m.viewport.TotalLineCount() > 0 {
 		pct = int(m.viewport.ScrollPercent() * 100)
 	}
+	left = fmt.Sprintf(" %d%% ", pct)
 
 	navActive := m.focus == focusList || m.focus == focusListFilter
 	metaHint := ""
 	if m.metaHidden > 0 {
 		metaHint = "m:meta  "
 	}
-	var hints string
+	watchHint := "w:watch(off)"
+	if m.watchEnabled {
+		watchHint = "w:watch(on)"
+	}
 	switch {
 	case navActive:
 		hints = "^b:nav  tab:switch  enter:open  /:filter  //:content(all files)  t:titles  x:ext  q:quit"
 	case m.showList:
-		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  r:reload  x:ext  q:quit"
+		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  r:reload  " + watchHint + "  x:ext  q:quit"
 	default:
-		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  r:reload  x:ext  q:quit"
+		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  r:reload  " + watchHint + "  x:ext  q:quit"
 	}
 
-	status := m.statusMsg
-	flash := m.statusMsg != "" // transient/user-facing message, shown in accent blue
+	status = m.statusMsg
+	flash = m.statusMsg != ""
 	if status == "" && m.update.Available {
 		status = fmt.Sprintf("Update %s available → %s", m.update.Latest, m.update.DownloadURL)
 	}
+	return left, status, hints, flash
+}
 
-	bar := lipgloss.NewStyle().Reverse(true)
-	left := fmt.Sprintf(" %d%% ", pct)
+// statusBarHeight reports how many terminal rows the status bar occupies: two
+// when the content view's percentage, notification and shortcut hints cannot
+// share one line, otherwise one. The search and navigator-filter bars are
+// always a single line.
+func (m Model) statusBarHeight() int {
+	if m.focus == focusSearch || m.focus == focusListFilter {
+		return 1
+	}
+	left, status, hints, _ := m.statusParts()
 	right := " " + hints + " "
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - lipgloss.Width(status)
-	if gap < 1 {
-		gap = 1
+	if lipgloss.Width(left)+lipgloss.Width(status)+1+lipgloss.Width(right) <= m.width {
+		return 1
 	}
-	// The bar is reverse-video; render the transient status in the primary
-	// accent (blue) so it stands out the way the GUI's flash notification does.
-	// Using Reverse+Background keeps the segment's background identical to the
-	// rest of the bar (the terminal's default foreground), so only the glyphs
-	// turn blue instead of sitting in an inverted dark block.
-	statusSeg := status
-	if flash && status != "" {
-		statusSeg = lipgloss.NewStyle().Reverse(true).Background(lipgloss.Color("12")).Bold(true).Render(status)
-	} else if status != "" {
-		statusSeg = bar.Render(status)
-	}
-	line := bar.Render(left) + statusSeg + bar.Render(strings.Repeat(" ", gap)+right)
-	return lipgloss.NewStyle().MaxWidth(m.width).Render(line)
+	// One row for the percentage/notification plus however many rows the wrapped
+	// shortcut hints require.
+	return 1 + len(wrapHints(hints, m.width))
 }
 
 // collectHeadings extracts ATX headings from markdown (ignoring fenced code).

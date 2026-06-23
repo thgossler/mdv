@@ -77,6 +77,13 @@ func runGUI() error {
 	store := NewLayoutStore(st)
 	bridge.layout = store
 	bridge.initExcludes()
+
+	// Seed the rolling recents with the initial input so the toolbar's recents
+	// drop-down is populated from the first frame. Picker mode (InputNone) records
+	// its choice later, from Bridge.Init.
+	if in.Kind != core.InputNone {
+		store.AddRecent(recentItemFor(in))
+	}
 	// Home/End (with or without Ctrl/Cmd) are swallowed by WKWebView before they
 	// reach the webview's JS or Wails' key-binding system: WKWebView consumes them
 	// for its own (here no-op) document scrolling and dispatches neither a DOM

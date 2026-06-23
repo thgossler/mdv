@@ -12,5 +12,6 @@ export type {
     InitInfo,
     LayoutDTO,
     LinkTargetDTO,
+    RecentItem,
     UpdateDTO
 } from "./models.js";

@@ -117,6 +117,27 @@ func (w *Watcher) Watch(path string) {
 	w.addDir(dir)
 }
 
+// Unwatch releases the active-document watch so no further FileChanged events
+// are emitted until Watch is called again. It is used to turn auto-reload off at
+// runtime. The directory containing the previously active document is released
+// unless it is still part of the workspace tree.
+func (w *Watcher) Unwatch() {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.current == "" {
+		return
+	}
+	dir := filepath.Dir(w.current)
+	w.current = ""
+	if !w.wsDirs[dir] {
+		w.removeDir(dir)
+	}
+}
+
 // WatchWorkspace (re)arms the recursive watch on the workspace document tree
 // rooted at root, so structural changes anywhere in the tree are reported.
 // Passing an empty root disables workspace watching.

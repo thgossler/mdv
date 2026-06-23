@@ -23,6 +23,27 @@ const (
 // into a single file write, firing this long after the last change.
 const saveDebounce = 500 * time.Millisecond
 
+// maxRecentItems caps the rolling "recently opened" list so the program menu
+// stays manageable. Older entries fall off the end as new ones are added.
+const maxRecentItems = 20
+
+// RecentItem is a single entry in the rolling list of recently opened inputs.
+// Files and folders share one list; Kind ("file" or "folder") only affects how
+// the entry is labelled in the toolbar's recents drop-down.
+type RecentItem struct {
+	Path string `json:"path"`
+	Kind string `json:"kind"`
+}
+
+// recentItemFor builds a RecentItem from a resolved program input.
+func recentItemFor(in core.Input) RecentItem {
+	kind := "file"
+	if in.Kind == core.InputFolder {
+		kind = "folder"
+	}
+	return RecentItem{Path: in.Path, Kind: kind}
+}
+
 // LayoutState is the persisted window geometry and side-panel widths restored
 // across runs. A zero value for any width means "use the default".
 type LayoutState struct {
@@ -50,6 +71,10 @@ type LayoutState struct {
 	// not drop the marker and trigger needless re-registration.
 	FileAssocVersion int  `json:"fileAssocVersion"`
 	Valid            bool `json:"valid"`
+	// Recent is the rolling list of recently opened files and folders, most
+	// recent first, capped at maxRecentItems. It is surfaced only in the program
+	// menu, never in the window's toolbar content.
+	Recent []RecentItem `json:"recent,omitempty"`
 }
 
 func layoutStatePath() (string, error) {
@@ -166,6 +191,49 @@ func (s *LayoutStore) UpdateExcludes(patterns string, enabled bool) {
 func (s *LayoutStore) UpdateExtendedSyntax(enabled bool) {
 	s.mu.Lock()
 	s.st.ExtendedSyntax = &enabled
+	s.scheduleLocked()
+	s.mu.Unlock()
+}
+
+// AddRecent records a freshly opened file or folder at the top of the rolling
+// recents list. Any existing entry for the same path is removed first so the
+// item moves to the front rather than duplicating, and the list is capped at
+// maxRecentItems. The write is debounced like every other layout change.
+func (s *LayoutStore) AddRecent(item RecentItem) {
+	if item.Path == "" {
+		return
+	}
+	s.mu.Lock()
+	filtered := s.st.Recent[:0:0]
+	for _, r := range s.st.Recent {
+		if r.Path != item.Path {
+			filtered = append(filtered, r)
+		}
+	}
+	s.st.Recent = append([]RecentItem{item}, filtered...)
+	if len(s.st.Recent) > maxRecentItems {
+		s.st.Recent = s.st.Recent[:maxRecentItems]
+	}
+	s.scheduleLocked()
+	s.mu.Unlock()
+}
+
+// Recent returns a copy of the current recently-opened list, most recent first.
+func (s *LayoutStore) Recent() []RecentItem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.st.Recent) == 0 {
+		return nil
+	}
+	out := make([]RecentItem, len(s.st.Recent))
+	copy(out, s.st.Recent)
+	return out
+}
+
+// ClearRecent empties the recently-opened list and schedules a save.
+func (s *LayoutStore) ClearRecent() {
+	s.mu.Lock()
+	s.st.Recent = nil
 	s.scheduleLocked()
 	s.mu.Unlock()
 }

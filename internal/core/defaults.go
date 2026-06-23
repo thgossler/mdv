@@ -20,7 +20,7 @@ type Defaults struct {
 	// Behaviour.
 	NavLabelMode   string  `json:"navLabelMode"`   // "filename" | "title"
 	FollowExternal bool    `json:"followExternal"` // open http links in OS browser
-	LiveReload     bool    `json:"liveReload"`     // watch & auto-refresh
+	LiveReload     bool    `json:"liveReload"`     // initial state of the active-document auto-reload toggle
 	ZoomStep       float64 `json:"zoomStep"`       // zoom increment per +/- step
 	MinZoom        float64 `json:"minZoom"`
 	MaxZoom        float64 `json:"maxZoom"`
@@ -79,7 +79,7 @@ func DefaultSettings() Defaults {
 
 		NavLabelMode:   "filename",
 		FollowExternal: true,
-		LiveReload:     true,
+		LiveReload:     false,
 		ZoomStep:       0.1,
 		MinZoom:        0.5,
 		MaxZoom:        3.0,

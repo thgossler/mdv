@@ -23,16 +23,16 @@
   </p>
 </div>
 
-> **For non-developers**
+> **For most users**
 >
 > Open Markdown like any other document - cleanly, safely, and without editing
 > tools getting in the way.
 
-> **For developers**
+> **For experts and developers**
 >
 > Browse an entire local Markdown documentation set like a website, with linked
 > navigation, rich rendering, and cross-document search - without building or
-> serving anything.
+> serving anything. 
 
 `mdv` adapts to wherever it runs:
 
@@ -259,7 +259,7 @@ defaults. On Windows/macOS the location follows `XDG_CONFIG_HOME` if set.
   "lineHeight": 1.6,
   "contentWidthPx": 860,
   "navLabelMode": "filename", // or "title"
-  "liveReload": true,
+  "liveReload": false, // initial state of the active-document auto-reload toggle
   "enableExtendedSyntax": false, // math, sub/sup, highlight, inserted (GUI only)
   "checkForUpdates": true,
   "images": "auto", // "auto" | "graphics" | "blocks" | "off"
