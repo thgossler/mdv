@@ -36,6 +36,19 @@ func main() {
 	}
 }
 
+// windowBackground picks the initial native window background so an empty window
+// (e.g. behind the startup file picker, or before the webview first paints)
+// matches the active theme instead of flashing bright white. The values mirror
+// the --bg design tokens in themes.css (#ffffff light, #0d1117 dark). For the
+// "system" theme the current OS appearance decides.
+func windowBackground(theme string) application.RGBA {
+	dark := theme == "dark" || (theme != "light" && osPrefersDark())
+	if dark {
+		return application.NewRGB(13, 17, 23)
+	}
+	return application.NewRGB(255, 255, 255)
+}
+
 func runGUI() error {
 	cfg, _ := core.LoadConfig()
 
@@ -101,7 +114,7 @@ func runGUI() error {
 		Height:           defaultWindowHeight,
 		MinWidth:         480,
 		MinHeight:        360,
-		BackgroundColour: application.NewRGB(255, 255, 255),
+		BackgroundColour: windowBackground(cfg.Theme),
 		URL:              "/",
 		// Accept files/folders dragged from the OS so they can be opened in place
 		// (handled below via WindowFilesDropped). The frontend marks the drop zone

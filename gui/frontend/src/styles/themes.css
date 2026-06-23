@@ -16,6 +16,20 @@
   --tb-height: 40px;
   --sidebar-width: 260px;
   --toc-width: 260px;
+
+  /* Fallback background/foreground applied before JS resolves the theme (the
+     body still carries only .theme-system at that point). Without these the
+     window flashes bright white on load and behind native dialogs in dark
+     mode. The resolved .theme-light / .theme-dark classes override them. */
+  --bg: #ffffff;
+  --fg: #1f2328;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+  }
 }
 
 /* Light theme */
