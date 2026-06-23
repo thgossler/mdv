@@ -122,6 +122,7 @@ const els = {
   btnForward: $<HTMLButtonElement>("btn-forward"),
   btnHistory: $<HTMLButtonElement>("btn-history"),
   btnRecent: $<HTMLButtonElement>("btn-recent"),
+  btnReload: $<HTMLButtonElement>("btn-reload"),
   btnExtended: $<HTMLButtonElement>("btn-extended"),
   btnRaw: $<HTMLButtonElement>("btn-raw"),
   btnPdf: $<HTMLButtonElement>("btn-pdf"),
@@ -327,8 +328,22 @@ async function postProcess(headings: { level: number; text: string; slug: string
 }
 
 function rerenderMermaidForTheme(): void {
-  // Re-render diagrams to match the new theme by reloading the current doc.
-  if (currentPath) void openDocument(currentPath, false);
+  // Re-render diagrams (and the whole document) to match the new theme by
+  // reloading the current doc. openDocument resets every pane's scroll to the
+  // top and rebuilds the TOC/backlinks panels, so capture the content view and
+  // side-panel scroll positions first and restore them afterwards to keep the
+  // reader's place across a theme toggle.
+  if (!currentPath) return;
+  const contentScroll = els.contentWrap.scrollTop;
+  const navScroll = els.navList.scrollTop;
+  const tocScroll = els.tocList.scrollTop;
+  const backlinksScroll = els.backlinksList.scrollTop;
+  void openDocument(currentPath, false).then(() => {
+    els.contentWrap.scrollTop = contentScroll;
+    els.navList.scrollTop = navScroll;
+    els.tocList.scrollTop = tocScroll;
+    els.backlinksList.scrollTop = backlinksScroll;
+  });
 }
 
 // reloadCurrent re-reads and re-renders the active document, preserving the
@@ -1089,6 +1104,7 @@ function showFolderWelcome(): void {
   els.docTitle.textContent = info.dir;
   els.tocList.innerHTML = "";
   els.backlinksList.innerHTML = "";
+  updateChrome();
 }
 
 // showEmpty renders the no-input startup state: an empty content view with empty
@@ -1138,6 +1154,15 @@ function updateChrome(): void {
   els.btnForward.disabled = forward.length === 0;
   els.btnHistory.disabled = history.length === 0;
   els.btnRecent.disabled = recentItems().length === 0;
+  // PDF export and "open in associated app" act on the active document, so they
+  // are disabled whenever the content view is empty. Reload also refreshes the
+  // navigator's folder listing, so it stays enabled as long as a document is
+  // open or the navigator has items - letting the user refresh the listing even
+  // before selecting a file.
+  const hasDoc = currentPath !== "";
+  els.btnReload.disabled = !hasDoc && workspace.length === 0;
+  els.btnPdf.disabled = !hasDoc;
+  els.btnOpenExternal.disabled = !hasDoc;
   els.statusLeft.textContent = currentPath;
 }
 
