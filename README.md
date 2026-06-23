@@ -306,13 +306,20 @@ Notes:
 - Syntax highlighting with 6 themes (Glyph, GitHub, Monokai, Nord, Solarized Light/Dark)
 - Inline images in the console and terminal UI
 - Wikilinks `[[doc]]`, `[[doc|alias]]`, `[[doc#heading]]` with a backlinks panel
+- Smart link resolution: case-insensitive, directory-index fallback, symlink-aware
 - Table-of-contents sidebar with scroll-spy, heading anchors
 - CSV/TSV fenced blocks rendered as tables
 - YAML frontmatter metadata block, emoji shortcodes
-- Azure DevOps constructs (`[[_TOC_]]`, `:::video:::`, `#123` work items)
+- Azure DevOps constructs (`[[_TOC_]]`, `:::video:::`, `#123` work items, image sizing `![alt](img =800x600)`)
 - Sanitized inline HTML (DOMPurify)
-- In-document search (Cmd/Ctrl+F), live reload, drag-and-drop
+- In-document search (Cmd/Ctrl+F), toggleable live reload, drag-and-drop
 - Document content search in the navigator (smart fuzzy-phrase matching)
+- Entry-point highlighting in the document navigator (e.g. README)
+- Export to PDF from the GUI and CLI, headless-friendly; see [PDF export](#pdf-export)
+- Read-only "View raw Markdown" toggle in the GUI
+- Recently opened files and folders list in the GUI
+- Open the current document in your associated external app
+- OS file-manager integration: "Open with mdv" context-menu entry and `.md` association
 - Zoom (Cmd/Ctrl + wheel / +/-), light/dark/system themes, configurable fonts
 - History navigation, link target preview in the status bar
 - "Open in new window"
