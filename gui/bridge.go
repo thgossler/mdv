@@ -293,7 +293,7 @@ func (b *Bridge) PickFolder() string {
 	path, err := b.app.Dialog.OpenFile().
 		CanChooseFiles(false).
 		CanChooseDirectories(true).
-		SetTitle(core.AppName+" \u2014 Open Folder").
+		SetTitle(core.AppName + " \u2014 Open Folder").
 		PromptForSingleSelection()
 	if err != nil {
 		return ""
