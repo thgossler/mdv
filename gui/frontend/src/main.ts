@@ -195,11 +195,7 @@ async function boot(): Promise<void> {
   wireFileDrop();
 
   if (info.update?.available) {
-    els.statusMid.innerHTML = `Update ${escapeHtml(info.update.latest)} available - <a href="#" id="upd-link">download</a>`;
-    $("upd-link")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      api.openExternal(info.update.downloadUrl);
-    });
+    els.statusMid.innerHTML = `New version ${escapeHtml(info.update.latest)}, run <code>mdv update</code>`;
   }
 
   if (info.kind === "file") {

@@ -63,6 +63,31 @@ func CheckForUpdate(ctx context.Context, cfg Defaults) (UpdateInfo, error) {
 	return info, nil
 }
 
+// CheckForUpdateNow performs an immediate version check, bypassing both the
+// CheckForUpdates gate and the on-disk cache. It is used by the explicit
+// `mdv update` command, where a fresh result is always wanted.
+func CheckForUpdateNow(ctx context.Context, cfg Defaults) (UpdateInfo, error) {
+	info := UpdateInfo{Current: Version}
+
+	if cfg.UpdateRepo == "" {
+		return info, fmt.Errorf("no update repository is configured")
+	}
+
+	latest, dl, rel, err := fetchLatestRelease(ctx, cfg.UpdateRepo)
+	if err != nil {
+		return info, err
+	}
+
+	info.Latest = latest
+	info.DownloadURL = dl
+	info.ReleaseURL = rel
+	info.CheckedAt = time.Now().Unix()
+	info.Available = VersionLess(Version, latest)
+
+	writeUpdateCache(info)
+	return info, nil
+}
+
 func readUpdateCache(cfg Defaults) (UpdateInfo, bool) {
 	path, err := updateCacheFile()
 	if err != nil {

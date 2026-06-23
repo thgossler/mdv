@@ -1801,7 +1801,7 @@ func (m Model) statusParts() (left, status, hints string, flash bool) {
 	status = m.statusMsg
 	flash = m.statusMsg != ""
 	if status == "" && m.update.Available {
-		status = fmt.Sprintf("Update %s available → %s", m.update.Latest, m.update.DownloadURL)
+		status = fmt.Sprintf("New version %s, run `mdv update`", m.update.Latest)
 	}
 	return left, status, hints, flash
 }

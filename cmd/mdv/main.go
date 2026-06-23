@@ -58,6 +58,13 @@ func run() int {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", cfgErr)
 	}
 
+	// The "update" subcommand checks GitHub Releases and, when a newer version
+	// exists, launches the install script detached and exits immediately so the
+	// script can replace this executable.
+	if flag.Arg(0) == "update" {
+		return runUpdate(cfg)
+	}
+
 	// Best-effort, once per install: add an "Open with mdv" entry to the OS file
 	// manager for Markdown files. A marker in state.jsonc keeps later launches
 	// fast by skipping the work after the first successful registration.
@@ -307,8 +314,36 @@ func runConsole(cfg core.Defaults, in core.Input, updCh <-chan core.UpdateInfo, 
 	}
 
 	if upd := waitUpdate(updCh, 200*time.Millisecond); upd.Available {
-		fmt.Fprintf(os.Stderr, "\n→ mdv %s is available: %s\n", upd.Latest, upd.DownloadURL)
+		fmt.Fprintf(os.Stderr, "\n→ New version %s, run `mdv update`\n", upd.Latest)
 	}
+	return 0
+}
+
+// runUpdate implements the `mdv update` subcommand. It performs a fresh version
+// check and, when a newer release exists, launches the platform install script
+// detached and returns so mdv can exit immediately - letting the script replace
+// this executable (required on Windows, where a running binary is locked).
+func runUpdate(cfg core.Defaults) int {
+	fmt.Println("Checking for updates…")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	info, err := core.CheckForUpdateNow(ctx, cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: update check failed: %v\n", err)
+		return 1
+	}
+	if !info.Available {
+		fmt.Printf("mdv %s is already up to date.\n", strings.TrimPrefix(core.Version, "v"))
+		return 0
+	}
+
+	fmt.Printf("Updating mdv %s → %s …\n", strings.TrimPrefix(core.Version, "v"), info.Latest)
+	if err := core.SpawnInstaller(cfg.UpdateRepo); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Println("The installer is running in the background; mdv will now exit so it can be replaced.")
 	return 0
 }
 
@@ -373,6 +408,8 @@ func usage() {
 	fmt.Fprintf(w, "  %s [flags] <file.md | folder>\n", core.AppName)
 	fmt.Fprintf(w, "  %s .          open the current directory as a folder\n", core.AppName)
 	fmt.Fprintf(w, "  ... | %s      read markdown piped on stdin\n\n", core.AppName)
+	fmt.Fprintf(w, "Commands:\n")
+	fmt.Fprintf(w, "  update         check for a newer release and install it, then exit\n\n")
 	fmt.Fprintf(w, "Flags:\n")
 	fmt.Fprintf(w, "  --tui          force the interactive terminal UI\n")
 	fmt.Fprintf(w, "  --gui          force the graphical UI\n")
