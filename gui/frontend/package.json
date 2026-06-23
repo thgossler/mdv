@@ -16,7 +16,7 @@
     "dompurify": "^3.4.11",
     "github-slugger": "^2.0.0",
     "highlight.js": "^11.11.1",
-    "html2pdf.js": "^0.10.3",
+    "html2pdf.js": "^0.14.0",
     "js-yaml": "^4.1.0",
     "katex": "^0.16.21",
     "markdown-it": "^14.1.0",
