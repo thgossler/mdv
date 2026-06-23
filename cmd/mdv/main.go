@@ -6,16 +6,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/thgossler/mdv/internal/console"
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/launcher"
+	"github.com/thgossler/mdv/internal/pdf"
 	"github.com/thgossler/mdv/internal/tui"
 )
 
@@ -34,6 +37,9 @@ func run() int {
 		flagNoColor  = flag.Bool("no-color", false, "disable ANSI colors in console output")
 		flagMaxWidth = flag.Int("max-width", 0, "cap the render width in columns (0 = full width)")
 		flagImages   = flag.String("images", "", "image rendering: auto|graphics|blocks|off")
+		flagPDF      = flag.String("pdf", "", "render the input to a PDF at the given file or folder path and exit")
+		flagForce    = flag.Bool("force", false, "overwrite an existing --pdf output file without prompting")
+		flagRemote   = flag.Bool("remote", false, "with --pdf, allow downloading remote (http/https) images and assets")
 	)
 	flag.Usage = usage
 	// Accept flags on either side of the positional input argument. Go's flag
@@ -106,6 +112,14 @@ func run() int {
 			return 1
 		}
 	}
+	// Headless PDF export: when --pdf is given, render the input to a PDF and
+	// exit without showing any UI. This works over SSH and in containers because
+	// it never needs a webview (it uses an installed browser when available and
+	// otherwise a pure-Go renderer).
+	if *flagPDF != "" {
+		return runPDFExport(*flagPDF, in, *flagForce, *flagRemote)
+	}
+
 	if in.Kind == core.InputNone {
 		// No file, folder, or piped content was given. When a GUI will be
 		// shown - e.g. launched by double-click from Finder/Explorer, or forced
@@ -143,6 +157,89 @@ func run() int {
 	default: // ModeConsole
 		return runConsole(cfg, in, updCh, *flagNoColor)
 	}
+}
+
+// runPDFExport renders the resolved input to a PDF file and exits. It accepts a
+// single Markdown file or piped stdin (a folder or empty input is an error),
+// resolves the output path from the --pdf argument, picks the best available
+// engine, writes the file and prints its path. It never shows a UI, so it is
+// safe over SSH and in headless containers.
+func runPDFExport(pdfArg string, in core.Input, force, allowRemote bool) int {
+	var markdown []byte
+	var inputName, srcDir string
+	switch in.Kind {
+	case core.InputFile:
+		data, err := core.ReadMarkdownFile(in.Path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: reading %q: %v\n", in.Path, err)
+			return 1
+		}
+		markdown = data
+		inputName = filepath.Base(in.Path)
+		srcDir = filepath.Dir(in.Path)
+	case core.InputStdin:
+		markdown = in.Data
+	default:
+		fmt.Fprintln(os.Stderr, "error: --pdf requires a Markdown file or piped stdin input")
+		return 1
+	}
+
+	out, err := core.ResolvePDFOutputPath(pdfArg, inputName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	// Guard against clobbering an existing file. With --force, overwrite
+	// silently; otherwise ask for confirmation when a terminal is attached, and
+	// refuse when input is non-interactive (e.g. stdin piped) since there is no
+	// way to prompt.
+	if !force {
+		if _, statErr := os.Stat(out); statErr == nil {
+			if in.Kind == core.InputFile && console.StdinIsTTY() {
+				if !confirmOverwrite(out) {
+					fmt.Fprintln(os.Stderr, "aborted: existing file not overwritten")
+					return 1
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "error: %q already exists; pass --force to overwrite\n", out)
+				return 1
+			}
+		}
+	}
+
+	f, err := os.Create(out)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: creating %q: %v\n", out, err)
+		return 1
+	}
+	res, genErr := pdf.GenerateAuto(markdown, srcDir, allowRemote, f)
+	closeErr := f.Close()
+	if genErr != nil {
+		os.Remove(out)
+		fmt.Fprintf(os.Stderr, "error: generating PDF: %v\n", genErr)
+		return 1
+	}
+	if closeErr != nil {
+		fmt.Fprintf(os.Stderr, "error: writing %q: %v\n", out, closeErr)
+		return 1
+	}
+
+	for _, w := range res.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+	fmt.Printf("PDF written to %s (%s engine)\n", out, res.Engine)
+	return 0
+}
+
+// confirmOverwrite asks the user, on the terminal, whether to overwrite an
+// existing file. It returns true only for an explicit yes.
+func confirmOverwrite(path string) bool {
+	fmt.Fprintf(os.Stderr, "File %q already exists. Overwrite? [y/N]: ", path)
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	answer := strings.ToLower(strings.TrimSpace(line))
+	return answer == "y" || answer == "yes"
 }
 
 // spawnGUIForInput launches the GUI helper for the resolved input. Stdin
@@ -243,7 +340,7 @@ func waitUpdate(ch <-chan core.UpdateInfo, d time.Duration) core.UpdateInfo {
 // Most mdv flags are booleans; flags that take a value (e.g. --max-width) carry
 // their following token along when it is not given in --flag=value form.
 func reorderArgs(args []string) []string {
-	valueFlags := map[string]bool{"-max-width": true, "--max-width": true, "-images": true, "--images": true}
+	valueFlags := map[string]bool{"-max-width": true, "--max-width": true, "-images": true, "--images": true, "-pdf": true, "--pdf": true}
 	var flags, positionals []string
 	terminated := false
 	for i := 0; i < len(args); i++ {
@@ -283,6 +380,9 @@ func usage() {
 	fmt.Fprintf(w, "  --no-color     disable ANSI colors in console output\n")
 	fmt.Fprintf(w, "  --max-width N  cap the render width to N columns\n")
 	fmt.Fprintf(w, "  --images MODE  image rendering: auto|graphics|blocks|off\n")
+	fmt.Fprintf(w, "  --pdf PATH     render the input to a PDF at PATH (file or folder) and exit\n")
+	fmt.Fprintf(w, "  --force        with --pdf, overwrite an existing output file without asking\n")
+	fmt.Fprintf(w, "  --remote       with --pdf, allow downloading remote (http/https) images/assets\n")
 	fmt.Fprintf(w, "  --init-config  write a default settings.jsonc and exit\n")
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")

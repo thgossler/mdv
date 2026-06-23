@@ -101,9 +101,9 @@ page:
 
 ### Where it gets installed and how PATH is handled
 
-| Platform      | Default location                                                                        | PATH handling                                                                                                                                          |
-| -------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows       | `%LOCALAPPDATA%\Programs\mdv\mdv.exe`                                                   | Added to your **user** `Path` (persisted for new terminals) and prepended to the current session.                                                      |
+| Platform      | Default location                | PATH handling             |
+| ---- | ------------------------ | ----------------------------------------- |
+| Windows       | `%LOCALAPPDATA%\Programs\mdv\mdv.exe` | Added to your **user** `Path` (persisted for new terminals) and prepended to the current session. |
 | macOS / Linux | `/usr/local/bin/mdv` if it is on your `PATH` and writable, otherwise `~/.local/bin/mdv` | If the chosen directory isn't already on `PATH`, the installer appends it to your shell profile (`.zshrc`, `.bashrc`, `.bash_profile`, or `.profile`). |
 
 Set the `MDV_INSTALL` environment variable to install somewhere else (e.g.
@@ -142,20 +142,26 @@ mdv README.md            # open a single document
 mdv ./docs               # open a folder (sidebar lists all markdown files)
 mdv --tui README.md      # force the terminal UI
 mdv --console README.md  # render to stdout and exit
+mdv --pdf out.pdf README.md   # render to a PDF and exit (headless-friendly)
+mdv --pdf out.pdf --force README.md  # overwrite an existing PDF without asking
+mdv --pdf out.pdf --remote README.md # allow downloading remote images/assets
 mdv --version            # show current SemVer version number
 mdv --init-config        # write a default settings.jsonc
 ```
 
-| Flag              | Description                            |
-| ----------------- | -------------------------------------- |
-| `--tui`           | Force the interactive terminal UI      |
-| `--gui`           | Force the graphical UI                 |
-| `--console`, `-c` | Render to stdout and exit              |
-| `--no-color`      | Disable ANSI colors in console output  |
-| `--max-width N`   | Cap the render width to N columns      |
-| `--images MODE`   | Image rendering: `auto`, `graphics`, `blocks`, `off` |
-| `--version`       | Print version and exit                 |
-| `--init-config`   | Write a default settings file and exit |
+| Flag              | Description                                              |
+| ------------ | ------------------------------------------------------------- |
+| `--tui`           | Force the interactive terminal UI                        |
+| `--gui`           | Force the graphical UI                                   |
+| `--console`, `-c` | Render to stdout and exit                                |
+| `--pdf PATH`      | Render the input to a PDF at PATH (file or folder) and exit; see [PDF export](#pdf-export) |
+| `--force`         | With `--pdf`, overwrite an existing output file without prompting |
+| `--remote`        | With `--pdf`, allow downloading remote (http/https) images/assets (blocked by default) |
+| `--no-color`      | Disable ANSI colors in console output                    |
+| `--max-width N`   | Cap the render width to N columns                        |
+| `--images MODE`   | Image rendering: `auto`, `graphics`, `blocks`, `off`     |
+| `--version`       | Print version and exit                                   |
+| `--init-config`   | Write a default settings file and exit                   |
 
 ### Open Markdown files from Finder (macOS)
 
@@ -218,6 +224,76 @@ The same smart matching powers the navigator's **filename/title filter** (when
 content search is off), so filtering documents by name behaves just like
 searching their content. Only documents with a filename or content match remain
 in the list. The search runs entirely in-memory with no external dependencies.
+
+## PDF export
+
+mdv can export a document to PDF from both the GUI and the command line. To keep
+behaviour predictable, both surfaces prefer the highest-fidelity engine that is
+available and silently fall back to a self-contained engine otherwise. **A4
+portrait** is always used.
+
+- **GUI** - click the **PDF** button in the toolbar. mdv asks where to save the
+  file and opens the result in your OS default PDF viewer.
+- **CLI** - `mdv --pdf <path> <file>` renders and exits without opening a window,
+  so it works over SSH, in CI, and inside containers. `<path>` may be a file
+  (`out.pdf`, or any name - `.pdf` is appended if missing) or an existing
+  directory / trailing-slash path (the PDF is named after the source document).
+  The input may be a Markdown file or piped on stdin (`cat doc.md | mdv --pdf out.pdf`);
+  a folder as input is not supported for `--pdf`. The output path is printed on
+  success, along with the engine that was used.
+
+If the output file already exists, mdv asks for confirmation before overwriting
+it (when run interactively); pass `--force` to overwrite without prompting. With
+non-interactive input (e.g. piped stdin) mdv refuses to overwrite unless
+`--force` is given. When the offline goldmark-pdf engine has to drop content it
+cannot render (HTML tags outside code blocks, or remote/SVG/WebP images), it
+prints a `warning:` line to stderr describing what was skipped.
+
+### Remote images and assets
+
+For safety, PDF export **never loads anything from a remote location by
+default** - in every engine and on every surface. A document that references
+remote (`http`/`https`) images or assets is rendered with those resources
+blocked, so generating a PDF cannot trigger network requests or leak that a file
+was opened. To opt in:
+
+- **CLI** - pass `--remote` alongside `--pdf` to allow remote images/assets to be
+  downloaded and embedded.
+- **GUI** - turn on the remote-images toggle in the toolbar (the same one that
+  controls remote images in the live view). PDF export then mirrors what you see
+  on screen. The toggle is off after every restart.
+
+### Engines and what to expect
+
+Which engine renders the PDF depends on the surface and on whether a browser is
+installed, so the result can differ. This is by design - the fallbacks let PDF
+export work everywhere, including fully offline and headless - but it is worth
+knowing the trade-offs:
+
+| Surface | Tier 1 (preferred)            | Tier 2 (fallback)               | Fallback used when… |
+| ----- | ------------------ | ------------------- | ------------------------- |
+| GUI     | Installed browser, printToPDF | html2pdf.js (in the webview)    | no browser found / release bundle absent |
+| CLI     | Installed browser, printToPDF | goldmark-pdf (pure Go, offline) | no browser found / release bundle absent |
+
+| Engine             | Fidelity | Selectable text  | Needs a browser  | Notes |
+| --- | ---------------- | --- | ----- | ------------------------------------ |
+| Browser printToPDF | Highest - matches the on-screen render (Mermaid, KaTeX math, syntax highlighting, fonts) | Yes | Yes (Chrome/Chromium/Edge) | Uses a browser already installed on the machine; mdv never downloads one. Set `MDV_CHROME` (or `CHROME_BIN`) to point at a specific binary. |
+| html2pdf.js        | High - rasterised snapshot of the rendered page | No (image) | No | GUI-only fallback; diagrams and math look right but the text is an image, and very long pages may break across pages imperfectly. |
+| goldmark-pdf       | Basic - clean text layout with inbuilt PDF fonts | Yes | No | CLI-only fallback; works fully offline with a 1 cm page margin. HTML tags outside code blocks are stripped (HTML inside code blocks is kept verbatim); Mermaid and KaTeX are **not** rendered as graphics; SVG and WebP are always skipped, and remote images are skipped unless `--remote` is given (even then this offline engine embeds them only on a best-effort basis - it reliably embeds only local PNG/JPEG/GIF). Dropped content is reported as a stderr warning. Limited Unicode coverage. |
+
+Notes:
+
+- The **browser** path is only compiled into official release builds (it embeds
+  a small print harness). Plain `go build` / `go run` builds therefore use the
+  Tier 2 fallback even when a browser is installed; build with
+  `-tags pdf_bundled` after staging the frontend to enable it locally.
+- Browser detection looks for Chrome, Chromium, Microsoft Edge and Brave in the
+  usual per-OS locations. The browser runs headless with `--no-sandbox` so it
+  also works as root inside containers.
+- By default no PDF engine reaches out to the network: the browser path loads
+  only local content from a temporary loopback server and blocks every remote
+  request, while the goldmark fallback embeds only local images. Pass `--remote`
+  (CLI) or enable the GUI remote-images toggle to allow remote downloads.
 
 ## Features
 

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>mdv — PDF</title>
+  </head>
+  <!-- Standalone "print" page used by the headless-browser PDF engine. It loads
+       no app chrome: the document is rendered with the exact same pipeline as
+       the GUI (Markdown-it, KaTeX, Mermaid, highlight.js) and then printed to
+       PDF via the browser's DevTools printToPDF. The launcher injects the
+       Markdown source as window.__mdvMarkdown before navigation and waits for
+       window.__mdvPdfReady. The page is forced to the light theme. -->
+  <body class="theme-light">
+    <article id="content" class="markdown-body"></article>
+    <script type="module" src="/src/print.ts"></script>
+  </body>
+</html>

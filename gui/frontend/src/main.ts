@@ -124,6 +124,7 @@ const els = {
   btnRecent: $<HTMLButtonElement>("btn-recent"),
   btnExtended: $<HTMLButtonElement>("btn-extended"),
   btnRaw: $<HTMLButtonElement>("btn-raw"),
+  btnPdf: $<HTMLButtonElement>("btn-pdf"),
   btnRemoteImg: $<HTMLButtonElement>("btn-remote-img"),
   btnOpenExternal: $<HTMLButtonElement>("btn-open-external"),
   btnWatch: $<HTMLButtonElement>("btn-watch"),
@@ -1168,6 +1169,7 @@ function wireToolbar(): void {
   $("btn-width").addEventListener("click", toggleContentWidth);
   els.btnExtended.addEventListener("click", () => void toggleExtendedSyntax());
   els.btnRaw.addEventListener("click", () => void toggleRawMarkdown());
+  els.btnPdf.addEventListener("click", () => void exportPdf());
   els.btnRemoteImg.addEventListener("click", toggleRemoteImages);
   els.btnOpenExternal.addEventListener("click", () => {
     if (currentPath) void api.openExternal(currentPath);
@@ -1490,6 +1492,127 @@ async function toggleExtendedSyntax(): Promise<void> {
     await renderInto(lastRendered.markdown, lastRendered.name, lastRendered.path);
     els.contentWrap.scrollTop = scroll;
   }
+}
+
+// pdfExporting guards against re-entrant export while one is already running.
+let pdfExporting = false;
+
+// exportPdf saves the current document as a PDF. It prefers the high-fidelity
+// headless-browser engine (Chrome/Chromium/Edge printToPDF, which yields
+// selectable text and faithful layout) when one is installed and the print
+// bundle is embedded; otherwise it falls back to the in-webview html2pdf.js
+// engine, which needs no external browser but rasterises the page.
+async function exportPdf(): Promise<void> {
+  if (pdfExporting || !lastRendered) return;
+  pdfExporting = true;
+  els.btnPdf.disabled = true;
+  const prevTitle = els.btnPdf.title;
+  els.btnPdf.title = "Generating PDF…";
+  flashStatus("Generating PDF…");
+  try {
+    const name = pdfBaseName();
+
+    // Tier 1: native headless-browser printToPDF.
+    if (await api.pdfNativeAvailable()) {
+      const res = await api.exportPdfFromMarkdown(
+        lastRendered.markdown,
+        currentDir,
+        name,
+        extendedSyntax,
+        remoteImagesEnabled,
+      );
+      if (res === "" ) {
+        flashStatus("PDF saved", true);
+        return;
+      }
+      if (res === "cancel") return;
+      if (res !== "fallback") {
+        flashStatus(`PDF export failed: ${res}`);
+        return;
+      }
+      // res === "fallback": native engine not usable; use html2pdf.js below.
+    }
+
+    // Tier 2: in-webview html2pdf.js fallback.
+    await exportPdfViaHtml2Pdf(name);
+  } catch (e) {
+    flashStatus(`PDF export failed: ${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    els.btnPdf.disabled = false;
+    els.btnPdf.title = prevTitle;
+    pdfExporting = false;
+  }
+}
+
+// pdfBaseName derives a sensible PDF file name (without extension) from the
+// current document's file name.
+function pdfBaseName(): string {
+  const n = (currentDocName || "document").replace(/\.[^.]+$/, "");
+  return n || "document";
+}
+
+// exportPdfViaHtml2Pdf renders the current content with html2pdf.js (loaded on
+// demand) and hands the resulting bytes to the bridge to save and open. The
+// content is cloned into a light-themed, fixed-width container so the output
+// looks the same regardless of the active app theme.
+async function exportPdfViaHtml2Pdf(name: string): Promise<void> {
+  const html2pdf = (await import("html2pdf.js")).default;
+  const source = buildPrintContainer();
+  document.body.appendChild(source);
+  try {
+    const worker = html2pdf()
+      .set({
+        margin: [10, 10, 10, 10],
+        filename: `${name}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["css", "legacy"] },
+      })
+      .from(source);
+    const blob: Blob = await worker.outputPdf("blob");
+    const b64 = await blobToBase64(blob);
+    const res = await api.exportPdf(b64, currentDir, name);
+    if (res === "" ) {
+      flashStatus("PDF saved", true);
+    } else if (res !== "cancel") {
+      flashStatus(`PDF export failed: ${res}`);
+    }
+  } finally {
+    source.remove();
+  }
+}
+
+// buildPrintContainer clones the rendered content into an off-screen,
+// light-themed, A4-width container suitable for rasterised PDF capture.
+function buildPrintContainer(): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "theme-light";
+  wrap.style.position = "fixed";
+  wrap.style.left = "-10000px";
+  wrap.style.top = "0";
+  wrap.style.width = "794px"; // ≈ A4 width at 96dpi
+  wrap.style.background = "#ffffff";
+  const article = document.createElement("article");
+  article.className = "markdown-body";
+  article.innerHTML = els.content.innerHTML;
+  wrap.appendChild(article);
+  return wrap;
+}
+
+// blobToBase64 extracts the base64 payload (without the data-URL prefix) from a
+// Blob, for passing PDF bytes across the bridge.
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 // toggleRawMarkdown switches the content view between the rendered document and

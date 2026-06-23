@@ -82,6 +82,12 @@ if ($Stage -eq "all" -or $Stage -eq "helper") {
         Copy-Item gui/frontend/public/.gitkeep gui/frontend/dist/.gitkeep
     }
 
+    # Stage the freshly built frontend as the embedded "print" harness used by
+    # the headless-browser PDF engine (compiled in via -tags pdf_bundled below).
+    Write-Host "==> Staging print bundle for PDF export"
+    if (Test-Path internal/pdf/assets/dist) { Remove-Item -Recurse -Force internal/pdf/assets/dist }
+    Copy-Item -Recurse gui/frontend/dist internal/pdf/assets/dist
+
     # Keep the embedded GUI icon (window/App-switcher icon) in sync, and embed
     # the .exe resource icon for Explorer / shortcuts / taskbar.
     Copy-Item images/icon.png gui/appicon.png -Force
@@ -94,7 +100,7 @@ if ($Stage -eq "all" -or $Stage -eq "helper") {
     # -H windowsgui marks the PE as a GUI-subsystem binary so Windows never
     # allocates a console window for the helper (it is a webview app).
     $env:CGO_ENABLED = "1"
-    go build -tags production -ldflags "$LdFlags -H windowsgui" -o build/mdv-gui.exe ./gui
+    go build -tags "production pdf_bundled" -ldflags "$LdFlags -H windowsgui" -o build/mdv-gui.exe ./gui
 }
 
 if ($Stage -eq "helper") {
@@ -123,7 +129,7 @@ if ($Stage -eq "all" -or $Stage -eq "launcher") {
     # double-click. The launcher reattaches to the parent console at startup
     # (see internal/console/console_windows.go) so terminal use still works.
     $env:CGO_ENABLED = "0"
-    go build -tags gui_bundled -ldflags "$LdFlags -H windowsgui" -o build/mdv.exe ./cmd/mdv
+    go build -tags "gui_bundled pdf_bundled" -ldflags "$LdFlags -H windowsgui" -o build/mdv.exe ./cmd/mdv
 
     Write-Host ""
     Write-Host "Done: build/mdv.exe  (version $Version, windows/$Arch)"

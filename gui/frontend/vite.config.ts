@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import wails from "@wailsio/runtime/plugins/vite";
 
@@ -13,6 +14,12 @@ export default defineConfig({
     // Inline assets and keep chunking simple for fast cold start.
     chunkSizeWarningLimit: 4096,
     rollupOptions: {
+      // Two entry points: the GUI (index.html) and the standalone print page
+      // (print.html) used by the headless-browser PDF engine.
+      input: {
+        main: resolve(__dirname, "index.html"),
+        print: resolve(__dirname, "print.html"),
+      },
       output: {
         manualChunks(id: string) {
           if (id.includes("node_modules/mermaid")) return "mermaid";

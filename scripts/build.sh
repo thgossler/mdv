@@ -77,6 +77,13 @@ if [ ! -f gui/frontend/dist/.gitkeep ]; then
   cp gui/frontend/public/.gitkeep gui/frontend/dist/.gitkeep
 fi
 
+# Stage the freshly built frontend as the embedded "print" harness used by the
+# headless-browser PDF engine (compiled in via -tags pdf_bundled below). Both the
+# GUI helper and the launcher import internal/pdf, so both embed this bundle.
+echo "==> Staging print bundle for PDF export"
+rm -rf internal/pdf/assets/dist
+cp -R gui/frontend/dist internal/pdf/assets/dist
+
 echo "==> [2/4] Generating bindings + compiling GUI helper"
 ( cd gui && wails3 generate bindings -ts -i -clean=true >/dev/null 2>&1 || true )
 
@@ -84,8 +91,8 @@ build_macos_universal() {
   # Build the GUI helper as a universal (arm64 + amd64) binary.
   local out_helper="$1"
   echo "    macOS universal: building arm64 + amd64 slices"
-  CGO_ENABLED=1 GOARCH=arm64 go build -tags production -ldflags "$LDFLAGS" -o "build/mdv-gui-arm64" ./gui
-  CGO_ENABLED=1 GOARCH=amd64 go build -tags production -ldflags "$LDFLAGS" -o "build/mdv-gui-amd64" ./gui
+  CGO_ENABLED=1 GOARCH=arm64 go build -tags "production pdf_bundled" -ldflags "$LDFLAGS" -o "build/mdv-gui-arm64" ./gui
+  CGO_ENABLED=1 GOARCH=amd64 go build -tags "production pdf_bundled" -ldflags "$LDFLAGS" -o "build/mdv-gui-amd64" ./gui
   lipo -create -output "$out_helper" build/mdv-gui-arm64 build/mdv-gui-amd64
   rm -f build/mdv-gui-arm64 build/mdv-gui-amd64
 }
@@ -93,7 +100,7 @@ build_macos_universal() {
 if [ "$GOOS" = "darwin" ]; then
   build_macos_universal "build/mdv-gui"
 else
-  go build -tags production -ldflags "$LDFLAGS$WINGUI_LDFLAGS" -o "build/mdv-gui${HELPER_EXT}" ./gui
+  go build -tags "production pdf_bundled" -ldflags "$LDFLAGS$WINGUI_LDFLAGS" -o "build/mdv-gui${HELPER_EXT}" ./gui
 fi
 macos_sign "build/mdv-gui${HELPER_EXT}"
 
@@ -103,12 +110,12 @@ ls -lh internal/launcher/assets/mdv-gui.gz
 
 echo "==> [4/4] Compiling self-contained launcher"
 if [ "$GOOS" = "darwin" ]; then
-  CGO_ENABLED=0 GOARCH=arm64 go build -tags gui_bundled -ldflags "$LDFLAGS" -o "build/mdv-arm64" ./cmd/mdv
-  CGO_ENABLED=0 GOARCH=amd64 go build -tags gui_bundled -ldflags "$LDFLAGS" -o "build/mdv-amd64" ./cmd/mdv
+  CGO_ENABLED=0 GOARCH=arm64 go build -tags "gui_bundled pdf_bundled" -ldflags "$LDFLAGS" -o "build/mdv-arm64" ./cmd/mdv
+  CGO_ENABLED=0 GOARCH=amd64 go build -tags "gui_bundled pdf_bundled" -ldflags "$LDFLAGS" -o "build/mdv-amd64" ./cmd/mdv
   lipo -create -output "build/mdv" build/mdv-arm64 build/mdv-amd64
   rm -f build/mdv-arm64 build/mdv-amd64
 else
-  go build -tags gui_bundled -ldflags "$LDFLAGS$WINGUI_LDFLAGS" -o "build/mdv${HELPER_EXT}" ./cmd/mdv
+  go build -tags "gui_bundled pdf_bundled" -ldflags "$LDFLAGS$WINGUI_LDFLAGS" -o "build/mdv${HELPER_EXT}" ./cmd/mdv
 fi
 macos_sign "build/mdv${HELPER_EXT}"
 

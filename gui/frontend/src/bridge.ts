@@ -52,4 +52,14 @@ export const api = {
     Bridge.ApplyExcludes(text, enabled),
   saveExtendedSyntax: (enabled: boolean): Promise<void> => Bridge.SaveExtendedSyntax(enabled),
   clearRecent: (): Promise<RecentItem[] | null> => Bridge.ClearRecent(),
+  pdfNativeAvailable: (): Promise<boolean> => Bridge.PDFNativeAvailable(),
+  exportPdfFromMarkdown: (
+    markdown: string,
+    dir: string,
+    name: string,
+    extended: boolean,
+    allowRemote: boolean,
+  ): Promise<string> => Bridge.ExportPDFFromMarkdown(markdown, dir, name, extended, allowRemote),
+  exportPdf: (dataB64: string, dir: string, name: string): Promise<string> =>
+    Bridge.ExportPDF(dataB64, dir, name),
 };

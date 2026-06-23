@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"mime"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/thgossler/mdv/internal/core"
+	"github.com/thgossler/mdv/internal/pdf"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -468,6 +470,101 @@ func (b *Bridge) OpenExternal(target string) string {
 // is only useful when something other than mdv would open the file.
 func (b *Bridge) IsDefaultHandler(path string) bool {
 	return isDefaultHandler(path)
+}
+
+// PDFNativeAvailable reports whether the high-fidelity headless-browser PDF
+// engine is usable (an installed browser plus the embedded print bundle). The
+// toolbar's PDF export uses it to decide between Chrome's printToPDF and the
+// in-webview html2pdf.js fallback.
+func (b *Bridge) PDFNativeAvailable() bool {
+	return pdf.NativeAvailable()
+}
+
+// ExportPDFFromMarkdown renders the given Markdown to a PDF using the headless
+// browser engine (the same print harness used by the CLI, so Mermaid, KaTeX and
+// syntax highlighting render faithfully with selectable text), after asking the
+// user where to save it. dir is the document's directory (for relative images
+// and as the default save location); name seeds the default file name.
+//
+// allowRemote permits fetching remote (http/https) images and assets; it is
+// blocked by default and should mirror the GUI's per-session remote-images
+// toggle so a PDF never silently downloads more than the on-screen view.
+//
+// It returns an empty string on success, "fallback" when the native engine is
+// unavailable (so the frontend can use its in-webview html2pdf.js path),
+// "cancel" when the user dismisses the save dialog, or an error message
+// otherwise.
+func (b *Bridge) ExportPDFFromMarkdown(markdown, dir, name string, extended, allowRemote bool) string {
+	if !pdf.NativeAvailable() {
+		return "fallback"
+	}
+	dest := b.promptSavePDF(dir, name)
+	if dest == "" {
+		return "cancel"
+	}
+	var buf bytes.Buffer
+	if err := pdf.RenderChromium([]byte(markdown), dir, extended, allowRemote, &buf); err != nil {
+		return err.Error()
+	}
+	if err := os.WriteFile(dest, buf.Bytes(), 0o644); err != nil {
+		return err.Error()
+	}
+	_ = core.OpenInOS(dest)
+	return ""
+}
+
+// ExportPDF writes a PDF produced in the webview (the html2pdf.js fallback,
+// passed as base64) to a user-chosen location and opens it. It is used when the
+// native headless-browser engine is unavailable.
+//
+// It returns an empty string on success, "cancel" when the user dismisses the
+// save dialog, or an error message otherwise.
+func (b *Bridge) ExportPDF(dataB64, dir, name string) string {
+	raw, err := base64.StdEncoding.DecodeString(dataB64)
+	if err != nil {
+		return err.Error()
+	}
+	dest := b.promptSavePDF(dir, name)
+	if dest == "" {
+		return "cancel"
+	}
+	if err := os.WriteFile(dest, raw, 0o644); err != nil {
+		return err.Error()
+	}
+	_ = core.OpenInOS(dest)
+	return ""
+}
+
+// promptSavePDF asks the user where to save a PDF, defaulting to dir and a .pdf
+// filename derived from name. It returns the chosen path, or "" when cancelled.
+func (b *Bridge) promptSavePDF(dir, name string) string {
+	filename := strings.TrimSpace(name)
+	if filename == "" {
+		filename = "document"
+	}
+	if !strings.HasSuffix(strings.ToLower(filename), ".pdf") {
+		filename += ".pdf"
+	}
+	if b.app == nil {
+		// No app (shouldn't happen in the GUI): write alongside the source.
+		if dir == "" {
+			dir = os.TempDir()
+		}
+		return filepath.Join(dir, filename)
+	}
+	dest, err := b.app.Dialog.SaveFile().
+		SetDirectory(dir).
+		SetFilename(filename).
+		AddFilter("PDF", "*.pdf").
+		CanCreateDirectories(true).
+		PromptForSingleSelection()
+	if err != nil || strings.TrimSpace(dest) == "" {
+		return ""
+	}
+	if !strings.HasSuffix(strings.ToLower(dest), ".pdf") {
+		dest += ".pdf"
+	}
+	return dest
 }
 
 // isAllowedExternalTarget reports whether target is safe to hand to the OS

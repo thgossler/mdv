@@ -46,6 +46,38 @@ export function ClearRecent(): $CancellablePromise<$models.RecentItem[] | null> 
 }
 
 /**
+ * ExportPDF writes a PDF produced in the webview (the html2pdf.js fallback,
+ * passed as base64) to a user-chosen location and opens it. It is used when the
+ * native headless-browser engine is unavailable.
+ * 
+ * It returns an empty string on success, "cancel" when the user dismisses the
+ * save dialog, or an error message otherwise.
+ */
+export function ExportPDF(dataB64: string, dir: string, name: string): $CancellablePromise<string> {
+    return $Call.ByID(1373531477, dataB64, dir, name);
+}
+
+/**
+ * ExportPDFFromMarkdown renders the given Markdown to a PDF using the headless
+ * browser engine (the same print harness used by the CLI, so Mermaid, KaTeX and
+ * syntax highlighting render faithfully with selectable text), after asking the
+ * user where to save it. dir is the document's directory (for relative images
+ * and as the default save location); name seeds the default file name.
+ * 
+ * allowRemote permits fetching remote (http/https) images and assets; it is
+ * blocked by default and should mirror the GUI's per-session remote-images
+ * toggle so a PDF never silently downloads more than the on-screen view.
+ * 
+ * It returns an empty string on success, "fallback" when the native engine is
+ * unavailable (so the frontend can use its in-webview html2pdf.js path),
+ * "cancel" when the user dismisses the save dialog, or an error message
+ * otherwise.
+ */
+export function ExportPDFFromMarkdown(markdown: string, dir: string, name: string, extended: boolean, allowRemote: boolean): $CancellablePromise<string> {
+    return $Call.ByID(3527354988, markdown, dir, name, extended, allowRemote);
+}
+
+/**
  * Init returns the bootstrap information for the frontend.
  */
 export function Init(): $CancellablePromise<$models.InitInfo> {
@@ -79,6 +111,16 @@ export function OpenExternal(target: string): $CancellablePromise<string> {
  */
 export function OpenInNewWindow(path: string, fragment: string): $CancellablePromise<string> {
     return $Call.ByID(262853242, path, fragment);
+}
+
+/**
+ * PDFNativeAvailable reports whether the high-fidelity headless-browser PDF
+ * engine is usable (an installed browser plus the embedded print bundle). The
+ * toolbar's PDF export uses it to decide between Chrome's printToPDF and the
+ * in-webview html2pdf.js fallback.
+ */
+export function PDFNativeAvailable(): $CancellablePromise<boolean> {
+    return $Call.ByID(557699711);
 }
 
 /**

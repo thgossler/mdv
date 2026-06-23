@@ -1,0 +1,5 @@
+# This directory holds the compiled frontend "print" harness used by the
+# headless-browser PDF engine. The build pipeline writes the production build of
+# gui/frontend into ./dist here before compiling the launcher with the
+# `pdf_bundled` build tag (see internal/pdf/assets_bundled.go). Only this
+# placeholder is committed; the generated dist/ is produced at build time.

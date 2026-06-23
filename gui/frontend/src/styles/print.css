@@ -1,0 +1,53 @@
+/* print.css - layout for the standalone PDF "print" page. The page shows only
+   the rendered document (no toolbar, sidebar or window chrome) sized to fill the
+   printable area; the uniform 1 cm page margin is applied by the @page rule
+   below (a CSS @page margin overrides Chrome's printToPDF margin parameters). */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+body.theme-light {
+  background: #ffffff;
+}
+
+#content.markdown-body {
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: var(--fg);
+}
+
+/* Keep atomic blocks from being split across page boundaries where the engine
+   supports it. */
+pre,
+table,
+blockquote,
+figure,
+.mermaid-diagram {
+  break-inside: avoid;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  break-after: avoid;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+/* Apply a uniform 1 cm page margin on every edge of every page. A CSS @page
+   margin rule is honoured per page and overrides Chrome's printToPDF margin
+   parameters, so this is the single source of truth for the print margin. */
+@page {
+  margin: 1cm;
+}
