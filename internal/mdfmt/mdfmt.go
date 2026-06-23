@@ -48,8 +48,13 @@ var (
 	reDivBlock = regexp.MustCompile(`(?is)<div\b[^>]*>(.*?)</div>`)
 	rePOpen    = regexp.MustCompile(`(?i)<p\b[^>]*>`)
 	rePClose   = regexp.MustCompile(`(?i)</p\s*>`)
-	reAnyTag   = regexp.MustCompile(`(?s)<[^>]+>`)
-	reManyNL   = regexp.MustCompile(`\n{3,}`)
+	// reAnyTag strips leftover HTML tags. It deliberately requires a tag-name
+	// start (letter, or '!'/'?' for declarations and processing instructions)
+	// right after '<', so stray '<' runs such as the Azure DevOps page-break
+	// macro "<<<" are not mistaken for a tag whose '[^>]' body then swallows
+	// the following heading up to an unrelated '>' (e.g. a blockquote marker).
+	reAnyTag = regexp.MustCompile(`</?[a-zA-Z!?][^>]*>`)
+	reManyNL = regexp.MustCompile(`\n{3,}`)
 
 	reHeading = [7]*regexp.Regexp{
 		nil,

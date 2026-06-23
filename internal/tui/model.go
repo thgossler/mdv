@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -22,6 +23,7 @@ import (
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/mdfmt"
 	"github.com/thgossler/mdv/internal/termimg"
+	"github.com/thgossler/mdv/internal/watch"
 	"golang.org/x/term"
 )
 
@@ -127,6 +129,15 @@ type Model struct {
 	statusMsg string
 	update    core.UpdateInfo
 
+	// watcher delivers debounced filesystem events (active-document content
+	// changes and workspace tree changes) so the viewer can live-reload and keep
+	// its navigator in sync. nil when live reload is disabled or unavailable.
+	watcher *watch.Watcher
+	watchCh chan watch.Event
+	// statusGen tags each transient status message so a scheduled expiry only
+	// clears the message it was issued for, never a newer one.
+	statusGen int
+
 	// extendedSyntax mirrors the shared GUI/TUI "extended" inline syntax toggle
 	// (math, sub/sup, highlight, inserted). The terminal renderer cannot display
 	// these constructs, so toggling it here only updates and persists the shared
@@ -144,6 +155,18 @@ type Model struct {
 // result (the user already navigated away) is ignored.
 type imagesReadyMsg struct {
 	path string
+}
+
+// watchEventMsg carries a debounced filesystem event from the watcher into the
+// Bubble Tea update loop.
+type watchEventMsg struct {
+	ev watch.Event
+}
+
+// statusExpireMsg clears a transient status message once its display time has
+// elapsed, provided a newer message has not replaced it in the meantime.
+type statusExpireMsg struct {
+	gen int
 }
 
 // docItem adapts a DocFile to the list widget.
@@ -269,6 +292,30 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 	linkList.Title = "Links - Enter to follow, Esc to cancel"
 	linkList.SetShowHelp(false)
 	m.links = linkList
+
+	// Live reload: watch the active document for content changes and the
+	// workspace tree for structural changes. The emit callback runs on the
+	// watcher's goroutine and hands events to the update loop via a buffered
+	// channel. Stdin content has no backing file, but the workspace directory is
+	// still worth watching so the navigator tracks new documents.
+	if cfg.LiveReload {
+		ch := make(chan watch.Event, 8)
+		m.watchCh = ch
+		m.watcher = watch.New(cfg, func(ev watch.Event) {
+			select {
+			case ch <- ev:
+			default:
+			}
+		})
+		if m.watcher != nil {
+			m.watcher.WatchWorkspace(in.Dir)
+			if m.currentPath != "" {
+				m.watcher.Watch(m.currentPath)
+			}
+		} else {
+			m.watchCh = nil
+		}
+	}
 
 	return m
 }
@@ -399,7 +446,23 @@ func resolveStyle(theme string) string {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return waitForWatch(m.watchCh) }
+
+// waitForWatch returns a command that blocks until the next filesystem event is
+// available on ch and delivers it as a watchEventMsg. It returns nil when live
+// reload is disabled, so the program simply never receives watch events.
+func waitForWatch(ch chan watch.Event) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return watchEventMsg{ev: ev}
+	}
+}
 
 // Run starts the program and blocks until the user quits.
 func Run(cfg core.Defaults, in core.Input, upd core.UpdateInfo) error {
@@ -461,6 +524,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case watchEventMsg:
+		// Keep listening for the next event regardless of how this one is handled.
+		next := waitForWatch(m.watchCh)
+		switch msg.ev.Kind {
+		case watch.FileChanged:
+			if m.ready && msg.ev.Path == m.currentPath {
+				return m, tea.Batch(m.reloadCurrent("Document changed"), next)
+			}
+		case watch.WorkspaceChanged:
+			m.refreshWorkspace()
+		}
+		return m, next
+
+	case statusExpireMsg:
+		if msg.gen == m.statusGen {
+			m.statusMsg = ""
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
@@ -519,6 +601,8 @@ func (m *Model) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return *m, m.goBack()
 	case "f", "right", "alt+right":
 		return *m, m.goForward()
+	case "r":
+		return *m, m.reloadCurrent("Reloaded")
 	case "enter", "l":
 		m.openLinkPicker()
 		return *m, nil
@@ -950,7 +1034,71 @@ func (m *Model) openPath(path string, pushHistory bool) tea.Cmd {
 	m.rerender()
 	m.viewport.GotoTop()
 	m.syncListSelection()
+	m.watcher.Watch(path)
 	return m.prewarmImagesCmd()
+}
+
+// reloadCurrent re-reads the active document from disk and re-renders it in
+// place, preserving the reader's scroll position (unlike openPath, which jumps
+// to the top). When status is non-empty it briefly shows that message in the
+// status bar. It is used by both the manual reload key and the live-reload
+// watcher.
+func (m *Model) reloadCurrent(status string) tea.Cmd {
+	if m.currentPath == "" {
+		return nil
+	}
+	data, err := core.ReadMarkdownFile(m.currentPath)
+	if err != nil {
+		m.statusMsg = "Reload failed: " + err.Error()
+		return nil
+	}
+	y := m.viewport.YOffset
+	m.rawMarkdown = string(data)
+	m.renderCache = nil
+	m.refreshMeta()
+	m.matches = nil
+	m.matchIdx = 0
+	m.searchQuery = ""
+	m.searchTerms = nil
+	m.rerender()
+	m.viewport.SetYOffset(y)
+	return tea.Batch(m.flashStatus(status), m.prewarmImagesCmd())
+}
+
+// flashStatus shows a transient status-bar message that clears itself after a
+// short delay. An empty message is a no-op. The returned command schedules the
+// expiry; a newer flash supersedes an older one via the generation tag.
+func (m *Model) flashStatus(msg string) tea.Cmd {
+	if msg == "" {
+		return nil
+	}
+	m.statusMsg = msg
+	m.statusGen++
+	gen := m.statusGen
+	return tea.Tick(2500*time.Millisecond, func(time.Time) tea.Msg {
+		return statusExpireMsg{gen: gen}
+	})
+}
+
+// refreshWorkspace re-scans the workspace directory after a filesystem change
+// and rebuilds the document navigator, preserving the current selection. While
+// the navigator filter is active the visible (filtered) list is left untouched
+// to avoid disrupting typing; the refreshed set is still recorded so the next
+// unfiltered view reflects it.
+func (m *Model) refreshWorkspace() {
+	files, _ := core.ListMarkdownFiles(m.workspaceDir, m.cfg)
+	if m.titlesLoaded || m.labelMode == "title" {
+		core.PopulateTitles(files)
+		m.titlesLoaded = true
+	}
+	m.workspace = files
+	m.entryPath = entryPointPath(files)
+	if m.focus == focusListFilter || m.listFilterInput != "" {
+		return
+	}
+	m.list.SetDelegate(newDocDelegate(m.entryPath))
+	m.list.SetItems(docItemsFrom(files, m.labelMode))
+	m.syncListSelection()
 }
 
 // prewarmImagesCmd returns a command that fetches the current document's images
@@ -1481,24 +1629,37 @@ func (m Model) statusBar() string {
 	case navActive:
 		hints = "^b:nav  tab:switch  enter:open  /:filter  //:content(all files)  t:titles  x:ext  q:quit"
 	case m.showList:
-		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  x:ext  q:quit"
+		hints = "^b:nav  tab:switch  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  r:reload  x:ext  q:quit"
 	default:
-		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  x:ext  q:quit"
+		hints = "^b:nav  /:content  //:content(all files)  b:back  f:fwd  l:links  " + metaHint + "i:img  r:reload  x:ext  q:quit"
 	}
 
 	status := m.statusMsg
+	flash := m.statusMsg != "" // transient/user-facing message, shown in accent blue
 	if status == "" && m.update.Available {
 		status = fmt.Sprintf("Update %s available → %s", m.update.Latest, m.update.DownloadURL)
 	}
 
+	bar := lipgloss.NewStyle().Reverse(true)
 	left := fmt.Sprintf(" %d%% ", pct)
 	right := " " + hints + " "
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - lipgloss.Width(status) - 2
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - lipgloss.Width(status)
 	if gap < 1 {
 		gap = 1
 	}
-	line := left + status + strings.Repeat(" ", gap) + right
-	return lipgloss.NewStyle().Width(m.width).Reverse(true).Render(line)
+	// The bar is reverse-video; render the transient status in the primary
+	// accent (blue) so it stands out the way the GUI's flash notification does.
+	// Using Reverse+Background keeps the segment's background identical to the
+	// rest of the bar (the terminal's default foreground), so only the glyphs
+	// turn blue instead of sitting in an inverted dark block.
+	statusSeg := status
+	if flash && status != "" {
+		statusSeg = lipgloss.NewStyle().Reverse(true).Background(lipgloss.Color("12")).Bold(true).Render(status)
+	} else if status != "" {
+		statusSeg = bar.Render(status)
+	}
+	line := bar.Render(left) + statusSeg + bar.Render(strings.Repeat(" ", gap)+right)
+	return lipgloss.NewStyle().MaxWidth(m.width).Render(line)
 }
 
 // collectHeadings extracts ATX headings from markdown (ignoring fenced code).

@@ -15,6 +15,20 @@ func stripANSI(s string) string {
 	return s
 }
 
+func TestStrayAngleBracketsKeepHeading(t *testing.T) {
+	// "<<<" (an Azure DevOps wiki page-break macro) must not be treated as the
+	// start of an HTML tag whose body then swallows everything up to the next
+	// '>' — here the blockquote marker — which would delete the heading.
+	in := "[[_TOC_]]\n\n<<<\n\n# Executive Summary\n\n> **TL;DR:** hello\n"
+	out, err := Render(in, 80, "notty", false, nil, "")
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, "Executive Summary") {
+		t.Errorf("heading after stray '<<<' was dropped:\n%q", out)
+	}
+}
+
 func TestConvertHTMLHeadingsAndParagraph(t *testing.T) {
 	in := `<h1 align="center">Title</h1>
 <p>First paragraph.</p>

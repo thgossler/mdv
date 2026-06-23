@@ -165,3 +165,46 @@ func TestExtractTitleAndPopulate(t *testing.T) {
 		t.Errorf("PopulateTitles = %+v", files)
 	}
 }
+
+func TestIsSkippedDir(t *testing.T) {
+	for _, name := range []string{".git", "node_modules", ".hidden", ".svn"} {
+		if !IsSkippedDir(name) {
+			t.Errorf("IsSkippedDir(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{"docs", "src", "wiki", "documentation"} {
+		if IsSkippedDir(name) {
+			t.Errorf("IsSkippedDir(%q) = true, want false", name)
+		}
+	}
+}
+
+func TestWorkspaceDirs(t *testing.T) {
+	root := t.TempDir()
+	mk := func(rel string) {
+		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("docs/guide")
+	mk("src")
+	mk("node_modules/pkg") // skipped (noise dir)
+	mk(".git/objects")     // skipped (hidden dir)
+
+	got := WorkspaceDirs(root)
+
+	want := map[string]bool{
+		root:                                 true,
+		filepath.Join(root, "docs"):          true,
+		filepath.Join(root, "docs", "guide"): true,
+		filepath.Join(root, "src"):           true,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("WorkspaceDirs returned %d dirs, want %d: %v", len(got), len(want), got)
+	}
+	for _, d := range got {
+		if !want[d] {
+			t.Errorf("unexpected watched dir %q (noise/hidden trees must be skipped)", d)
+		}
+	}
+}
