@@ -575,6 +575,10 @@ func (m Model) routeMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.stdin {
 				m.rerender()
 				m.viewport.GotoTop()
+				// Piped stdin has no path to open, so kick off the background
+				// image prefetch here; otherwise the deferred-load renderer
+				// would leave every image as alt text (images never load).
+				return m, m.prewarmImagesCmd()
 			}
 		} else {
 			m.rerender()

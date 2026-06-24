@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 )
@@ -44,10 +45,30 @@ func OpenInOS(target string) error {
 
 // SpawnDetached launches exe with the given arguments as an independent
 // process, not tied to the lifetime of the caller. It is used to open a
-// document in a new window (a separate mdv instance).
+// document in a new window (a separate mdv instance) and to launch the bundled
+// GUI helper.
+//
+// The child is fully detached from the launcher's controlling terminal: its
+// standard streams are pointed at the null device and (via applyDetachedAttrs)
+// it is placed in its own session/process group. Without this the spawned GUI
+// helper would inherit the terminal's stdin/stdout/stderr and keep sharing the
+// controlling terminal after mdv exits - a backgrounded GUI process holding the
+// tty can swallow keystrokes meant for the shell and leave the terminal's
+// line-editing state disturbed (e.g. Tab completion or cursor-movement keys
+// emitting escape sequences). Windows already achieves this with
+// DETACHED_PROCESS; this makes the Unix behaviour match.
 func SpawnDetached(exe string, args ...string) error {
 	cmd := exec.Command(exe, args...)
 	applyDetachedAttrs(cmd)
+	// Redirect the child's standard streams to the null device so it can never
+	// read from or write to the controlling terminal. Closing the parent's
+	// handle after Start is safe: the child has its own dup of the descriptor.
+	if devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0); err == nil {
+		cmd.Stdin = devNull
+		cmd.Stdout = devNull
+		cmd.Stderr = devNull
+		defer devNull.Close()
+	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("spawning %q: %w", exe, err)
 	}

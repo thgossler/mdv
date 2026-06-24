@@ -425,9 +425,19 @@ func (b *Bridge) ReadDocument(path string) DocumentDTO {
 	if err != nil {
 		return DocumentDTO{Path: path, Error: err.Error()}
 	}
+	dir := filepath.Dir(path)
+	// When this is the program's initial input, honor the resolved input
+	// directory instead of the file's own parent. They are identical for a
+	// regular file, but for piped stdin (materialized into a throwaway temp
+	// file) input.Dir is the directory mdv was launched from, so relative
+	// links and images resolve against the user's working directory rather
+	// than the temp directory the document physically lives in.
+	if b.input.Path != "" && path == b.input.Path && b.input.Dir != "" {
+		dir = b.input.Dir
+	}
 	return DocumentDTO{
 		Path:     path,
-		Dir:      filepath.Dir(path),
+		Dir:      dir,
 		Name:     filepath.Base(path),
 		Markdown: string(data),
 	}
