@@ -118,8 +118,8 @@ On Windows and macOS the installer also **asks whether to associate `.md` files
 with mdv** so you can open Markdown by double-clicking. Set
 `MDV_ASSOCIATE_MD=1` to associate without being prompted (or `=no` to skip it
 silently in non-interactive installs). See
-[Open Markdown files from Finder (macOS)](#open-markdown-files-from-finder-macos)
-for how the macOS association works and how to change the default by hand.
+[Open Markdown files from File Manager](#open-markdown-files-from-file-manager)
+for how association works and how to change the default by hand.
 
 For unattended installs (e.g. chaining the script from another installer or
 tool), pass `--silent` (`-Silent` in PowerShell) to suppress all prompts; this
@@ -210,34 +210,32 @@ type README.md | mdv --console           # Windows (cmd.exe)
 > macOS/Linux, passing a file path (`mdv --console README.md`), and redirecting
 > to a file in `cmd.exe` all work without the extra step.
 
-### Open Markdown files from Finder (macOS)
+### Open Markdown files from File Manager
 
-macOS Finder's **Open With** only lists application bundles, so the bare `mdv`
-command-line tool can't be selected there. The macOS release archive
-(`mdv-macos-darwin-universal.tar.gz`) therefore also contains **`mdv.app`** - a small
-wrapper bundle that forwards opened files to `mdv --gui`.
-
-The `install.sh` installer offers to do all of this for you (it copies
-`mdv.app` into `Applications`, registers it, and - if [`duti`](https://github.com/moretension/duti)
-is installed - sets it as the default). To do it manually instead:
-
-1. Extract the archive and drag `mdv.app` into `/Applications`.
-2. Make `mdv` the default for Markdown files, either way:
-   - **In Finder:** select a `.md` file → **Get Info** → **Open with** →
-     choose `mdv` → **Change All…**.
-   - **From the command line** with [`duti`](https://github.com/moretension/duti)
-     (`brew install duti`):
-
-     ```sh
-     duti -s com.thgossler.mdv net.daringfireball.markdown all
-     ```
-
-Double-clicking a Markdown file (or any file opened via the bundle) now opens it
-in the mdv GUI. The plain `mdv` executable in the same archive remains the way
+mdv can register itself as a handler for `.md` files so you can open Markdown by
+double-clicking it in your file manager - the document opens in the mdv GUI. The
+installer script sets this up for you when you opt in (it asks during an interactive
+install, or pass `--associate-md-file-extension` / `-AssociateMdFileExtension`,
+or set `MDV_ASSOCIATE_MD=1`). Either way, the plain `mdv` command stays the way
 to use mdv from the terminal.
 
-The wrapper runs as a background agent, so opening a file shows only the mdv GUI
-icon in the Dock - the wrapper itself never appears there.
+Two platform specifics are worth knowing:
+
+- **macOS** - Finder's **Open With** only lists application bundles, so the
+  release archive also ships a small **`mdv.app`** wrapper that forwards opened
+  files to `mdv --gui`. The installer copies it into `/Applications`, registers
+  it, and sets it as the default handler using
+  [`duti`](https://github.com/moretension/duti) (installing `duti` via Homebrew
+  first if needed). To set the default by hand, either pick `mdv` via a `.md`
+  file's **Get Info → Open with → Change All…**, or run
+  `duti -s de.thomas-gossler.apps.mdv net.daringfireball.markdown all`. The
+  wrapper runs as a background agent, so only the mdv GUI icon appears in the
+  Dock.
+- **Linux** - automatic `.md` association is **not** performed; set up your
+  desktop environment's file association manually if you want it.
+
+On **Windows** the installer registers a per-user handler (no admin rights
+needed), so association works out of the box once you opt in.
 
 ### Document content search
 
@@ -436,7 +434,7 @@ The script builds the frontend, compiles the GUI helper, compresses and embeds
 it into the launcher, and produces a single self-contained executable. On macOS
 the result is a universal (arm64 + amd64) binary, and the script additionally
 produces `build/mdv.app` (the Finder wrapper described under
-[Open Markdown files from Finder](#open-markdown-files-from-finder-macos)).
+[Open Markdown files from File Manager](#open-markdown-files-from-file-manager)).
 
 ### Architecture
 

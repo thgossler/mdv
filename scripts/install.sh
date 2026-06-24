@@ -170,8 +170,14 @@ install_macos_app() {
 
   # Make it the default Markdown handler when duti is available; otherwise show
   # how to finish (macOS protects default-handler changes from silent override).
+  if ! command -v duti >/dev/null 2>&1; then
+    if command -v brew >/dev/null 2>&1; then
+      echo "Installing duti (needed to set the default Markdown handler)..."
+      brew install duti >/dev/null 2>&1 || true
+    fi
+  fi
   if command -v duti >/dev/null 2>&1; then
-    if duti -s com.thgossler.mdv net.daringfireball.markdown all >/dev/null 2>&1; then
+    if duti -s de.thomas-gossler.apps.mdv net.daringfireball.markdown all >/dev/null 2>&1; then
       echo "Set mdv as the default app for Markdown (.md) files."
     else
       echo "Registered mdv.app, but setting it as the default failed."
@@ -179,7 +185,7 @@ install_macos_app() {
   else
     echo "Registered mdv.app. To make it the default for .md files:"
     echo "  - Finder: select a .md file -> Get Info -> Open with -> mdv -> Change All..."
-    echo "  - or: brew install duti && duti -s com.thgossler.mdv net.daringfireball.markdown all"
+    echo "  - or: brew install duti && duti -s de.thomas-gossler.apps.mdv net.daringfireball.markdown all"
   fi
 }
 

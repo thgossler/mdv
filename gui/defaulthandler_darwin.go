@@ -20,7 +20,7 @@ import (
 // this identifier rather than a filesystem path, because the GUI helper runs
 // from a per-version cache directory outside the .app bundle and so cannot find
 // the bundle from its own executable path.
-const macOSBundleID = "com.thgossler.mdv"
+const macOSBundleID = "de.thomas-gossler.apps.mdv"
 
 // isDefaultHandler reports whether mdv is the macOS default application for the
 // file at path, by comparing the bundle identifier Launch Services resolves for

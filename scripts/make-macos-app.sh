@@ -34,7 +34,7 @@ ROOT="$(pwd)"
 APP="${1:-build/mdv.app}"
 MDV_BIN="${2:-build/mdv}"
 ICON_SRC="$ROOT/images/icon.png"
-BUNDLE_ID="com.thgossler.mdv"
+BUNDLE_ID="de.thomas-gossler.apps.mdv"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "make-macos-app: macOS only (needs osacompile, sips, iconutil)" >&2
