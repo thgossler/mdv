@@ -10,10 +10,20 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/thgossler/mdv/internal/console"
 )
+
+// minGTK4Minor is the lowest GTK 4 minor version the bundled GUI helper can run
+// against. The helper is built (via Wails v3) on the release runners, which ship
+// GTK 4.14, and it calls APIs introduced in that release - e.g.
+// gdk_monitor_get_scale (since 4.14) and the GtkFileDialog family (since 4.10).
+// On an older GTK those symbols are missing, so the helper aborts on startup.
+// Detecting the version here lets mdv degrade to TUI/console instead of
+// spawning a helper that silently dies.
+const minGTK4Minor = 14
 
 // Mode is a chosen presentation mode.
 type Mode int
@@ -149,12 +159,97 @@ func windowsGUIAvailable() bool {
 	return true
 }
 
-// linuxGUIAvailable requires a display server and the WebKitGTK library.
+// linuxGUIAvailable requires a display server, a GTK 4 runtime new enough for
+// the bundled helper, and the WebKitGTK library. The GTK version gate ensures we
+// never spawn a helper that would crash on missing symbols (older GTK), so mdv
+// degrades cleanly to the TUI/console instead.
 func linuxGUIAvailable() bool {
 	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 		return false
 	}
+	if !gtk4AtLeast(minGTK4Minor) {
+		return false
+	}
 	return webkitGTKPresent()
+}
+
+// gtk4AtLeast reports whether an installed GTK 4 runtime is at least version
+// 4.<minMinor>. When no GTK 4 library can be found or its version parsed, it
+// returns false so mdv stays on the safe TUI/console path.
+func gtk4AtLeast(minMinor int) bool {
+	minor, ok := gtk4MinorInDirs(libDirs())
+	return ok && minor >= minMinor
+}
+
+// gtk4MinorInDirs scans the given directories for the GTK 4 shared object and
+// returns the highest GTK minor version it can derive, without dlopen or cgo.
+// GTK ships the library as a versioned file named
+// libgtk-4.so.1.<minor*100>.<micro> (e.g. libgtk-4.so.1.1400.2 for 4.14.2), and
+// the bare soname libgtk-4.so.1 is a symlink to it. Both are inspected.
+func gtk4MinorInDirs(dirs []string) (int, bool) {
+	best := -1
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if m, ok := parseGTK4Minor(name); ok && m > best {
+				best = m
+			}
+			// The bare soname symlink points at the versioned object; follow it
+			// so systems that expose only libgtk-4.so.1 are still detected.
+			if name == "libgtk-4.so.1" {
+				if target, err := os.Readlink(filepath.Join(dir, name)); err == nil {
+					if m, ok := parseGTK4Minor(filepath.Base(target)); ok && m > best {
+						best = m
+					}
+				}
+			}
+		}
+	}
+	if best < 0 {
+		return 0, false
+	}
+	return best, true
+}
+
+// parseGTK4Minor extracts the GTK minor version from a versioned GTK 4 library
+// filename of the form libgtk-4.so.1.<minor*100>.<micro>. For example
+// "libgtk-4.so.1.1400.2" yields 14 and "libgtk-4.so.1.800.3" yields 8.
+func parseGTK4Minor(name string) (int, bool) {
+	const prefix = "libgtk-4.so.1."
+	if !strings.HasPrefix(name, prefix) {
+		return 0, false
+	}
+	rest := name[len(prefix):] // e.g. "1400.2"
+	dot := strings.IndexByte(rest, '.')
+	if dot <= 0 {
+		return 0, false
+	}
+	enc, err := strconv.Atoi(rest[:dot])
+	if err != nil || enc < 0 {
+		return 0, false
+	}
+	return enc / 100, true
+}
+
+// libDirs returns the usual shared-library search directories, plus any from
+// LD_LIBRARY_PATH. Used for cgo-free probing of GTK/WebKitGTK presence.
+func libDirs() []string {
+	dirs := []string{
+		"/usr/lib",
+		"/usr/lib64",
+		"/usr/local/lib",
+		"/lib",
+		"/usr/lib/x86_64-linux-gnu",
+		"/usr/lib/aarch64-linux-gnu",
+	}
+	if extra := os.Getenv("LD_LIBRARY_PATH"); extra != "" {
+		dirs = append(dirs, strings.Split(extra, ":")...)
+	}
+	return dirs
 }
 
 // webkitGTKPresent scans the usual library directories for a libwebkit2gtk
@@ -167,17 +262,7 @@ func webkitGTKPresent() bool {
 		"libwebkit2gtk-4.1.so.0",
 		"libwebkit2gtk-4.0.so.37",
 	}
-	dirs := []string{
-		"/usr/lib",
-		"/usr/lib64",
-		"/usr/local/lib",
-		"/lib",
-		"/usr/lib/x86_64-linux-gnu",
-		"/usr/lib/aarch64-linux-gnu",
-	}
-	if extra := os.Getenv("LD_LIBRARY_PATH"); extra != "" {
-		dirs = append(dirs, strings.Split(extra, ":")...)
-	}
+	dirs := libDirs()
 
 	for _, dir := range dirs {
 		for _, name := range names {

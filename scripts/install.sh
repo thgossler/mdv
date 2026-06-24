@@ -199,4 +199,43 @@ if [ "$os" = "Darwin" ] && [ -d "$tmp/mdv.app" ]; then
   fi
 fi
 
+# --- Linux: warn when the GUI's GTK requirement is unmet ---------------------
+# The bundled GUI helper is built against GTK 4.14 (the release runners' GTK) and
+# calls APIs introduced there, e.g. gdk_monitor_get_scale. On an older GTK the
+# helper cannot start, so mdv runs in TUI/console mode instead. mdv still
+# installs and works headless, so this is a heads-up, not a fatal error. The GTK
+# version is read from the versioned shared-object filename
+# (libgtk-4.so.1.<minor*100>.<micro>, e.g. libgtk-4.so.1.1400.2 for 4.14.2) with
+# no dependency on pkg-config.
+MIN_GTK_MINOR=14
+gtk4_minor() {
+  found=""
+  for d in /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu /usr/lib64 \
+           /usr/lib /usr/local/lib /lib; do
+    [ -d "$d" ] || continue
+    for f in "$d"/libgtk-4.so.1.*; do
+      [ -e "$f" ] || continue
+      enc=$(printf '%s\n' "${f##*/}" | sed -n 's/^libgtk-4\.so\.1\.\([0-9]\{1,\}\)\..*$/\1/p')
+      [ -n "$enc" ] || continue
+      m=$((enc / 100))
+      if [ -z "$found" ] || [ "$m" -gt "$found" ]; then
+        found="$m"
+      fi
+    done
+  done
+  printf '%s' "$found"
+}
+
+if [ "$os" = "Linux" ]; then
+  gtk_minor="$(gtk4_minor)"
+  if [ -z "$gtk_minor" ]; then
+    echo "Note: GTK 4 was not found. mdv's GUI needs GTK >= 4.${MIN_GTK_MINOR} and"
+    echo "      WebKitGTK 6.0; without them mdv runs in TUI/console mode here."
+  elif [ "$gtk_minor" -lt "$MIN_GTK_MINOR" ]; then
+    echo "Note: detected GTK 4.${gtk_minor}, but mdv's GUI needs GTK >= 4.${MIN_GTK_MINOR}."
+    echo "      mdv will run in TUI/console mode. To enable the GUI, use a distro"
+    echo "      with GTK >= 4.${MIN_GTK_MINOR} and WebKitGTK 6.0 (e.g. Debian 13+, Ubuntu 24.04+)."
+  fi
+fi
+
 echo "Try:  mdv --version"
