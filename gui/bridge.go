@@ -53,6 +53,12 @@ type Bridge struct {
 	// environment variable (the launcher exports it for `mdv --remote`).
 	remoteImages bool
 
+	// forceSidePanel, when true, keeps the document navigator panel visible for
+	// this session even when a single file is opened. It is set from the
+	// MDV_SIDEPANEL environment variable (the launcher exports it for
+	// `mdv --sidepanel`).
+	forceSidePanel bool
+
 	// cliExcludeText holds the newline-separated navigator exclusion patterns
 	// supplied via MDV_IGNORE (the --ignore CLI flag) for this session. When
 	// non-empty it overrides the persisted exclude patterns returned by
@@ -104,6 +110,10 @@ type InitInfo struct {
 	// begins the session with remote (http/https) image loading enabled and the
 	// toolbar toggle shown active.
 	RemoteImages bool `json:"remoteImages"`
+	// SidePanel is true when mdv was started with --sidepanel, so the frontend
+	// keeps the document navigator panel visible even when a single file is
+	// opened (including files opened later via File ▸ Open).
+	SidePanel bool `json:"sidePanel"`
 }
 
 // LayoutDTO carries the persisted side-panel widths (in pixels) so the frontend
@@ -145,6 +155,7 @@ func (b *Bridge) Init() InitInfo {
 			Recent:         b.recentList(),
 			ExtendedSyntax: b.effectiveExtendedSyntax(),
 			RemoteImages:   b.remoteImages,
+			SidePanel:      b.forceSidePanel,
 		}
 	}
 	kind := "file"
@@ -169,6 +180,7 @@ func (b *Bridge) Init() InitInfo {
 		Recent:         b.recentList(),
 		ExtendedSyntax: b.effectiveExtendedSyntax(),
 		RemoteImages:   b.remoteImages,
+		SidePanel:      b.forceSidePanel,
 	}
 }
 
@@ -204,6 +216,7 @@ func (b *Bridge) Reinit(path string) InitInfo {
 		Recent:         b.recentList(),
 		ExtendedSyntax: b.effectiveExtendedSyntax(),
 		RemoteImages:   b.remoteImages,
+		SidePanel:      b.forceSidePanel,
 	}
 }
 

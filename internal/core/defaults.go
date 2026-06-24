@@ -70,6 +70,12 @@ type Defaults struct {
 	// in GUI mode. This field is never written to settings.jsonc; it is a
 	// runtime-only override.
 	ExcludePatterns []string `json:"-"`
+
+	// ForceSidePanel is set by the --sidepanel CLI flag and forces the document
+	// navigator panel to start visible even when mdv opens a single file. It
+	// applies to the GUI and TUI (console has no panel) and is never written to
+	// settings.jsonc; it is a runtime-only override.
+	ForceSidePanel bool `json:"-"`
 }
 
 // DefaultSettings returns a fresh copy of the built-in defaults.

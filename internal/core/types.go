@@ -20,7 +20,7 @@ const AppCopyright = "© 2026 Thomas Gossler"
 // via -ldflags "-X github.com/thgossler/mdv/internal/core.Version=vX.Y.Z". This
 // default is kept in sync with VERSION (by scripts/bump-version.*) so `go run`
 // and unstamped builds still report the real SemVer instead of a commit hash.
-var Version = "v0.8.1"
+var Version = "v0.8.2"
 
 // LinkKind classifies a resolved markdown link target.
 type LinkKind int

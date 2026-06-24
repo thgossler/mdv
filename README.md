@@ -140,11 +140,13 @@ manual `source` needed:
   enable it in the current one (or run it sourced - `. install.sh` - to have the
   `PATH` update applied directly to your shell).
 
-## Usage
+## Usage Examples
 
 ```sh
 mdv README.md            # open a single document
 mdv ./docs               # open a folder (sidebar lists all markdown files)
+mdv README.md --remote --sidepanel --ignore "*,\!/README.md,\!docs/" # open 
+  # document, show sidebar with related markdown files, but only within docs/
 mdv --tui README.md      # force the terminal UI
 mdv --console README.md  # render to stdout and exit
 cat README.md | mdv --console # render Markdown piped on stdin (see note below)
@@ -166,6 +168,7 @@ mdv --init-config        # write a default settings.jsonc
 | `--no-color`      | Disable ANSI colors in console output                    |
 | `--max-width N`   | Cap the render width to N columns                        |
 | `--images MODE`   | Image rendering: `auto`, `graphics`, `blocks`, `off`     |
+| `--sidepanel`     | Force the document navigator panel to start visible (GUI and TUI) |
 | `--version`       | Print version and exit                                   |
 | `--init-config`   | Write a default settings file and exit                   |
 

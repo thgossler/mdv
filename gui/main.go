@@ -41,6 +41,12 @@ const remoteEnv = "MDV_REMOTE"
 // It must match launcher.MDVIgnoreEnv.
 const ignoreEnv = "MDV_IGNORE"
 
+// sidePanelEnv is the environment variable the launcher sets when mdv is started
+// with --sidepanel, asking the GUI to keep the document navigator panel visible
+// for this session even when a single file is opened. It must match
+// launcher.MDVSidePanelEnv.
+const sidePanelEnv = "MDV_SIDEPANEL"
+
 func main() {
 	if err := runGUI(); err != nil {
 		log.Fatal(err)
@@ -90,6 +96,9 @@ func runGUI() error {
 	// --remote (propagated via MDV_REMOTE) opts this session into loading remote
 	// images on startup; the frontend reflects it in the toolbar toggle.
 	bridge.remoteImages = os.Getenv(remoteEnv) == "1"
+	// --sidepanel (propagated via MDV_SIDEPANEL) keeps the navigator panel visible
+	// for this session even when a single file is opened.
+	bridge.forceSidePanel = os.Getenv(sidePanelEnv) == "1"
 	// When started with no input but a GUI is shown, the launcher signals picker
 	// mode (resolveInput returns InputNone). The bridge then bootstraps an empty
 	// GUI (collapsed navigator, empty content view) so the user can pick a

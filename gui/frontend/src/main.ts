@@ -40,6 +40,10 @@ let history: HistoryEntry[] = [];
 let forward: HistoryEntry[] = [];
 let labelMode: "filename" | "title" = "filename";
 let detachScrollSpy: (() => void) | null = null;
+// When mdv is started with --sidepanel the document navigator panel is forced
+// visible for the whole session: it never starts collapsed and every newly
+// opened file (e.g. via File ▸ Open) re-shows it if it was toggled away.
+let sidePanelForced = false;
 // The current document's filename and resolved title, kept so the toolbar title
 // can switch between them when the nav-panel label mode is toggled.
 let currentDocName = "";
@@ -154,6 +158,9 @@ async function boot(): Promise<void> {
   // remote media immediately and the toolbar toggle shows as active.
   remoteImagesEnabled = info.remoteImages === true;
   els.btnRemoteImg.classList.toggle("active", remoteImagesEnabled);
+  // `mdv --sidepanel` forces the navigator panel to stay visible for the
+  // session, including for single files and files opened later via File ▸ Open.
+  sidePanelForced = info.sidePanel === true;
   watchEnabled = info.config.liveReload === true;
   updateWatchButton();
   applyLayout(info.layout);
@@ -184,8 +191,8 @@ async function boot(): Promise<void> {
   // The navigator is most useful when browsing a folder, so start it collapsed
   // for a single file or when nothing is open yet, and expanded when a folder
   // was given. Done before the UI is revealed so the sidebar never flashes the
-  // wrong state.
-  els.sidebar.classList.toggle("collapsed", info.kind !== "folder");
+  // wrong state. With --sidepanel the navigator is forced visible regardless.
+  els.sidebar.classList.toggle("collapsed", !sidePanelForced && info.kind !== "folder");
   // Layout (panel widths) is now applied; reveal the UI so the panes never
   // flash at their default width before jumping to the persisted size.
   $("app").classList.remove("layout-pending");
@@ -1994,6 +2001,9 @@ async function reopenInput(path: string): Promise<void> {
   if (next.kind === "file") {
     await openDocument(next.path, false);
     if (next.fragment) scrollToSlug(next.fragment);
+    // With --sidepanel the navigator must stay visible even when opening a
+    // single file, re-showing it if it had been toggled away.
+    if (sidePanelForced) els.sidebar.classList.remove("collapsed");
   } else {
     // A dropped folder is meant for browsing, so make sure the navigator is
     // visible even if it was collapsed for the previously viewed file.

@@ -273,6 +273,11 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 		m.workspace = files
 		m.currentPath = in.Path
 		m.currentDir = in.Dir
+		// --sidepanel forces the navigator visible even for a single file; keep
+		// focus on the content so the document stays readable from the start.
+		if cfg.ForceSidePanel {
+			m.showList = true
+		}
 	} else if in.Kind == core.InputStdin {
 		// Markdown piped in: render the in-memory buffer. Use the working
 		// directory as the workspace so relative links and images resolve.
@@ -281,6 +286,9 @@ func New(cfg core.Defaults, in core.Input, upd core.UpdateInfo) Model {
 		m.currentDir = in.Dir
 		m.rawMarkdown = string(in.Data)
 		m.stdin = true
+		if cfg.ForceSidePanel {
+			m.showList = true
+		}
 	}
 	m.refreshMeta()
 

@@ -43,6 +43,11 @@ const MDVRemoteEnv = "MDV_REMOTE"
 // the initial navigator exclusion list for this session without persisting them.
 const MDVIgnoreEnv = "MDV_IGNORE"
 
+// MDVSidePanelEnv is the environment variable the launcher sets when mdv is
+// started with --sidepanel, telling the spawned GUI helper to keep the document
+// navigator panel visible for this session even when a single file is opened.
+const MDVSidePanelEnv = "MDV_SIDEPANEL"
+
 // SpawnGUIPicker launches the embedded GUI helper with no input path, signalling
 // it (via MDVPickEnv) to present a native file/folder picker on startup. It
 // returns ErrNoEmbeddedGUI when no helper is bundled. The environment variable

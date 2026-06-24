@@ -67,6 +67,13 @@ export interface InitInfo {
      * toolbar toggle shown active.
      */
     "remoteImages": boolean;
+
+    /**
+     * SidePanel is true when mdv was started with --sidepanel, so the frontend
+     * keeps the document navigator panel visible even when a single file is
+     * opened (including files opened later via File ▸ Open).
+     */
+    "sidePanel": boolean;
 }
 
 /**

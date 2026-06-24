@@ -29,19 +29,20 @@ func main() {
 
 func run() int {
 	var (
-		flagTUI      = flag.Bool("tui", false, "force the interactive terminal UI")
-		flagGUI      = flag.Bool("gui", false, "force the graphical UI")
-		flagConsole  = flag.Bool("console", false, "render to stdout and exit (no UI)")
-		flagC        = flag.Bool("c", false, "alias for --console")
-		flagVersion  = flag.Bool("version", false, "print version and exit")
-		flagInit     = flag.Bool("init-config", false, "write a default settings.jsonc and exit")
-		flagNoColor  = flag.Bool("no-color", false, "disable ANSI colors in console output")
-		flagMaxWidth = flag.Int("max-width", 0, "cap the render width in columns (0 = full width)")
-		flagImages   = flag.String("images", "", "image rendering: auto|graphics|blocks|off")
-		flagPDF      = flag.String("pdf", "", "render the input to a PDF at the given file or folder path and exit")
-		flagForce    = flag.Bool("force", false, "overwrite an existing --pdf output file without prompting")
-		flagRemote   = flag.Bool("remote", false, "allow downloading remote (http/https) images and assets (console, TUI, GUI and --pdf)")
-		flagIgnore   = flag.String("ignore", "", "comma-separated .gitignore-style patterns to exclude from the document list (runtime only, not saved)")
+		flagTUI       = flag.Bool("tui", false, "force the interactive terminal UI")
+		flagGUI       = flag.Bool("gui", false, "force the graphical UI")
+		flagConsole   = flag.Bool("console", false, "render to stdout and exit (no UI)")
+		flagC         = flag.Bool("c", false, "alias for --console")
+		flagVersion   = flag.Bool("version", false, "print version and exit")
+		flagInit      = flag.Bool("init-config", false, "write a default settings.jsonc and exit")
+		flagNoColor   = flag.Bool("no-color", false, "disable ANSI colors in console output")
+		flagMaxWidth  = flag.Int("max-width", 0, "cap the render width in columns (0 = full width)")
+		flagImages    = flag.String("images", "", "image rendering: auto|graphics|blocks|off")
+		flagPDF       = flag.String("pdf", "", "render the input to a PDF at the given file or folder path and exit")
+		flagForce     = flag.Bool("force", false, "overwrite an existing --pdf output file without prompting")
+		flagRemote    = flag.Bool("remote", false, "allow downloading remote (http/https) images and assets (console, TUI, GUI and --pdf)")
+		flagIgnore    = flag.String("ignore", "", "comma-separated .gitignore-style patterns to exclude from the document list (runtime only, not saved)")
+		flagSidePanel = flag.Bool("sidepanel", false, "force the document navigator panel to start visible (GUI and TUI)")
 	)
 	flag.Usage = usage
 	// Accept flags on either side of the positional input argument. Go's flag
@@ -107,6 +108,14 @@ func run() int {
 		}
 		cfg.ExcludePatterns = patterns
 		os.Setenv(launcher.MDVIgnoreEnv, *flagIgnore)
+	}
+
+	// A --sidepanel flag forces the document navigator panel to start visible even
+	// when a single file is opened. The TUI honors it via the in-process config,
+	// while the GUI helper (a separate process) reads MDV_SIDEPANEL on startup.
+	if *flagSidePanel {
+		cfg.ForceSidePanel = true
+		os.Setenv(launcher.MDVSidePanelEnv, "1")
 	}
 
 	if *flagInit {
@@ -455,6 +464,7 @@ func usage() {
 	fmt.Fprintf(w, "  --force        with --pdf, overwrite an existing output file without asking\n")
 	fmt.Fprintf(w, "  --remote       allow downloading remote (http/https) images/assets in any viewer\n")
 	fmt.Fprintf(w, "  --ignore LIST  comma-separated .gitignore-style patterns to exclude from the document list (runtime only, not saved)\n")
+	fmt.Fprintf(w, "  --sidepanel    force the document navigator panel to start visible (GUI and TUI)\n")
 	fmt.Fprintf(w, "  --init-config  write a default settings.jsonc and exit\n")
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")
