@@ -60,6 +60,13 @@ export interface InitInfo {
      * settings.jsonc default.
      */
     "extendedSyntax": boolean;
+
+    /**
+     * RemoteImages is true when mdv was started with --remote, so the frontend
+     * begins the session with remote (http/https) image loading enabled and the
+     * toolbar toggle shown active.
+     */
+    "remoteImages": boolean;
 }
 
 /**

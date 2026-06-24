@@ -30,6 +30,11 @@ var appIcon []byte
 // launcher.MDVPickEnv.
 const pickEnv = "MDV_PICK"
 
+// remoteEnv is the environment variable the launcher sets when mdv is started
+// with --remote, asking the GUI to begin the session with remote (http/https)
+// image loading enabled. It must match launcher.MDVRemoteEnv.
+const remoteEnv = "MDV_REMOTE"
+
 func main() {
 	if err := runGUI(); err != nil {
 		log.Fatal(err)
@@ -76,6 +81,9 @@ func runGUI() error {
 	bridge := NewBridge(cfg, in)
 	bridge.watcher = watcher
 	bridge.app = app
+	// --remote (propagated via MDV_REMOTE) opts this session into loading remote
+	// images on startup; the frontend reflects it in the toolbar toggle.
+	bridge.remoteImages = os.Getenv(remoteEnv) == "1"
 	// When started with no input but a GUI is shown, the launcher signals picker
 	// mode (resolveInput returns InputNone). The bridge then bootstraps an empty
 	// GUI (collapsed navigator, empty content view) so the user can pick a

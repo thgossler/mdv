@@ -149,6 +149,11 @@ async function boot(): Promise<void> {
   els.content.setAttribute("dir", "auto");
   extendedSyntax = info.extendedSyntax === true;
   els.btnExtended.classList.toggle("active", extendedSyntax);
+  // `mdv --remote` opts this session into loading remote images from the start.
+  // Reflect it before the first document is rendered so resolveAssets loads
+  // remote media immediately and the toolbar toggle shows as active.
+  remoteImagesEnabled = info.remoteImages === true;
+  els.btnRemoteImg.classList.toggle("active", remoteImagesEnabled);
   watchEnabled = info.config.liveReload === true;
   updateWatchButton();
   applyLayout(info.layout);
@@ -486,6 +491,9 @@ function toggleRemoteImages(): void {
   remoteImagesEnabled = !remoteImagesEnabled;
   els.btnRemoteImg.classList.toggle("active", remoteImagesEnabled);
   applyRemoteImagePolicy();
+  // Re-sync image sizing: blocked placeholders and the real images they reveal
+  // have different dimensions, so the zoom module must re-measure them.
+  refreshZoom();
   updateRemoteImgIndicator();
   flashStatus(
     remoteImagesEnabled ? "Remote images enabled for this session" : "Remote images blocked"

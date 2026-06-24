@@ -33,6 +33,11 @@ func SpawnGUI(inputPath string) error {
 // (e.g. double-clicked from Finder/Explorer).
 const MDVPickEnv = "MDV_PICK"
 
+// MDVRemoteEnv is the environment variable the launcher sets when mdv is started
+// with --remote, telling the spawned GUI helper to begin the session with
+// remote (http/https) image loading enabled (the toolbar toggle starts active).
+const MDVRemoteEnv = "MDV_REMOTE"
+
 // SpawnGUIPicker launches the embedded GUI helper with no input path, signalling
 // it (via MDVPickEnv) to present a native file/folder picker on startup. It
 // returns ErrNoEmbeddedGUI when no helper is bundled. The environment variable

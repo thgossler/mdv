@@ -47,6 +47,11 @@ type Bridge struct {
 	// watchEnabled is the runtime auto-reload toggle for the active document. It
 	// starts from cfg.LiveReload and can be flipped from the toolbar at runtime.
 	watchEnabled bool
+
+	// remoteImages, when true, tells the frontend to begin the session with
+	// remote (http/https) image loading enabled. It is set from the MDV_REMOTE
+	// environment variable (the launcher exports it for `mdv --remote`).
+	remoteImages bool
 }
 
 // NewBridge builds a Bridge for the given input and configuration.
@@ -88,6 +93,10 @@ type InitInfo struct {
 	// choice from state.jsonc if the user ever toggled it, otherwise the
 	// settings.jsonc default.
 	ExtendedSyntax bool `json:"extendedSyntax"`
+	// RemoteImages is true when mdv was started with --remote, so the frontend
+	// begins the session with remote (http/https) image loading enabled and the
+	// toolbar toggle shown active.
+	RemoteImages bool `json:"remoteImages"`
 }
 
 // LayoutDTO carries the persisted side-panel widths (in pixels) so the frontend
@@ -128,6 +137,7 @@ func (b *Bridge) Init() InitInfo {
 			Layout:         b.layoutDTO(),
 			Recent:         b.recentList(),
 			ExtendedSyntax: b.effectiveExtendedSyntax(),
+			RemoteImages:   b.remoteImages,
 		}
 	}
 	kind := "file"
@@ -151,6 +161,7 @@ func (b *Bridge) Init() InitInfo {
 		Layout:         b.layoutDTO(),
 		Recent:         b.recentList(),
 		ExtendedSyntax: b.effectiveExtendedSyntax(),
+		RemoteImages:   b.remoteImages,
 	}
 }
 
@@ -185,6 +196,7 @@ func (b *Bridge) Reinit(path string) InitInfo {
 		Layout:         b.layoutDTO(),
 		Recent:         b.recentList(),
 		ExtendedSyntax: b.effectiveExtendedSyntax(),
+		RemoteImages:   b.remoteImages,
 	}
 }
 

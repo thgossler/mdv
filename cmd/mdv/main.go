@@ -40,7 +40,7 @@ func run() int {
 		flagImages   = flag.String("images", "", "image rendering: auto|graphics|blocks|off")
 		flagPDF      = flag.String("pdf", "", "render the input to a PDF at the given file or folder path and exit")
 		flagForce    = flag.Bool("force", false, "overwrite an existing --pdf output file without prompting")
-		flagRemote   = flag.Bool("remote", false, "with --pdf, allow downloading remote (http/https) images and assets")
+		flagRemote   = flag.Bool("remote", false, "allow downloading remote (http/https) images and assets (console, TUI, GUI and --pdf)")
 	)
 	flag.Usage = usage
 	// Accept flags on either side of the positional input argument. Go's flag
@@ -81,6 +81,15 @@ func run() int {
 	// A --images value overrides the configured image rendering mode.
 	if *flagImages != "" {
 		cfg.Images = *flagImages
+	}
+
+	// A --remote flag enables remote (http/https) image and asset loading across
+	// every viewer: console and TUI honor it via the in-process config, while the
+	// GUI helper (a separate process) reads MDV_REMOTE on startup so its toolbar
+	// remote-image toggle begins enabled. PDF export reads *flagRemote directly.
+	if *flagRemote {
+		cfg.ImagesRemote = true
+		os.Setenv(launcher.MDVRemoteEnv, "1")
 	}
 
 	if *flagInit {
@@ -427,7 +436,7 @@ func usage() {
 	fmt.Fprintf(w, "  --images MODE  image rendering: auto|graphics|blocks|off\n")
 	fmt.Fprintf(w, "  --pdf PATH     render the input to a PDF at PATH (file or folder) and exit\n")
 	fmt.Fprintf(w, "  --force        with --pdf, overwrite an existing output file without asking\n")
-	fmt.Fprintf(w, "  --remote       with --pdf, allow downloading remote (http/https) images/assets\n")
+	fmt.Fprintf(w, "  --remote       allow downloading remote (http/https) images/assets in any viewer\n")
 	fmt.Fprintf(w, "  --init-config  write a default settings.jsonc and exit\n")
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")

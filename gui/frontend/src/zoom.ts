@@ -11,6 +11,11 @@ const boundImages = new WeakSet<HTMLImageElement>();
 // Caches each image's intrinsic 100% width so zoom scales from a stable
 // baseline instead of the live (already-scaled) rendered width.
 const baseWidthCache = new WeakMap<HTMLImageElement, number>();
+// Caches each image's intrinsic height/width ratio so the height can be set
+// explicitly. WebKit's `height:auto` computation is unreliable for SVG sources
+// that report `naturalWidth === 0` (e.g. shields.io badges), which otherwise
+// renders rows of equal-height badges at slightly different heights.
+const aspectCache = new WeakMap<HTMLImageElement, number>();
 
 type ZoomKeyAction = "in" | "out" | "reset";
 
@@ -130,10 +135,21 @@ function syncImages(): void {
         "load",
         () => {
           baseWidthCache.delete(img);
+          aspectCache.delete(img);
           syncImages();
         },
         { passive: true }
       );
+    }
+
+    // Remote-blocked placeholders are sized by CSS (the dashed box). Their box
+    // dimensions are not the real image's, so measuring or caching them would
+    // leak a wrong size once the image is unblocked. Leave them untouched.
+    if (img.classList.contains("remote-blocked")) {
+      clearImageSizing(img);
+      baseWidthCache.delete(img);
+      aspectCache.delete(img);
+      continue;
     }
 
     // Height-only sizing (e.g. ADO `=x600`): scale by the author height and let
@@ -147,7 +163,15 @@ function syncImages(): void {
     }
 
     const intrinsicW = intrinsicWidth(img, attrWidth);
-    if (intrinsicW <= 0) continue;
+    // Without an author width or a reliable natural pixel width (SVG badges
+    // report naturalWidth === 0 in WebKit), leave the image at its natural CSS
+    // size. The `max-width: 100%` rule still fits it to the column. Forcing a
+    // measured width here produced inconsistent badge heights and broke
+    // re-rendering when remote images were unblocked.
+    if (intrinsicW <= 0) {
+      clearImageSizing(img);
+      continue;
+    }
 
     // The content column itself scales with zoom (its max-width is
     // `--content-width * --zoom`), so contentWidth already includes the zoom
@@ -163,11 +187,19 @@ function syncImages(): void {
     // `max-width: 100%` would otherwise re-cap it at the column width.
     img.style.maxWidth = "none";
     // Preserve an explicit author aspect ratio (e.g. ADO `=800x600`); otherwise
-    // let the natural aspect ratio drive the height.
+    // derive the height from the cached intrinsic aspect ratio. Setting the
+    // height explicitly (rather than `auto`) keeps SVG badge rows uniform,
+    // because WebKit's `height:auto` is unreliable for sources that report
+    // `naturalWidth === 0`.
     if (Number.isFinite(attrHeight) && attrHeight > 0) {
       img.style.height = `${Math.round(attrHeight * fit * level)}px`;
     } else {
-      img.style.height = "auto";
+      const ratio = aspectCache.get(img);
+      if (ratio && ratio > 0) {
+        img.style.height = `${Math.round(width * ratio)}px`;
+      } else {
+        img.style.height = "auto";
+      }
     }
 
     // Keep an explicitly centered image (inside an `align="center"` block)
@@ -202,7 +234,9 @@ function centerOverflowingImage(img: HTMLImageElement, overflowing: boolean): vo
 // Resolves a stable intrinsic 100% width for an image. Author-specified widths
 // (HTML `width="..."` or ADO `=WxH`) win; otherwise the natural pixel width is
 // used, cached so that later zoom steps never compound off the already-scaled
-// width.
+// width. Returns 0 when no reliable intrinsic width is available (e.g. SVG
+// sources that report naturalWidth === 0), so the caller can leave the image at
+// its natural CSS size instead of forcing an unreliable measured size.
 function intrinsicWidth(img: HTMLImageElement, attrWidth: number): number {
   if (Number.isFinite(attrWidth) && attrWidth > 0) return attrWidth;
 
@@ -211,21 +245,22 @@ function intrinsicWidth(img: HTMLImageElement, attrWidth: number): number {
 
   if (img.naturalWidth > 0) {
     baseWidthCache.set(img, img.naturalWidth);
+    if (img.naturalHeight > 0) {
+      aspectCache.set(img, img.naturalHeight / img.naturalWidth);
+    }
     return img.naturalWidth;
   }
 
-  // SVG sources (e.g. shields.io badges) often report naturalWidth === 0.
-  // Measure the intrinsic width with any inline width temporarily removed so
-  // the reading is not the previously applied (scaled) width.
-  const prevWidth = img.style.width;
-  img.style.width = "";
-  const measured = img.getBoundingClientRect().width;
-  img.style.width = prevWidth;
-  if (measured > 0) {
-    baseWidthCache.set(img, measured);
-    return measured;
-  }
   return 0;
+}
+
+// clearImageSizing removes any inline sizing this module applied, restoring the
+// element to its natural, CSS-driven size.
+function clearImageSizing(img: HTMLImageElement): void {
+  img.style.width = "";
+  img.style.height = "";
+  img.style.maxWidth = "";
+  centerOverflowingImage(img, false);
 }
 
 function clamp(v: number, lo: number, hi: number): number {
