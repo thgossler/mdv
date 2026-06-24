@@ -73,12 +73,20 @@ func DetectMode(pref Preference) Mode {
 
 	// No explicit preference: infer.
 	if !console.StdoutIsTTY() {
-		// On Windows a GUI-subsystem launch (double-click in Explorer) has no
-		// console and no redirected output: there is nowhere to dump text, so
-		// the GUI is the only sensible default. Everywhere else a non-TTY
-		// stdout means piped/redirected output, which should get a console dump.
+		// Explorer / Spotlight launch: no console and no redirection anywhere.
+		// There is nowhere to dump text, so go straight to the GUI.
 		if !console.HasStartupConsole() && GUIAvailable() {
 			return ModeGUI
+		}
+		// Windows GUI-subsystem binary launched from a terminal: AttachConsole
+		// reattaches the parent console but the resulting CONOUT$ handle may not
+		// pass term.IsTerminal, so StdoutIsTTY() is unreliable here. Use the
+		// explicit attachment flag instead to detect an interactive session.
+		if console.IsAttachedToTerminal() {
+			if GUIAvailable() {
+				return ModeGUI
+			}
+			return ModeTUI
 		}
 		return ModeConsole
 	}

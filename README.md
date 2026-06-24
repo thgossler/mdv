@@ -142,6 +142,7 @@ mdv README.md            # open a single document
 mdv ./docs               # open a folder (sidebar lists all markdown files)
 mdv --tui README.md      # force the terminal UI
 mdv --console README.md  # render to stdout and exit
+cat README.md | mdv --console # render Markdown piped on stdin (see note below)
 mdv --pdf out.pdf README.md   # render to a PDF and exit (headless-friendly)
 mdv --pdf out.pdf --force README.md  # overwrite an existing PDF without asking
 mdv --pdf out.pdf --remote README.md # allow downloading remote images/assets
@@ -162,6 +163,44 @@ mdv --init-config        # write a default settings.jsonc
 | `--images MODE`   | Image rendering: `auto`, `graphics`, `blocks`, `off`     |
 | `--version`       | Print version and exit                                   |
 | `--init-config`   | Write a default settings file and exit                   |
+
+> [!NOTE]
+> **On Windows the prompt returns before mdv prints.** The shipped `mdv.exe`
+> is a GUI-subsystem binary, which is exactly what lets you double-click a
+> `.md` file in Explorer without a console window ever flashing up. A small,
+> harmless side effect of that feature: Windows command-line shells
+> (PowerShell and `cmd.exe`) do not wait for GUI-subsystem programs, so after a
+> run such as `mdv --console README.md` you get a fresh prompt immediately and
+> mdv's output is drawn just after it. The command finished successfully -
+> press <kbd>Enter</kbd> for a clean prompt if the redraw looks untidy. This
+> never affects double-clicking, the GUI, or the TUI.
+
+### Piping Markdown on stdin
+
+mdv reads Markdown piped on stdin, so you can render the output of another
+command without a temporary file:
+
+```sh
+cat README.md | mdv --console            # macOS / Linux
+type README.md | mdv --console           # Windows (cmd.exe)
+```
+
+> [!NOTE]
+> **Windows PowerShell only:** the shipped `mdv.exe` is a GUI-subsystem binary
+> (so double-clicking a `.md` file in Explorer never flashes a console window).
+> As a side effect, PowerShell does not wait for or capture its stdout unless a
+> downstream command consumes the pipeline, so a bare
+> `type README.md | mdv --console` prints nothing. Pipe the result through any
+> consumer to force PowerShell to drain the output - `Out-String` (then
+> `Write-Host`) preserves the rendering:
+>
+> ```powershell
+> Get-Content README.md | mdv --console | Out-String | Write-Host
+> ```
+>
+> This affects only piped stdin in PowerShell. `cmd.exe`, PowerShell on
+> macOS/Linux, passing a file path (`mdv --console README.md`), and redirecting
+> to a file in `cmd.exe` all work without the extra step.
 
 ### Open Markdown files from Finder (macOS)
 

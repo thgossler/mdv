@@ -6,6 +6,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -466,17 +467,50 @@ func waitForWatch(ch chan watch.Event) tea.Cmd {
 	}
 }
 
+// ErrNoTerminal reports that the TUI cannot run because no interactive terminal
+// is available on stdin and stdout (for example both are pipes). Callers can use
+// it to fall back to plain console rendering.
+var ErrNoTerminal = errors.New("no interactive terminal available")
+
 // Run starts the program and blocks until the user quits.
 func Run(cfg core.Defaults, in core.Input, upd core.UpdateInfo) error {
 	m := New(cfg, in, upd)
 	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion()}
 	// When markdown is piped on stdin, os.Stdin carries the document, not the
-	// keyboard. Reopen the controlling terminal so the TUI still receives key
-	// and mouse input.
+	// keyboard, so reopen the controlling terminal for interactive use. We
+	// rebind os.Stdin/os.Stdout (rather than passing tea.WithInput/WithOutput)
+	// on purpose: Bubble Tea's Windows cancelreader only supports interrupting a
+	// blocking read when the input's file descriptor matches os.Stdin. A handle
+	// supplied via WithInput falls back to a non-cancelable reader, which leaves
+	// the program waiting for one extra keypress before it can exit. On Windows
+	// we additionally repoint the Win32 standard handles (bindStdHandle), because
+	// Bubble Tea resolves the console through GetStdHandle(STD_INPUT_HANDLE), not
+	// os.Stdin - without this it calls GetConsoleMode on the redirected pipe and
+	// fails with "The handle is invalid". The piped document has already been
+	// read into memory by now, so repurposing the std handles is safe.
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		if tty, err := openControllingTerminal(); err == nil {
-			opts = append(opts, tea.WithInput(tty))
-			defer tty.Close()
+		if tty, err := openControllingTerminal(ttyInput); err == nil {
+			os.Stdin = tty
+			bindStdHandle(ttyInput, tty)
+		}
+		// On Windows the launcher rebinds os.Stdout to a write-only CONOUT$
+		// handle, which fails the TTY check - so Bubble Tea never learns the
+		// window size and stays stuck on the initial "Loading…" frame. Reopen
+		// the console output as a real (read-write) TTY so it gets an initial
+		// size and renders normally.
+		if !term.IsTerminal(int(os.Stdout.Fd())) {
+			if tty, err := openControllingTerminal(ttyOutput); err == nil {
+				os.Stdout = tty
+				bindStdHandle(ttyOutput, tty)
+			}
+		}
+		// If we still lack an interactive terminal on either end (for example
+		// both stdin and stdout are pipes, as in `cmd | mdv --tui | Out-String`),
+		// there is no console to drive the TUI. Report a recoverable error so the
+		// caller can fall back to console rendering instead of letting Bubble Tea
+		// fail deep inside its console-input setup.
+		if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+			return ErrNoTerminal
 		}
 	}
 	p := tea.NewProgram(m, opts...)
@@ -484,12 +518,29 @@ func Run(cfg core.Defaults, in core.Input, upd core.UpdateInfo) error {
 	return err
 }
 
-// openControllingTerminal opens the process's controlling terminal for reading,
-// used to source keyboard input when stdin is a pipe.
-func openControllingTerminal() (*os.File, error) {
+// ttyRole selects which end of the controlling terminal to open. On Windows the
+// console input and output are distinct devices (CONIN$ / CONOUT$); on Unix both
+// map to /dev/tty.
+type ttyRole int
+
+const (
+	ttyInput ttyRole = iota
+	ttyOutput
+)
+
+// openControllingTerminal opens the process's controlling terminal for the given
+// role, used to source keyboard input and render output when stdin (and, on
+// Windows, stdout) is a pipe rather than the terminal. The handle is opened
+// read-write because the Windows console-output device (CONOUT$) only reports as
+// a TTY - and only answers window-size queries - when the handle has read access.
+func openControllingTerminal(role ttyRole) (*os.File, error) {
 	name := "/dev/tty"
 	if runtime.GOOS == "windows" {
-		name = "CONIN$"
+		if role == ttyInput {
+			name = "CONIN$"
+		} else {
+			name = "CONOUT$"
+		}
 	}
 	return os.OpenFile(name, os.O_RDWR, 0)
 }

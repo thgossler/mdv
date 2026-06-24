@@ -22,11 +22,24 @@ param(
     [ValidateSet("all", "helper", "launcher")]
     [string]$Stage = "all",
     [ValidateSet("amd64", "arm64")]
-    [string]$Arch = "amd64"
+    [string]$Arch = ""
 )
+
+# Default to the host architecture so a native arm64 machine produces an arm64
+# binary without needing an explicit -Arch flag.
+if ([string]::IsNullOrEmpty($Arch)) {
+    $Arch = (go env GOARCH 2>$null).Trim()
+    if ($Arch -notin @("amd64", "arm64")) { $Arch = "amd64" }
+}
 
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
+# Set-Location only updates PowerShell's provider location ($PWD); raw .NET APIs
+# such as [System.IO.File] resolve relative paths against the process-level
+# [Environment]::CurrentDirectory, which is wherever pwsh was launched. Sync them
+# so the script works from any shell, not just when launched with cwd = repo root
+# (as the VS Code build task does).
+[Environment]::CurrentDirectory = (Get-Location).ProviderPath
 
 # Build for the requested architecture. On a native runner this matches the host,
 # but we set it explicitly so the GUI helper (cgo) and launcher agree and the

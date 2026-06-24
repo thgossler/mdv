@@ -8,6 +8,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -135,8 +136,10 @@ func run() int {
 		if mode == launcher.ModeGUI {
 			if err := launcher.SpawnGUIPicker(); err == nil {
 				return 0
+			} else {
+				// Surface the reason so users can diagnose GUI startup failures.
+				fmt.Fprintf(os.Stderr, "warning: could not open GUI (%v)\n", err)
 			}
-			// GUI not bundled/available: fall through to usage.
 		}
 		usage()
 		return 2
@@ -156,6 +159,11 @@ func run() int {
 	case launcher.ModeTUI:
 		upd := waitUpdate(updCh, 1500*time.Millisecond)
 		if err := tui.Run(cfg, in, upd); err != nil {
+			// No interactive terminal (e.g. stdin and stdout both piped): the
+			// TUI cannot run, so render to the console instead.
+			if errors.Is(err, tui.ErrNoTerminal) {
+				return runConsole(cfg, in, updCh, *flagNoColor)
+			}
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			return 1
 		}

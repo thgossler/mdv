@@ -7,3 +7,7 @@ package console
 // (or a pipe), so this is always true and mode detection falls back to its
 // normal TTY-based logic.
 func HasStartupConsole() bool { return true }
+
+// IsAttachedToTerminal always returns false on non-Windows platforms; the
+// AttachConsole / GUI-subsystem pattern does not apply there.
+func IsAttachedToTerminal() bool { return false }

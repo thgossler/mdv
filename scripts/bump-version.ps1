@@ -24,6 +24,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
+# Set-Location only updates PowerShell's provider location ($PWD); raw .NET APIs
+# such as [System.IO.File] resolve relative paths against the process-level
+# [Environment]::CurrentDirectory, which is wherever pwsh was launched. Sync them
+# so the script works from any shell, not just when launched with cwd = repo root.
+[Environment]::CurrentDirectory = (Get-Location).ProviderPath
 
 $versionFile = Join-Path (Get-Location) "VERSION"
 $typesFile = Join-Path (Get-Location) "internal/core/types.go"

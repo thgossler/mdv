@@ -145,16 +145,32 @@ body {
   position: relative;
   top: 2px;
 }
-/* These glyph icons read a little small at the base toolbar size; bump them up
-   so they match the visual weight of the SVG icons on high-res displays. */
-#btn-recent,
-#btn-reload,
-#btn-watch {
-  font-size: 19px;
+/* Back/forward angle-quote glyphs render optically large in most system fonts;
+   pull them back so they match the SVG icons on either side. */
+#btn-back,
+#btn-forward {
+  font-size: 13px;
 }
-/* The reload glyph reads smaller than its neighbours at the shared size. */
+/* Circular-ring glyphs (recent ◷, watch ⊙) need a small bump above the base to
+   reach the visual weight of the 16 px SVG icons. */
+#btn-recent,
+#btn-watch {
+  font-size: 16px;
+}
+/* The circular-arrow reload glyph also reads a touch light; give it a slightly
+   larger bump than its neighbours since it is a lighter-weight drawing. */
 #btn-reload {
-  font-size: 22px;
+  font-size: 17px;
+}
+/* The half-circle theme glyph reads small at the base size; nudge it up to
+   align with the solid SVG icons beside it. */
+#btn-theme {
+  font-size: 17px;
+}
+/* The diagonal-arrow open-external glyph is slightly bolder than other text
+   glyphs at the same size; bring it in line with the rest. */
+#btn-open-external {
+  font-size: 13px;
 }
 .tb-btn:hover {
   background: var(--hover);

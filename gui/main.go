@@ -114,6 +114,9 @@ func runGUI() error {
 		MinHeight:        360,
 		BackgroundColour: windowBackground(cfg.Theme),
 		URL:              "/",
+		// On Windows, Wails attaches the application menu to the window only
+		// when explicitly requested; app.Menu.Set() alone is macOS-only.
+		UseApplicationMenu: true,
 		// Accept files/folders dragged from the OS so they can be opened in place
 		// (handled below via WindowFilesDropped). The frontend marks the drop zone
 		// with the data-file-drop-target attribute.

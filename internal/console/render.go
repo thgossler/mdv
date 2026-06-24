@@ -105,12 +105,11 @@ func Render(w io.Writer, markdown, path string, opt Options) error {
 	return err
 }
 
-// detectWidth returns the terminal width, clamped to a readable range.
+// detectWidth returns the terminal width, or a readable default when stdout is
+// not a terminal. The full viewport width is used; callers cap it via
+// Options.MaxWidth (the --max-width flag / contentWidth config) when desired.
 func detectWidth() int {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
-		if w > 120 {
-			return 120
-		}
 		return w
 	}
 	return 80
