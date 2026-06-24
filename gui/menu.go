@@ -53,6 +53,11 @@ func buildMenu(app *application.App) *application.Menu {
 		})
 	}
 
+	// Edit menu (Cut / Copy / Paste / Select All / Undo / Redo and platform
+	// extras). Required for the standard keyboard shortcuts to work inside
+	// text fields and textareas in the webview.
+	menu.AddRole(application.EditMenu)
+
 	// View menu.
 	viewMenu := menu.AddSubmenu("View")
 	viewMenu.Add("Toggle Sidebar").SetAccelerator("CmdOrCtrl+B").OnClick(func(*application.Context) {

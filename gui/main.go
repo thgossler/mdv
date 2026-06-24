@@ -35,6 +35,12 @@ const pickEnv = "MDV_PICK"
 // image loading enabled. It must match launcher.MDVRemoteEnv.
 const remoteEnv = "MDV_REMOTE"
 
+// ignoreEnv is the environment variable the launcher sets when mdv is started
+// with --ignore, carrying the raw comma-separated pattern list. The GUI applies
+// it as the initial navigator exclusion without writing it to state.jsonc.
+// It must match launcher.MDVIgnoreEnv.
+const ignoreEnv = "MDV_IGNORE"
+
 func main() {
 	if err := runGUI(); err != nil {
 		log.Fatal(err)
@@ -96,6 +102,23 @@ func runGUI() error {
 	store := NewLayoutStore(st)
 	bridge.layout = store
 	bridge.initExcludes()
+	// --ignore (propagated via MDV_IGNORE) overrides the persisted navigator
+	// exclusion patterns for this session without saving them to state.jsonc.
+	if raw := os.Getenv(ignoreEnv); raw != "" {
+		var lines []string
+		for _, p := range strings.Split(raw, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				lines = append(lines, p)
+			}
+		}
+		if len(lines) > 0 {
+			bridge.cliExcludeText = strings.Join(lines, "\n")
+			bridge.excludeMu.Lock()
+			bridge.excludePatterns = lines
+			bridge.excludeEnabled = true
+			bridge.excludeMu.Unlock()
+		}
+	}
 
 	// Seed the rolling recents with the initial input so the toolbar's recents
 	// drop-down is populated from the first frame. Picker mode (InputNone) records

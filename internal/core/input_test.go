@@ -124,6 +124,78 @@ func indexIn(s []string, want string) int {
 	return -1
 }
 
+func TestListMarkdownFilesExcludePatterns(t *testing.T) {
+	root := t.TempDir()
+
+	must := func(rel, body string) {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	must("README.md", "# Home")
+	must("alpha.md", "# Alpha")
+	must("draft-ideas.md", "# Draft")
+	must("archive/old.md", "# Old")
+	must("archive/notes.md", "# Notes")
+
+	tests := []struct {
+		name     string
+		patterns []string
+		wantRels []string
+	}{
+		{
+			name:     "no patterns returns all files",
+			patterns: nil,
+			// sortDocFiles: depth then alpha; README suffix trick places it after
+			// alpha/draft at the same depth.
+			wantRels: []string{"alpha.md", "draft-ideas.md", "README.md", "archive/notes.md", "archive/old.md"},
+		},
+		{
+			name:     "glob excludes matching files",
+			patterns: []string{"draft*"},
+			wantRels: []string{"alpha.md", "README.md", "archive/notes.md", "archive/old.md"},
+		},
+		{
+			name:     "directory pattern excludes entire subtree",
+			patterns: []string{"archive/**"},
+			wantRels: []string{"alpha.md", "draft-ideas.md", "README.md"},
+		},
+		{
+			name:     "multiple patterns are combined",
+			patterns: []string{"draft*", "archive/**"},
+			wantRels: []string{"alpha.md", "README.md"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultSettings()
+			cfg.ExcludePatterns = tc.patterns
+			files, err := ListMarkdownFiles(root, cfg)
+			if err != nil {
+				t.Fatalf("ListMarkdownFiles: %v", err)
+			}
+			if len(files) != len(tc.wantRels) {
+				got := make([]string, len(files))
+				for i, f := range files {
+					got[i] = f.Rel
+				}
+				t.Fatalf("got %d files %v, want %d %v", len(files), got, len(tc.wantRels), tc.wantRels)
+			}
+			for i, f := range files {
+				if f.Rel != tc.wantRels[i] {
+					t.Errorf("files[%d].Rel = %q, want %q", i, f.Rel, tc.wantRels[i])
+				}
+			}
+		})
+	}
+}
+
 func TestExtractTitleAndPopulate(t *testing.T) {
 	dir := t.TempDir()
 

@@ -38,6 +38,11 @@ const MDVPickEnv = "MDV_PICK"
 // remote (http/https) image loading enabled (the toolbar toggle starts active).
 const MDVRemoteEnv = "MDV_REMOTE"
 
+// MDVIgnoreEnv is the environment variable the launcher sets when mdv is started
+// with --ignore, telling the spawned GUI helper to use the supplied patterns as
+// the initial navigator exclusion list for this session without persisting them.
+const MDVIgnoreEnv = "MDV_IGNORE"
+
 // SpawnGUIPicker launches the embedded GUI helper with no input path, signalling
 // it (via MDVPickEnv) to present a native file/folder picker on startup. It
 // returns ErrNoEmbeddedGUI when no helper is bundled. The environment variable

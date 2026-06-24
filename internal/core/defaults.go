@@ -63,6 +63,13 @@ type Defaults struct {
 
 	// Files recognised as markdown documents in folder navigation.
 	MarkdownExtensions []string `json:"markdownExtensions"`
+
+	// ExcludePatterns holds .gitignore-style patterns supplied via the --ignore
+	// CLI flag for the current run. The patterns filter the visible document list
+	// in TUI and console modes, and pre-populate the navigator exclusion field
+	// in GUI mode. This field is never written to settings.jsonc; it is a
+	// runtime-only override.
+	ExcludePatterns []string `json:"-"`
 }
 
 // DefaultSettings returns a fresh copy of the built-in defaults.

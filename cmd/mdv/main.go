@@ -41,6 +41,7 @@ func run() int {
 		flagPDF      = flag.String("pdf", "", "render the input to a PDF at the given file or folder path and exit")
 		flagForce    = flag.Bool("force", false, "overwrite an existing --pdf output file without prompting")
 		flagRemote   = flag.Bool("remote", false, "allow downloading remote (http/https) images and assets (console, TUI, GUI and --pdf)")
+		flagIgnore   = flag.String("ignore", "", "comma-separated .gitignore-style patterns to exclude from the document list (runtime only, not saved)")
 	)
 	flag.Usage = usage
 	// Accept flags on either side of the positional input argument. Go's flag
@@ -90,6 +91,22 @@ func run() int {
 	if *flagRemote {
 		cfg.ImagesRemote = true
 		os.Setenv(launcher.MDVRemoteEnv, "1")
+	}
+
+	// A --ignore value filters the visible document list for this run only. In
+	// console/TUI modes the patterns are applied inside ListMarkdownFiles via the
+	// in-process config. For the GUI helper (a separate process) the raw flag
+	// value is forwarded via MDV_IGNORE and applied on startup without being
+	// saved to state.jsonc.
+	if *flagIgnore != "" {
+		var patterns []string
+		for _, p := range strings.Split(*flagIgnore, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				patterns = append(patterns, p)
+			}
+		}
+		cfg.ExcludePatterns = patterns
+		os.Setenv(launcher.MDVIgnoreEnv, *flagIgnore)
 	}
 
 	if *flagInit {
@@ -392,7 +409,7 @@ func waitUpdate(ch <-chan core.UpdateInfo, d time.Duration) core.UpdateInfo {
 // Most mdv flags are booleans; flags that take a value (e.g. --max-width) carry
 // their following token along when it is not given in --flag=value form.
 func reorderArgs(args []string) []string {
-	valueFlags := map[string]bool{"-max-width": true, "--max-width": true, "-images": true, "--images": true, "-pdf": true, "--pdf": true}
+	valueFlags := map[string]bool{"-max-width": true, "--max-width": true, "-images": true, "--images": true, "-pdf": true, "--pdf": true, "-ignore": true, "--ignore": true}
 	var flags, positionals []string
 	terminated := false
 	for i := 0; i < len(args); i++ {
@@ -437,6 +454,7 @@ func usage() {
 	fmt.Fprintf(w, "  --pdf PATH     render the input to a PDF at PATH (file or folder) and exit\n")
 	fmt.Fprintf(w, "  --force        with --pdf, overwrite an existing output file without asking\n")
 	fmt.Fprintf(w, "  --remote       allow downloading remote (http/https) images/assets in any viewer\n")
+	fmt.Fprintf(w, "  --ignore LIST  comma-separated .gitignore-style patterns to exclude from the document list (runtime only, not saved)\n")
 	fmt.Fprintf(w, "  --init-config  write a default settings.jsonc and exit\n")
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")

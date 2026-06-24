@@ -52,6 +52,13 @@ type Bridge struct {
 	// remote (http/https) image loading enabled. It is set from the MDV_REMOTE
 	// environment variable (the launcher exports it for `mdv --remote`).
 	remoteImages bool
+
+	// cliExcludeText holds the newline-separated navigator exclusion patterns
+	// supplied via MDV_IGNORE (the --ignore CLI flag) for this session. When
+	// non-empty it overrides the persisted exclude patterns returned by
+	// layoutDTO so the frontend sidebar reflects the CLI value without the
+	// patterns ever being written to state.jsonc.
+	cliExcludeText string
 }
 
 // NewBridge builds a Bridge for the given input and configuration.
@@ -215,6 +222,12 @@ func (b *Bridge) layoutDTO() LayoutDTO {
 		}
 		patterns, enabled = st.ExcludePatterns, st.ExcludeEnabled
 	}
+	// --ignore CLI override: show the CLI patterns in the sidebar without
+	// touching the persisted layout state.
+	if b.cliExcludeText != "" {
+		patterns = b.cliExcludeText
+		enabled = true
+	}
 	return LayoutDTO{
 		SidebarWidth:    sidebar,
 		TocWidth:        toc,
@@ -348,7 +361,10 @@ func (b *Bridge) ApplyExcludes(text string, enabled bool) []string {
 	b.excludeEnabled = enabled
 	b.excludeMu.Unlock()
 
-	if b.layout != nil {
+	// When --ignore was supplied on the command line the exclusion state is
+	// session-only; skip the persist call so state.jsonc is never touched,
+	// regardless of whether the user edits the patterns in the sidebar.
+	if b.layout != nil && b.cliExcludeText == "" {
 		b.layout.UpdateExcludes(text, enabled)
 	}
 

@@ -243,6 +243,20 @@ func ListMarkdownFiles(dir string, cfg Defaults) ([]DocFile, error) {
 	}
 
 	sortDocFiles(files, dir)
+
+	// Apply any --ignore patterns supplied for this run. We build the matcher
+	// once outside the range and filter in-place using a zero-allocation idiom.
+	if len(cfg.ExcludePatterns) > 0 {
+		m := NewGitignoreMatcher(cfg.ExcludePatterns)
+		kept := files[:0]
+		for _, f := range files {
+			if !m.Match(f.Rel) {
+				kept = append(kept, f)
+			}
+		}
+		files = kept
+	}
+
 	return files, nil
 }
 
