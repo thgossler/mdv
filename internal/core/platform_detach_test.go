@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 // runSpawnChild records whether the child was placed in its own session and
 // whether its stdin still refers to a terminal, then exits.
 func runSpawnChild(out string) {
-	sid, _ := syscall.Getsid(0)
+	sid, _ := unix.Getsid(0)
 	isTTY := "0"
 	if term.IsTerminal(0) {
 		isTTY = "1"
@@ -69,7 +69,7 @@ func TestSpawnDetachedDetachesFromTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parsing child session id %q: %v", lines[0], err)
 	}
-	parentSID, _ := syscall.Getsid(0)
+	parentSID, _ := unix.Getsid(0)
 	if childSID == parentSID {
 		t.Errorf("child session id %d equals parent %d; child was not detached", childSID, parentSID)
 	}
