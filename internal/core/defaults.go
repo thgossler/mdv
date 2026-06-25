@@ -102,7 +102,7 @@ func DefaultSettings() Defaults {
 
 		CheckForUpdates:  true,
 		UpdateRepo:       "thgossler/mdv",
-		UpdateCheckHours: 24,
+		UpdateCheckHours: 4,
 
 		EnableMath:        true,
 		EnableMermaid:     true,

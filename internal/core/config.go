@@ -238,6 +238,6 @@ const defaultConfigTemplate = `// mdv - Markdown Viewer - user settings (JSONC).
   "enableExtendedSyntax": false,
 
   "checkForUpdates": true,
-  "updateCheckHours": 24
+  "updateCheckHours": 4
 }
 `
