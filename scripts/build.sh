@@ -60,6 +60,22 @@ mkdir -p build internal/launcher/assets
 # the Linux window icon) in sync with the canonical source.
 cp images/icon.png gui/appicon.png
 
+# Keep the macOS .app-bundle icon used by the spawned GUI helper in sync with the
+# canonical source. The launcher wraps the extracted helper in a minimal .app so
+# macOS shows a real icon (not the generic CLI-tool icon) in the Dock and Cmd+Tab
+# switcher; this regenerates the embedded .icns on macOS, where sips/iconutil are
+# available. On other build hosts the committed .icns is embedded as-is.
+if [ "$GOOS" = "darwin" ]; then
+  ICONSET_DIR="$(mktemp -d)/mdv.iconset"
+  mkdir -p "$ICONSET_DIR"
+  for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" images/icon.png --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
+    sips -z "$((size * 2))" "$((size * 2))" images/icon.png --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$ICONSET_DIR" -o internal/launcher/macicon/mdv.icns
+  rm -rf "$(dirname "$ICONSET_DIR")"
+fi
+
 echo "==> [1/4] Building frontend"
 pushd gui/frontend >/dev/null
 if [ ! -d node_modules ]; then

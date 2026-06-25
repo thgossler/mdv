@@ -6,15 +6,21 @@ export interface Frontmatter {
   body: string;
 }
 
-const FM_RE = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/;
+// FM_RE matches a leading YAML `--- ... ---` block, optionally preceded by a
+// UTF-8 BOM and any number of HTML comments and surrounding whitespace (so an
+// inert marker comment such as a generated DocID may sit above the front
+// matter). Capture group 1 holds that preserved prefix; group 2 holds the YAML.
+const FM_RE = /^\uFEFF?((?:\s*<!--[\s\S]*?-->)*\s*)---\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/;
 
 // extractFrontmatter splits a leading YAML `--- ... ---` block from the body.
 export function extractFrontmatter(markdown: string): Frontmatter {
   const m = markdown.match(FM_RE);
   if (!m) return { data: null, body: markdown };
   try {
-    const data = yaml.load(m[1]) as Record<string, unknown>;
-    return { data: data && typeof data === "object" ? data : null, body: markdown.slice(m[0].length) };
+    const data = yaml.load(m[2]) as Record<string, unknown>;
+    // Preserve any leading comment/whitespace prefix so an inert marker comment
+    // above the front matter is not silently dropped.
+    return { data: data && typeof data === "object" ? data : null, body: m[1] + markdown.slice(m[0].length) };
   } catch {
     return { data: null, body: markdown };
   }

@@ -231,10 +231,35 @@ func TestExtractTitleAndPopulate(t *testing.T) {
 		t.Errorf("no-heading title = %q, want empty", got)
 	}
 
-	files := []DocFile{{Path: atx, Name: "atx.md"}, {Path: setext, Name: "setext.md"}}
+	files := []DocFile{{Path: atx, Name: "atx.md"}, {Path: setext, Name: "setext.md"}, {Path: none, Name: "What-is-the-platform%3F.md"}}
 	PopulateTitles(files)
 	if files[0].Title != "Real Title" || files[1].Title != "My Heading" {
 		t.Errorf("PopulateTitles = %+v", files)
+	}
+	// A document with no detectable heading falls back to a sanitized file name.
+	if files[2].Title != "What is the platform?" {
+		t.Errorf("PopulateTitles fallback = %q, want %q", files[2].Title, "What is the platform?")
+	}
+}
+
+func TestFilenameTitle(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"For-All-Partners-(UNrestricted)/Services.md", "Services"},
+		{"What-is-the-platform%3F.md", "What is the platform?"},
+		{"Getting-Started-with-teamplay.md", "Getting Started with teamplay"},
+		{"docs/Collected-Q&A.md", "Collected Q&A"},
+		{"a%20b%20c.markdown", "a b c"},
+		{`C:\Users\me\My-Notes.md`, "My Notes"},
+		{"README", "README"},
+		{"%ZZbad-name.md", "%ZZbad name"},
+	}
+	for _, c := range cases {
+		if got := FilenameTitle(c.in); got != c.want {
+			t.Errorf("FilenameTitle(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 

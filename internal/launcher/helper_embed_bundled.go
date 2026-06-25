@@ -57,6 +57,14 @@ func spawnGUI(inputPath string) error {
 	if err != nil {
 		return err
 	}
+	// On macOS the bare helper would show a generic command-line-tool icon in
+	// the Dock and Cmd+Tab switcher; finalizeHelper wraps it in a minimal .app
+	// bundle so the proper application icon and name appear. On other platforms
+	// it returns the executable unchanged.
+	exe, err = finalizeHelper(exe)
+	if err != nil {
+		return err
+	}
 	args := []string{}
 	if inputPath != "" {
 		args = append(args, inputPath)

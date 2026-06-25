@@ -108,3 +108,40 @@ func TestStripFrontmatter(t *testing.T) {
 		t.Errorf("StripFrontmatter = %q", got)
 	}
 }
+
+func TestExtractFrontmatterAfterLeadingComment(t *testing.T) {
+	md := "<!-- DocID: 5983 (don't change or remove this comment!) -->\n\n\n---\ntitle: Home\nowners:\n  - a@example.com\n---\n# Welcome\n"
+	fm, body := ExtractFrontmatter(md)
+	if !fm.Has {
+		t.Fatal("expected Has=true when front matter follows a leading HTML comment")
+	}
+	if fm.Title != "Home" {
+		t.Errorf("Title = %q", fm.Title)
+	}
+	// The inert marker comment must be preserved in the body, while the YAML
+	// block is removed.
+	if want := "<!-- DocID: 5983 (don't change or remove this comment!) -->\n\n\n# Welcome\n"; body != want {
+		t.Errorf("body = %q, want %q", body, want)
+	}
+}
+
+func TestExtractFrontmatterAfterLeadingWhitespace(t *testing.T) {
+	md := "\n\n---\ntitle: T\n---\nbody\n"
+	fm, _ := ExtractFrontmatter(md)
+	if !fm.Has || fm.Title != "T" {
+		t.Errorf("fm = %#v", fm)
+	}
+}
+
+func TestExtractFrontmatterCommentOnlyNoFrontmatter(t *testing.T) {
+	// A leading comment with no following front matter must leave the document
+	// untouched.
+	md := "<!-- note -->\n\n# Heading\n\ntext\n"
+	fm, body := ExtractFrontmatter(md)
+	if fm.Has {
+		t.Errorf("expected Has=false, got %#v", fm)
+	}
+	if body != md {
+		t.Errorf("body changed: %q", body)
+	}
+}

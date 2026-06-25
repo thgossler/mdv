@@ -421,39 +421,49 @@ async function resolveWikilinks(): Promise<void> {
 }
 
 // resolveAssets rewrites local/relative media references (images, <source>,
-// video posters) to data URIs served by the Go bridge. The embedded webview
-// asset server only serves the compiled frontend, so relative filesystem paths
-// would otherwise fail to load. Absolute URLs (http(s), data:) are left as-is.
+// video sources and posters) to data URIs served by the Go bridge. The embedded
+// webview asset server only serves the compiled frontend, so relative
+// filesystem paths would otherwise fail to load. Absolute URLs (http(s), data:)
+// are left as-is.
 async function resolveAssets(): Promise<void> {
   const nodes = Array.from(
-    els.content.querySelectorAll<HTMLElement>("img[src], source[src], video[poster]")
+    els.content.querySelectorAll<HTMLElement>("img[src], source[src], video[src], video[poster]")
   );
   await Promise.all(
     nodes.map(async (el) => {
-      const attr = el.tagName === "VIDEO" ? "poster" : "src";
-      const ref = el.getAttribute(attr) || "";
-      if (!ref || ref.startsWith("#")) {
-        return; // empty or in-document fragment - nothing to resolve
-      }
-      if (isRemoteRef(ref)) {
-        // Remote media is deferred to the per-session policy: stash the original
-        // URL and only set src when the user has opted in for this session.
-        el.setAttribute("data-remote-src", ref);
-        applyRemotePolicyTo(el, attr);
-        return;
-      }
-      if (/^[a-z][a-z0-9+.-]+:/i.test(ref)) {
-        return; // data:, blob:, file: - already inline/local, nothing to fetch
-      }
-      try {
-        const dataUri = await api.resolveAsset(ref, currentDir);
-        if (dataUri) el.setAttribute(attr, dataUri);
-      } catch {
-        /* leave the original reference in place on failure */
+      for (const attr of mediaAttrs(el)) {
+        const ref = el.getAttribute(attr) || "";
+        if (!ref || ref.startsWith("#")) {
+          continue; // empty or in-document fragment - nothing to resolve
+        }
+        if (isRemoteRef(ref)) {
+          // Remote media is deferred to the per-session policy: stash the
+          // original URL and only set the attribute when the user has opted in
+          // for this session.
+          el.setAttribute(`data-remote-${attr}`, ref);
+          applyRemotePolicyTo(el, attr);
+          continue;
+        }
+        if (/^[a-z][a-z0-9+.-]+:/i.test(ref)) {
+          continue; // data:, blob:, file: - already inline/local, nothing to fetch
+        }
+        try {
+          const dataUri = await api.resolveAsset(ref, currentDir);
+          if (dataUri) el.setAttribute(attr, dataUri);
+        } catch {
+          /* leave the original reference in place on failure */
+        }
       }
     })
   );
   updateRemoteImgIndicator();
+}
+
+// mediaAttrs lists the URL-bearing attributes to resolve for a media element. A
+// <video> can carry both a direct media `src` and a `poster` image, while
+// images and <source> elements only use `src`.
+function mediaAttrs(el: HTMLElement): string[] {
+  return el.tagName === "VIDEO" ? ["src", "poster"] : ["src"];
 }
 
 // isRemoteRef reports whether a media reference points at the network: an
@@ -463,12 +473,12 @@ function isRemoteRef(ref: string): boolean {
   return /^https?:/i.test(ref) || ref.startsWith("//");
 }
 
-// applyRemotePolicyTo shows or hides a single remote media element according to
-// the current session policy. Blocked elements keep their URL in
-// data-remote-src so toggling the toolbar button can reveal them without a
+// applyRemotePolicyTo shows or hides a single remote media attribute according
+// to the current session policy. Blocked attributes keep their URL in
+// data-remote-<attr> so toggling the toolbar button can reveal them without a
 // re-render.
 function applyRemotePolicyTo(el: HTMLElement, attr: string): void {
-  const remote = el.getAttribute("data-remote-src");
+  const remote = el.getAttribute(`data-remote-${attr}`);
   if (!remote) return;
   if (remoteImagesEnabled) {
     el.setAttribute(attr, remote);
@@ -485,10 +495,13 @@ function applyRemotePolicyTo(el: HTMLElement, attr: string): void {
 // applyRemoteImagePolicy re-applies the current session policy to every deferred
 // remote media element in the document (used when the toolbar toggle changes).
 function applyRemoteImagePolicy(): void {
-  const nodes = Array.from(els.content.querySelectorAll<HTMLElement>("[data-remote-src]"));
+  const nodes = Array.from(
+    els.content.querySelectorAll<HTMLElement>("[data-remote-src], [data-remote-poster]")
+  );
   for (const el of nodes) {
-    const attr = el.tagName === "VIDEO" ? "poster" : "src";
-    applyRemotePolicyTo(el, attr);
+    for (const attr of mediaAttrs(el)) {
+      if (el.hasAttribute(`data-remote-${attr}`)) applyRemotePolicyTo(el, attr);
+    }
   }
 }
 
@@ -1209,7 +1222,9 @@ function wireToolbar(): void {
   els.btnRecent.addEventListener("click", toggleRecentMenu);
   $("btn-reload").addEventListener("click", () => void reloadAll());
   els.btnWatch.addEventListener("click", () => void toggleWatch());
-  $("btn-sidebar").addEventListener("click", () => els.sidebar.classList.toggle("collapsed"));
+  const toggleSidebar = () => els.sidebar.classList.toggle("collapsed");
+  $("btn-nav").addEventListener("click", toggleSidebar);
+  $("btn-sidebar").addEventListener("click", toggleSidebar);
   $("btn-toc").addEventListener("click", () => {
     const hidden = els.toc.classList.toggle("hidden");
     $("toc-resizer").classList.toggle("hidden", hidden);
@@ -2044,7 +2059,7 @@ function applyConfigStyles(): void {
 
 function chooseTitle(name: string, h1?: string, fm?: Record<string, unknown> | null): string {
   const fmTitle = fm && typeof fm.title === "string" ? fm.title : "";
-  return fmTitle || h1 || name;
+  return fmTitle || h1 || filenameTitle(name);
 }
 
 function flashStatus(msg: string, accent = false): void {
@@ -2058,6 +2073,22 @@ function flashStatus(msg: string, accent = false): void {
 
 function baseName(p: string): string {
   return p.split(/[\\/]/).pop() || p;
+}
+
+// filenameTitle derives a human-readable title from a file path, used as a
+// fallback for documents with no detectable content title. It drops the
+// directory and extension, decodes percent-encoded characters (e.g. "%20" to a
+// space, "%3F" to "?") and turns dashes into spaces, so
+// "docs/What-is-the-platform%3F.md" becomes "What is the platform?". It mirrors
+// core.FilenameTitle on the Go side so every surface derives titles identically.
+function filenameTitle(pathOrName: string): string {
+  let name = baseName(pathOrName).replace(/\.[^./\\]+$/, "");
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    /* leave malformed escape sequences as-is */
+  }
+  return name.replace(/-/g, " ").replace(/\s+/g, " ").trim();
 }
 
 // activeHeading returns the heading element nearest the top of the content

@@ -7,11 +7,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// fmRe matches a leading YAML front matter block: a `---` fence on the first
-// line (optionally preceded by a UTF-8 BOM), arbitrary YAML, and a closing
-// `---` fence on its own line. It mirrors the regex used by the GUI frontend so
-// every run mode recognizes front matter identically.
-var fmRe = regexp.MustCompile(`^\x{FEFF}?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)`)
+// fmRe matches a leading YAML front matter block: a `---` fence (optionally
+// preceded by a UTF-8 BOM and any number of HTML comments and surrounding
+// whitespace), arbitrary YAML, and a closing `---` fence on its own line. The
+// leading-comment allowance lets documents carry an inert marker comment (for
+// example a generated DocID) above their front matter. Capture group 1 holds
+// that preserved prefix; group 2 holds the YAML. It mirrors the regex used by
+// the GUI frontend so every run mode recognizes front matter identically.
+var fmRe = regexp.MustCompile(`^\x{FEFF}?((?:\s*<!--[\s\S]*?-->)*\s*)---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)`)
 
 // FrontmatterField is a single key/value entry preserved in document order. The
 // value is pre-formatted for display.
@@ -60,7 +63,7 @@ func ExtractFrontmatter(markdown string) (Frontmatter, string) {
 	}
 
 	var node yaml.Node
-	if err := yaml.Unmarshal([]byte(m[1]), &node); err != nil {
+	if err := yaml.Unmarshal([]byte(m[2]), &node); err != nil {
 		return Frontmatter{}, markdown
 	}
 	doc := mappingNode(&node)
@@ -68,7 +71,9 @@ func ExtractFrontmatter(markdown string) (Frontmatter, string) {
 		return Frontmatter{}, markdown
 	}
 
-	body := markdown[len(m[0]):]
+	// Preserve any leading comment/whitespace prefix in the returned body so an
+	// inert marker comment above the front matter is not silently dropped.
+	body := m[1] + markdown[len(m[0]):]
 	fm := Frontmatter{Has: true}
 
 	// A mapping node stores keys and values as alternating children.

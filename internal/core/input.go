@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -372,9 +373,47 @@ func cleanHeading(s string) string {
 	return strings.TrimSpace(replacer.Replace(s))
 }
 
+// FilenameTitle derives a human-readable title from a file path, used as a
+// fallback for documents that have no detectable content title (no level-1
+// heading and no front-matter title). It drops the directory and file
+// extension, decodes percent-encoded characters (e.g. "%20" to a space, "%3F"
+// to "?") and turns dashes into spaces, so e.g.
+// "docs/What-is-the-platform%3F.md" becomes "What is the platform?".
+func FilenameTitle(pathOrName string) string {
+	name := pathOrName
+	// Strip the directory. Handle both separators so it also works on the
+	// forward-slash relative paths used in workspace listings.
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	// Strip a single trailing extension (e.g. ".md").
+	if ext := filepath.Ext(name); ext != "" {
+		name = name[:len(name)-len(ext)]
+	}
+	// Decode percent-encoded characters; leave the text unchanged on error so a
+	// stray "%" never blanks the title.
+	if dec, err := url.PathUnescape(name); err == nil {
+		name = dec
+	}
+	// Dashes act as word separators; collapse any resulting whitespace runs.
+	name = strings.ReplaceAll(name, "-", " ")
+	return strings.Join(strings.Fields(name), " ")
+}
+
 // PopulateTitles fills in the Title field of each DocFile by extracting H1s.
+// When a document has no level-1 heading, the Title falls back to a sanitized
+// form of its file name (see FilenameTitle) so navigation surfaces never show a
+// raw path or extension as a document's title.
 func PopulateTitles(files []DocFile) {
 	for i := range files {
-		files[i].Title = ExtractTitle(files[i].Path)
+		title := ExtractTitle(files[i].Path)
+		if title == "" {
+			name := files[i].Name
+			if name == "" {
+				name = files[i].Path
+			}
+			title = FilenameTitle(name)
+		}
+		files[i].Title = title
 	}
 }

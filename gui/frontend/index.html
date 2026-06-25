@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' data: blob:; img-src 'self' data: blob: file: http: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-src 'none';"
+      content="default-src 'self' data: blob:; img-src 'self' data: blob: file: http: https:; media-src 'self' data: blob: file: http: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-src 'none';"
     />
     <title>mdv</title>
   </head>
@@ -22,6 +22,7 @@
       <!-- Toolbar sits in the same row as the native window controls. -->
       <header id="toolbar" class="toolbar">
         <div class="toolbar-left">
+          <button id="btn-nav" class="tb-btn" title="Toggle left panel (Cmd/Ctrl+B)" aria-label="Toggle left panel"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 4.25C2 3.836 2.336 3.5 2.75 3.5H13.25C13.664 3.5 14 3.836 14 4.25C14 4.664 13.664 5 13.25 5H2.75C2.336 5 2 4.664 2 4.25ZM2 7.25C2 6.836 2.336 6.5 2.75 6.5H13.25C13.664 6.5 14 6.836 14 7.25C14 7.664 13.664 8 13.25 8H2.75C2.336 8 2 7.664 2 7.25ZM2.75 9.5C2.336 9.5 2 9.836 2 10.25C2 10.664 2.336 11 2.75 11H13.25C13.664 11 14 10.664 14 10.25C14 9.836 13.664 9.5 13.25 9.5H2.75ZM2 13.25C2 12.836 2.336 12.5 2.75 12.5H13.25C13.664 12.5 14 12.836 14 13.25C14 13.664 13.664 14 13.25 14H2.75C2.336 14 2 13.664 2 13.25Z"/></svg></button>
           <button id="btn-back" class="tb-btn" title="Back (Cmd/Ctrl+Left)" disabled>‹</button>
           <div id="history-menu" class="history-menu hidden"></div>
           <button id="btn-history" class="tb-btn" title="History" aria-label="History" disabled><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3.14598 5.85423L7.64598 10.3542C7.84098 10.5492 8.15798 10.5492 8.35298 10.3542L12.853 5.85423C13.048 5.65923 13.048 5.34223 12.853 5.14723C12.658 4.95223 12.341 4.95223 12.146 5.14723L7.99998 9.29323L3.85398 5.14723C3.65898 4.95223 3.34198 4.95223 3.14698 5.14723C2.95198 5.34223 2.95098 5.65923 3.14598 5.85423Z"/></svg></button>
