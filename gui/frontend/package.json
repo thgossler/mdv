@@ -28,7 +28,7 @@
     "markdown-it-sub": "^2.0.0",
     "markdown-it-sup": "^2.0.0",
     "markdown-it-task-lists": "^2.1.1",
-    "mermaid": "^11.4.1"
+    "mermaid": "^11.16.1"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
