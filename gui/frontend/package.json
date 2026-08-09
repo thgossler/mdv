@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@wailsio/runtime": "latest",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.13",
     "github-slugger": "^2.0.0",
     "highlight.js": "^11.11.1",
     "html2pdf.js": "^0.14.0",
