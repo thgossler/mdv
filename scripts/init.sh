@@ -6,6 +6,7 @@
 #   Node.js 18+     brew (macOS) | NodeSource or system package manager (Linux)
 #   git             brew (macOS) | system package manager (Linux)
 #   C compiler      Xcode CLT (macOS, advisory) | gcc/build-essential (Linux)
+#   GTK/WebKitGTK   Arch package manager (Linux, for the GUI helper)
 #   wails3 CLI      go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 #
 # Usage: bash scripts/init.sh
@@ -279,6 +280,27 @@ if [ "$C_OK" = false ]; then
             command -v gcc >/dev/null 2>&1 && good "$(gcc --version 2>&1 | head -1)" || true
             ;;
     esac
+fi
+
+# ── Linux GUI development libraries ──────────────────────────────────────────
+if [ "$OS" = Linux ]; then
+    step "GTK 4 + WebKitGTK 6.0 (GUI helper)"
+    GUI_DEPS_OK=false
+    if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists gtk4 webkitgtk-6.0; then
+        good "GTK $(pkg-config --modversion gtk4)  WebKitGTK $(pkg-config --modversion webkitgtk-6.0)"
+        GUI_DEPS_OK=true
+    elif [ "$PKG_MGR" = pacman ]; then
+        info "Installing Arch Linux GUI development libraries..."
+        sudo pacman -S --needed --noconfirm base-devel pkgconf gtk4 webkitgtk-6.0
+        if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists gtk4 webkitgtk-6.0; then
+            good "GTK $(pkg-config --modversion gtk4)  WebKitGTK $(pkg-config --modversion webkitgtk-6.0)"
+            GUI_DEPS_OK=true
+        fi
+    fi
+    if [ "$GUI_DEPS_OK" = false ]; then
+        warn "GTK 4 and WebKitGTK 6.0 development files were not found."
+        info "The GUI helper build needs pkg-config metadata for gtk4 and webkitgtk-6.0."
+    fi
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────

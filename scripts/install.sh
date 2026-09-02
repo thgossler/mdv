@@ -205,7 +205,7 @@ if [ "$os" = "Darwin" ] && [ -d "$tmp/mdv.app" ]; then
   fi
 fi
 
-# --- Linux: warn when the GUI's GTK requirement is unmet ---------------------
+# --- Linux: ensure the GUI runtime is available ------------------------------
 # The bundled GUI helper is built against GTK 4.14 (the release runners' GTK) and
 # calls APIs introduced there, e.g. gdk_monitor_get_scale. On an older GTK the
 # helper cannot start, so mdv runs in TUI/console mode instead. mdv still
@@ -232,7 +232,52 @@ gtk4_minor() {
   printf '%s' "$found"
 }
 
+webkitgtk6_present() {
+  for required in libwebkitgtk-6.0.so libjavascriptcoregtk-6.0.so; do
+    found=no
+    for d in /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu /usr/lib64 \
+             /usr/lib /usr/local/lib /lib; do
+      [ -d "$d" ] || continue
+      for f in "$d"/"$required"*; do
+        [ -e "$f" ] || continue
+        found=yes
+        break
+      done
+      [ "$found" = yes ] && break
+    done
+    [ "$found" = yes ] || return 1
+  done
+  return 0
+}
+
+install_arch_gui_runtime() {
+  [ "$os" = Linux ] || return 0
+  command -v pacman >/dev/null 2>&1 || return 0
+  pacman -Q webkitgtk-6.0 >/dev/null 2>&1 && return 0
+
+  echo "Installing Arch Linux GUI runtime: webkitgtk-6.0"
+  if [ "$(id -u)" -eq 0 ]; then
+    pacman -S --needed --noconfirm webkitgtk-6.0
+  elif command -v sudo >/dev/null 2>&1; then
+    if [ "$silent" = yes ]; then
+      sudo -n pacman -S --needed --noconfirm webkitgtk-6.0
+    else
+      sudo pacman -S --needed --noconfirm webkitgtk-6.0
+    fi
+  else
+    echo "mdv: sudo is unavailable; install the GUI runtime manually:" >&2
+    echo "      sudo pacman -S --needed webkitgtk-6.0" >&2
+    return 1
+  fi
+}
+
 if [ "$os" = "Linux" ]; then
+  if command -v pacman >/dev/null 2>&1 && ! pacman -Q webkitgtk-6.0 >/dev/null 2>&1; then
+    if ! install_arch_gui_runtime; then
+      echo "Note: could not install Arch Linux's webkitgtk-6.0 package." >&2
+    fi
+  fi
+
   gtk_minor="$(gtk4_minor)"
   if [ -z "$gtk_minor" ]; then
     echo "Note: GTK 4 was not found. mdv's GUI needs GTK >= 4.${MIN_GTK_MINOR} and"
@@ -241,6 +286,14 @@ if [ "$os" = "Linux" ]; then
     echo "Note: detected GTK 4.${gtk_minor}, but mdv's GUI needs GTK >= 4.${MIN_GTK_MINOR}."
     echo "      mdv will run in TUI/console mode. To enable the GUI, use a distro"
     echo "      with GTK >= 4.${MIN_GTK_MINOR} and WebKitGTK 6.0 (e.g. Debian 13+, Ubuntu 24.04+)."
+  fi
+  if ! webkitgtk6_present; then
+    echo "Note: WebKitGTK 6.0 was not found. Install it to enable mdv's GUI:" >&2
+    if command -v pacman >/dev/null 2>&1; then
+      echo "      sudo pacman -S --needed webkitgtk-6.0" >&2
+    else
+      echo "      your distribution's WebKitGTK 6.0 package" >&2
+    fi
   fi
 fi
 

@@ -128,3 +128,32 @@ func TestGTK4AtLeast(t *testing.T) {
 	// guard the public predicate against the live system.
 	_ = gtk4AtLeast(minGTK4Minor)
 }
+
+func TestSharedLibraryPresent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "libwebkitgtk-6.0.so.4.1.2"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !sharedLibraryPresent([]string{dir}, "libwebkitgtk-6.0.so") {
+		t.Error("sharedLibraryPresent(versioned) = false, want true")
+	}
+	if sharedLibraryPresent([]string{dir}, "libjavascriptcoregtk-6.0.so") {
+		t.Error("sharedLibraryPresent(missing) = true, want false")
+	}
+}
+
+func TestWebkitGTKPresentRequiresRuntimePair(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "libwebkitgtk-6.0.so.4"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if webkitGTKPresentInDirs([]string{dir}) {
+		t.Error("webkitGTKPresentInDirs(webkit only) = true, want false")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "libjavascriptcoregtk-6.0.so.1"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !webkitGTKPresentInDirs([]string{dir}) {
+		t.Error("webkitGTKPresentInDirs(runtime pair) = false, want true")
+	}
+}

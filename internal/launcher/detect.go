@@ -252,31 +252,33 @@ func libDirs() []string {
 	return dirs
 }
 
-// webkitGTKPresent scans the usual library directories for a libwebkit2gtk
-// shared object (4.1/6.0/4.0). It avoids dlopen so no cgo or linkage is needed.
+// webkitGTKPresent scans the usual library directories for the WebKitGTK 6.0
+// and JavaScriptCoreGTK 6.0 shared objects used by the bundled Wails helper.
+// It avoids dlopen so no cgo or linkage is needed.
 func webkitGTKPresent() bool {
-	names := []string{
-		"libwebkit2gtk-4.1.so",
-		"libwebkit2gtk-4.0.so",
-		"libwebkitgtk-6.0.so",
-		"libwebkit2gtk-4.1.so.0",
-		"libwebkit2gtk-4.0.so.37",
-	}
 	dirs := libDirs()
+	return webkitGTKPresentInDirs(dirs)
+}
 
+func webkitGTKPresentInDirs(dirs []string) bool {
+	return sharedLibraryPresent(dirs, "libwebkitgtk-6.0.so") &&
+		sharedLibraryPresent(dirs, "libjavascriptcoregtk-6.0.so")
+}
+
+// sharedLibraryPresent reports whether a shared object or one of its versioned
+// files exists in the supplied directories.
+func sharedLibraryPresent(dirs []string, prefix string) bool {
 	for _, dir := range dirs {
-		for _, name := range names {
-			if fileExists(filepath.Join(dir, name)) {
-				return true
-			}
+		if fileExists(filepath.Join(dir, prefix)) {
+			return true
 		}
-		// Also match versioned suffixes via a shallow scan.
-		if entries, err := os.ReadDir(dir); err == nil {
-			for _, e := range entries {
-				n := e.Name()
-				if strings.HasPrefix(n, "libwebkit2gtk-4.") || strings.HasPrefix(n, "libwebkitgtk-6.") {
-					return true
-				}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), prefix+".") {
+				return true
 			}
 		}
 	}

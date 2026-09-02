@@ -54,13 +54,16 @@ environment is actually present.
 
 > **Linux GUI requirement:** the embedded GUI helper needs **GTK >= 4.14** and
 > **WebKitGTK 6.0** (e.g. Debian 13+, Ubuntu 24.04+, Fedora 39+). On older
-> systems mdv detects this and runs in the TUI/console instead; the installer
-> prints a note when the GUI cannot run.
+> systems mdv detects this and runs in the TUI/console instead. On Arch Linux,
+> the installer installs `webkitgtk-6.0` when `pacman` and `sudo` are available;
+> for a manual install, run `sudo pacman -S --needed webkitgtk-6.0`. The
+> installer prints a note when the GUI cannot run.
 
 ## Install
 
-No package managers needed - the install scripts download a single executable
-from GitHub Releases.
+The install scripts download a single executable from GitHub Releases. On Arch
+Linux, the installer also offers to install the native WebKitGTK runtime needed
+by the GUI.
 
 **macOS / Linux:**
 
