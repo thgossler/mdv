@@ -15,3 +15,7 @@ import (
 func applyDetachedAttrs(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }
+
+func applyInstallerAttrs(cmd *exec.Cmd) {
+	applyDetachedAttrs(cmd)
+}

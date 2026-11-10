@@ -23,3 +23,9 @@ func applyDetachedAttrs(cmd *exec.Cmd) {
 		CreationFlags: detachedProcess | createNewProcessGroup,
 	}
 }
+
+func applyInstallerAttrs(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: createNewProcessGroup,
+	}
+}

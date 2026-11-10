@@ -134,6 +134,10 @@ type ghRelease struct {
 }
 
 func fetchLatestRelease(ctx context.Context, repo string) (tag, downloadURL, releaseURL string, err error) {
+	return fetchLatestReleaseWithClient(ctx, repo, &http.Client{Timeout: 8 * time.Second})
+}
+
+func fetchLatestReleaseWithClient(ctx context.Context, repo string, client *http.Client) (tag, downloadURL, releaseURL string, err error) {
 	api := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
 	if err != nil {
@@ -142,7 +146,6 @@ func fetchLatestRelease(ctx context.Context, repo string) (tag, downloadURL, rel
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", AppName+"/"+Version)
 
-	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", "", "", err
@@ -150,6 +153,13 @@ func fetchLatestRelease(ctx context.Context, repo string) (tag, downloadURL, rel
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+			latest, release, fallbackErr := fetchLatestReleaseRedirect(ctx, repo, client)
+			if fallbackErr == nil {
+				return latest, release, release, nil
+			}
+			return "", "", "", fmt.Errorf("github releases API returned %s; release redirect failed: %w", resp.Status, fallbackErr)
+		}
 		return "", "", "", fmt.Errorf("github releases API returned %s", resp.Status)
 	}
 
@@ -163,6 +173,33 @@ func fetchLatestRelease(ctx context.Context, repo string) (tag, downloadURL, rel
 		dl = rel.HTMLURL
 	}
 	return rel.TagName, dl, rel.HTMLURL, nil
+}
+
+func fetchLatestReleaseRedirect(ctx context.Context, repo string, client *http.Client) (string, string, error) {
+	latestURL := fmt.Sprintf("https://github.com/%s/releases/latest", repo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, latestURL, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("User-Agent", AppName+"/"+Version)
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("github release page returned %s", resp.Status)
+	}
+	url := resp.Request.URL
+	prefix := "/" + repo + "/releases/tag/"
+	if url.Scheme != "https" || url.Hostname() != "github.com" || !strings.HasPrefix(url.Path, prefix) {
+		return "", "", fmt.Errorf("unexpected github release redirect")
+	}
+	tag := strings.TrimPrefix(url.Path, prefix)
+	if _, _, ok := parseSemver(tag); !ok || strings.Contains(tag, "/") {
+		return "", "", fmt.Errorf("invalid github release tag %q", tag)
+	}
+	return tag, url.String(), nil
 }
 
 // pickAssetForHost selects the release asset matching the current OS/arch, or

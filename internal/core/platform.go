@@ -106,7 +106,7 @@ func SpawnInstaller(repo string) error {
 	default:
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("curl -fsSL %s | sh -s -- --silent", url))
 	}
-	applyDetachedAttrs(cmd)
+	applyInstallerAttrs(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("starting installer: %w", err)
 	}

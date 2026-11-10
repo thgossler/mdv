@@ -1,11 +1,64 @@
 package core
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+type updateRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTrip updateRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return roundTrip(req)
+}
+
+func TestFetchLatestReleaseRateLimitFallback(t *testing.T) {
+	for _, status := range []int{http.StatusForbidden, http.StatusTooManyRequests} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			client := &http.Client{Transport: updateRoundTripper(func(req *http.Request) (*http.Response, error) {
+				response := &http.Response{Request: req, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}
+				switch req.URL.String() {
+				case "https://api.github.com/repos/thgossler/mdv/releases/latest":
+					response.StatusCode = status
+					response.Status = http.StatusText(status)
+				case "https://github.com/thgossler/mdv/releases/latest":
+					response.StatusCode = http.StatusFound
+					response.Header.Set("Location", "https://github.com/thgossler/mdv/releases/tag/v0.8.5")
+				case "https://github.com/thgossler/mdv/releases/tag/v0.8.5":
+					response.StatusCode = http.StatusOK
+				default:
+					t.Fatalf("unexpected request: %s", req.URL)
+				}
+				return response, nil
+			})}
+			tag, download, release, err := fetchLatestReleaseWithClient(context.Background(), "thgossler/mdv", client)
+			if err != nil || tag != "v0.8.5" || download != "https://github.com/thgossler/mdv/releases/tag/v0.8.5" || release != download {
+				t.Fatalf("fetchLatestReleaseWithClient = %q, %q, %q, %v", tag, download, release, err)
+			}
+		})
+	}
+}
+
+func TestFetchLatestReleaseRejectsUnexpectedRedirect(t *testing.T) {
+	client := &http.Client{Transport: updateRoundTripper(func(req *http.Request) (*http.Response, error) {
+		response := &http.Response{Request: req, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}
+		if req.URL.Hostname() == "api.github.com" {
+			response.StatusCode = http.StatusForbidden
+			response.Status = "403 Forbidden"
+		} else {
+			response.StatusCode = http.StatusOK
+		}
+		return response, nil
+	})}
+	if _, _, _, err := fetchLatestReleaseWithClient(context.Background(), "thgossler/mdv", client); err == nil {
+		t.Fatal("expected an error when the latest-release URL does not redirect to a tag")
+	}
+}
 
 func TestParseSemverInvalid(t *testing.T) {
 	bad := []string{"", "x", "1.x.0", "1.2.three", "v..", "abc.def.ghi"}
