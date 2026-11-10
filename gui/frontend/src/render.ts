@@ -1,4 +1,4 @@
-import MarkdownIt from "markdown-it";
+import MarkdownItFactory, { type MarkdownIt } from "markdown-it";
 import footnote from "markdown-it-footnote";
 import taskLists from "markdown-it-task-lists";
 import deflist from "markdown-it-deflist";
@@ -45,7 +45,7 @@ function getInstance(extended: boolean): MarkdownIt {
 // superscript, highlight, inserted) are only enabled when `extended` is true,
 // because they can silently transform ordinary prose (e.g. "$5 to $10").
 function build(extended: boolean): MarkdownIt {
-  const instance = new MarkdownIt({
+  const instance = new MarkdownItFactory({
     html: true,
     linkify: true,
     typographer: true,
@@ -101,7 +101,7 @@ function externalLinkPlugin(md: MarkdownIt): void {
     ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    const href = token.attrGet("href") || "";
+    const href = String(token.attrGet("href") || "");
     if (isExternalHref(href)) {
       const existing = token.attrGet("class");
       token.attrSet("class", existing ? `${existing} external-link` : "external-link");

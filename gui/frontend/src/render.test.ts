@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import DOMPurify from "dompurify";
+import { extractFrontmatter } from "./frontmatter";
 import { render } from "./render";
 
 // These tests pin down the resilience contract of the GUI render pipeline: a
@@ -15,6 +16,21 @@ describe("render resilience", () => {
     expect(res.html).toContain("Title");
     expect(res.html).toContain("<strong>world</strong>");
     expect(res.headings.length).toBeGreaterThan(0);
+  });
+
+  it("parses YAML frontmatter", () => {
+    expect(extractFrontmatter("---\ntitle: Example\ntags: [one, two]\n---\n\n# Body\n")).toEqual({
+      data: { title: "Example", tags: ["one", "two"] },
+      body: "# Body\n",
+    });
+  });
+
+  it("renders alerts, video links, and external links", () => {
+    const result = render("> [!NOTE]\n> Important\n\n:::video https://example.com/demo\n:::\n\n[External](https://example.com)");
+    expect(result.html).toContain("markdown-alert-note");
+    expect(result.html).toContain("icon-note");
+    expect(result.html).toContain("video-embed");
+    expect(result.html).toContain("external-link");
   });
 
   it("does not throw on invalid / unsupported syntax", () => {

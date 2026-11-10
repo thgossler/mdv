@@ -1,4 +1,4 @@
-import type MarkdownIt from "markdown-it";
+import type { MarkdownIt } from "markdown-it";
 
 // wikilinkPlugin parses `[[target]]`, `[[target|alias]]` and `[[target#heading]]`
 // into anchor tokens. Actual resolution (and broken-link styling) happens later

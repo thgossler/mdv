@@ -1,5 +1,4 @@
-import type MarkdownIt from "markdown-it";
-import type Token from "markdown-it/lib/token.mjs";
+import type { MarkdownIt, Token } from "markdown-it";
 
 // Supported GitHub/Azure DevOps alert types and their display labels.
 const ALERTS: Record<string, string> = {
@@ -75,8 +74,8 @@ export function alertsPlugin(md: MarkdownIt): void {
 
   md.renderer.rules.alert_open = (tokens, idx, options, env, self) => {
     const tok = tokens[idx] as Token;
-    const label = (tok.meta && tok.meta.alertLabel) || "Note";
-    const type = ((tok.meta && tok.meta.alertType) || "NOTE").toLowerCase();
+    const label = typeof tok.meta?.alertLabel === "string" ? tok.meta.alertLabel : "Note";
+    const type = (typeof tok.meta?.alertType === "string" ? tok.meta.alertType : "NOTE").toLowerCase();
     const rendered = self.renderToken(tokens, idx, options);
     const title =
       `<p class="markdown-alert-title">` +

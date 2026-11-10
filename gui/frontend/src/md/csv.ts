@@ -1,4 +1,4 @@
-import type MarkdownIt from "markdown-it";
+import type { MarkdownIt } from "markdown-it";
 
 // csvPlugin renders ```csv and ```tsv fenced blocks as styled HTML tables.
 // The first row is treated as a header. Quoted fields (CSV) are supported.

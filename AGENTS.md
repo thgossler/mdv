@@ -61,11 +61,11 @@ directory on first GUI launch, then runs it detached. Because the launcher
 links no native UI libraries, it starts cleanly anywhere.
 
 - Module path: `github.com/thgossler/mdv`
-- Language/runtime: **Go 1.26+**, **Node.js 18+**, **Wails v3** CLI.
+- Language/runtime: **Go 1.26+**, **Node.js 22.22.2 or 24.15.0 (or newer supported LTS releases)**, **Wails v3** CLI.
 
 ## Build
 
-Prerequisites: Go 1.26+, Node.js 18+, and the Wails v3 CLI
+Prerequisites: Go 1.26+, Node.js 22.22.2 or 24.15.0 (or newer supported LTS releases), and the Wails v3 CLI
 (`go install github.com/wailsapp/wails/v3/cmd/wails3@latest`).
 
 ```sh

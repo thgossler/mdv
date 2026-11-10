@@ -425,7 +425,7 @@ the terminal output is unchanged.
 
 ## Building from source
 
-Requires Go 1.26+, Node.js 18+, and the [Wails v3](https://v3alpha.wails.io/)
+Requires Go 1.26+, Node.js 22.22.2, 24.15.0, or newer supported LTS releases, and the [Wails v3](https://v3alpha.wails.io/)
 CLI (`go install github.com/wailsapp/wails/v3/cmd/wails3@latest`).
 
 ```sh

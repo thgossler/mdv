@@ -47,7 +47,7 @@ const (
 // blocked, so the document cannot fetch remote images or other assets (tracking
 // pixels, IP/User-Agent leakage). The local print harness and the document's
 // own directory are served from 127.0.0.1 and therefore still load.
-func runChromePDF(parent context.Context, execPath string, pre []chromedp.Action, navURL, readyJS string, allowRemote bool) ([]byte, error) {
+func runChromePDF(parent context.Context, execPath string, pre []chromedp.Action[chromedp.Void], navURL, readyJS string, allowRemote bool) ([]byte, error) {
 	allocOpts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(execPath),
 		// Local, user-owned content only; --no-sandbox lets the renderer run as
@@ -66,53 +66,54 @@ func runChromePDF(parent context.Context, execPath string, pre []chromedp.Action
 	// Block all non-loopback network access unless remote assets are allowed, so
 	// rendering a PDF never silently phones home.
 	if !allowRemote {
-		chromedp.ListenTarget(ctx, func(ev interface{}) {
-			e, ok := ev.(*fetch.EventRequestPaused)
-			if !ok {
-				return
-			}
-			go func() {
-				c := chromedp.FromContext(ctx)
-				ectx := cdp.WithExecutor(ctx, c.Target)
-				if isLocalRequestURL(e.Request.URL) {
-					_ = fetch.ContinueRequest(e.RequestID).Do(ectx)
-				} else {
-					_ = fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient).Do(ectx)
+		events := chromedp.Events(ctx, fetch.RequestPaused)
+		go func() {
+			for event, err := range events {
+				if err != nil {
+					return
 				}
-			}()
-		})
+				if isLocalRequestURL(event.Request.URL) {
+					_, _ = chromedp.Call(ctx, fetch.ContinueRequest, fetch.ContinueRequestParams{RequestID: event.RequestID})
+				} else {
+					_, _ = chromedp.Call(ctx, fetch.FailRequest, fetch.FailRequestParams{RequestID: event.RequestID, ErrorReason: network.ErrorReasonBlockedByClient})
+				}
+			}
+		}()
 	}
 
-	actions := append([]chromedp.Action{}, pre...)
+	actions := append([]chromedp.Action[chromedp.Void]{}, pre...)
 	if !allowRemote {
-		actions = append(actions, fetch.Enable())
+		actions = append(actions, chromedp.Func(func(ctx context.Context, target *chromedp.Target) error {
+			_, err := cdp.Call(ctx, target, fetch.Enable, fetch.EnableParams{})
+			return err
+		}))
 	}
 	actions = append(actions, chromedp.Navigate(navURL))
 	if readyJS != "" {
-		actions = append(actions, chromedp.Poll(readyJS, nil, chromedp.WithPollingTimeout(60*time.Second)))
+		actions = append(actions, chromedp.Poll[chromedp.Void](readyJS, chromedp.WithPollingTimeout(60*time.Second)))
 	} else {
-		actions = append(actions, chromedp.WaitReady("body", chromedp.ByQuery))
+		actions = append(actions, chromedp.WaitReady(chromedp.CSS("body")))
 		// Give late layout work (web fonts, inline SVG) a brief moment to settle.
 		actions = append(actions, chromedp.Sleep(250*time.Millisecond))
 	}
 
 	var buf []byte
-	actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
-		var err error
-		buf, _, err = page.PrintToPDF().
-			WithPrintBackground(true).
-			WithPaperWidth(a4WidthIn).
-			WithPaperHeight(a4HeightIn).
-			WithMarginTop(marginIn).
-			WithMarginBottom(marginIn).
-			WithMarginLeft(marginIn).
-			WithMarginRight(marginIn).
-			WithPreferCSSPageSize(false).
-			Do(ctx)
+	actions = append(actions, chromedp.Func(func(ctx context.Context, target *chromedp.Target) error {
+		result, err := cdp.Call(ctx, target, page.PrintToPDF, page.PrintToPDFParams{
+			PrintBackground:   new(true),
+			PaperWidth:        a4WidthIn,
+			PaperHeight:       a4HeightIn,
+			MarginTop:         new(marginIn),
+			MarginBottom:      new(marginIn),
+			MarginLeft:        new(marginIn),
+			MarginRight:       new(marginIn),
+			PreferCSSPageSize: new(false),
+		})
+		buf = result.Data
 		return err
 	}))
 
-	if err := chromedp.Run(ctx, actions...); err != nil {
+	if err := chromedp.Do(ctx, actions...); err != nil {
 		return nil, fmt.Errorf("chrome print to PDF: %w", err)
 	}
 	return buf, nil
@@ -145,9 +146,9 @@ func generateViaChromium(markdown []byte, srcDir string, extended, allowRemote b
 		return err
 	}
 	script := "window.__mdvMarkdown=" + string(mdJSON) + ";window.__mdvExtended=" + boolJS(extended) + ";"
-	pre := []chromedp.Action{
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
+	pre := []chromedp.Action[chromedp.Void]{
+		chromedp.Func(func(ctx context.Context, target *chromedp.Target) error {
+			_, err := cdp.Call(ctx, target, page.AddScriptToEvaluateOnNewDocument, page.AddScriptToEvaluateOnNewDocumentParams{Source: script})
 			return err
 		}),
 	}

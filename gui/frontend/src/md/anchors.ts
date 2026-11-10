@@ -1,4 +1,4 @@
-import type MarkdownIt from "markdown-it";
+import type { MarkdownIt } from "markdown-it";
 import GithubSlugger from "github-slugger";
 
 // HeadingInfo describes a heading for the table of contents.

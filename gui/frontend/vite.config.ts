@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import wails from "@wailsio/runtime/plugins/vite";
 
@@ -17,12 +17,11 @@ export default defineConfig({
       // Two entry points: the GUI (index.html) and the standalone print page
       // (print.html) used by the headless-browser PDF engine.
       input: {
-        main: resolve(__dirname, "index.html"),
-        print: resolve(__dirname, "print.html"),
+        main: fileURLToPath(new URL("index.html", import.meta.url)),
+        print: fileURLToPath(new URL("print.html", import.meta.url)),
       },
       output: {
         manualChunks(id: string) {
-          if (id.includes("node_modules/mermaid")) return "mermaid";
           if (id.includes("node_modules/katex")) return "katex";
           if (id.includes("node_modules/highlight.js")) return "hljs";
           return undefined;

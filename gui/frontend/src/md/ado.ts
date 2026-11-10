@@ -1,4 +1,4 @@
-import type MarkdownIt from "markdown-it";
+import type { MarkdownIt } from "markdown-it";
 
 // adoPlugin adds a pragmatic subset of Azure DevOps wiki markdown:
 //   - [[_TOC_]]               → an inline table-of-contents placeholder
@@ -49,7 +49,8 @@ export function adoPlugin(md: MarkdownIt): void {
   });
 
   md.renderer.rules.ado_video = (tokens, idx) => {
-    const url = (tokens[idx].meta && tokens[idx].meta.url) || "";
+    const value = tokens[idx].meta?.url;
+    const url = typeof value === "string" ? value : "";
     return renderVideo(url);
   };
 

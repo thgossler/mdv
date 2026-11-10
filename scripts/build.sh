@@ -101,7 +101,7 @@ rm -rf internal/pdf/assets/dist
 cp -R gui/frontend/dist internal/pdf/assets/dist
 
 echo "==> [2/4] Generating bindings + compiling GUI helper"
-( cd gui && wails3 generate bindings -ts -i -clean=true >/dev/null 2>&1 || true )
+( cd gui && { wails3 generate bindings -ts -i -clean=true || wails generate bindings -ts -i -clean=true; } >/dev/null 2>&1 || true )
 
 build_macos_universal() {
   # Build the GUI helper as a universal (arm64 + amd64) binary.

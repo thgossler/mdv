@@ -1,4 +1,4 @@
-import type MarkdownIt from "markdown-it";
+import type { MarkdownIt } from "markdown-it";
 
 // sourceLinesPlugin annotates block-level elements with a `data-source-line`
 // attribute carrying the 1-based line number of the element in the raw markdown

@@ -1,4 +1,4 @@
-import yaml from "js-yaml";
+import { load } from "js-yaml";
 
 // Frontmatter holds parsed YAML metadata and the markdown body without it.
 export interface Frontmatter {
@@ -17,7 +17,7 @@ export function extractFrontmatter(markdown: string): Frontmatter {
   const m = markdown.match(FM_RE);
   if (!m) return { data: null, body: markdown };
   try {
-    const data = yaml.load(m[2]) as Record<string, unknown>;
+    const data = load(m[2]) as Record<string, unknown>;
     // Preserve any leading comment/whitespace prefix so an inert marker comment
     // above the front matter is not silently dropped.
     return { data: data && typeof data === "object" ? data : null, body: m[1] + markdown.slice(m[0].length) };

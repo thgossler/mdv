@@ -2,10 +2,63 @@ package pdf
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
+
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/chromedp"
 )
+
+func TestRunChromePDFRemoteRequests(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires a browser")
+	}
+	browser, ok := FindBrowser()
+	if !ok {
+		t.Skip("no browser installed")
+	}
+
+	var requests atomic.Int32
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer remote.Close()
+	remoteURL := strings.Replace(remote.URL, "127.0.0.1", "localhost.", 1) + "/image"
+
+	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `<html><body><img src="%s" onload="window.ready=true" onerror="window.ready=true"></body></html>`, remoteURL)
+	}))
+	defer local.Close()
+
+	for _, allowRemote := range []bool{false, true} {
+		t.Run(fmt.Sprintf("allowRemote=%t", allowRemote), func(t *testing.T) {
+			requests.Store(0)
+			pre := []chromedp.Action[chromedp.Void]{chromedp.Func(func(ctx context.Context, target *chromedp.Target) error {
+				_, err := cdp.Call(ctx, target, page.AddScriptToEvaluateOnNewDocument, page.AddScriptToEvaluateOnNewDocumentParams{Source: "window.injected = true"})
+				return err
+			})}
+			result, err := runChromePDF(context.Background(), browser, pre, local.URL, "window.ready === true && window.injected === true", allowRemote)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.HasPrefix(result, []byte("%PDF-")) {
+				t.Fatal("expected PDF output")
+			}
+			if got := requests.Load(); (got > 0) != allowRemote {
+				t.Fatalf("remote requests = %d, allowRemote = %t", got, allowRemote)
+			}
+		})
+	}
+}
 
 func TestGenerateViaGoldmarkProducesPDF(t *testing.T) {
 	md := []byte("# Title\n\nSome **bold** text and a list:\n\n- one\n- two\n")
