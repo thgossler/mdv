@@ -53,4 +53,13 @@ describe("mermaid resilience", () => {
     await expect(renderMermaid(root, false)).resolves.toBeUndefined();
     expect(root.querySelector(".mermaid-error")).toBeNull();
   });
+
+  it("preserves source ranges on rendered diagrams and errors", async () => {
+    const root = document.createElement("div");
+    root.innerHTML = '<pre data-source-line="4" data-source-end-line="7"><code class="language-mermaid">graph TD; A--&gt;B</code></pre>' +
+      '<pre data-source-line="9" data-source-end-line="11"><code class="language-mermaid">BAD</code></pre>';
+    await renderMermaid(root, false);
+    expect(root.querySelector(".mermaid-diagram")?.getAttribute("data-source-line")).toBe("4");
+    expect(root.querySelector(".mermaid-error")?.getAttribute("data-source-end-line")).toBe("11");
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import DOMPurify from "dompurify";
-import { extractFrontmatter } from "./frontmatter";
+import { extractFrontmatter, sourceLineMapper } from "./frontmatter";
 import { render } from "./render";
 
 // These tests pin down the resilience contract of the GUI render pipeline: a
@@ -18,11 +18,27 @@ describe("render resilience", () => {
     expect(res.headings.length).toBeGreaterThan(0);
   });
 
+  it("preserves source ranges on paragraphs and fenced code", () => {
+    const result = render("First\nsecond\n\n```go\nline one\nline two\n```\n");
+    const root = document.createElement("div");
+    root.innerHTML = result.html;
+    expect(root.querySelector("p")?.getAttribute("data-source-line")).toBe("1");
+    expect(root.querySelector("p")?.getAttribute("data-source-end-line")).toBe("2");
+    expect(root.querySelector('[data-source-line="4"]')?.getAttribute("data-source-end-line")).toBe("7");
+  });
+
   it("parses YAML frontmatter", () => {
     expect(extractFrontmatter("---\ntitle: Example\ntags: [one, two]\n---\n\n# Body\n")).toEqual({
       data: { title: "Example", tags: ["one", "two"] },
       body: "# Body\n",
     });
+  });
+
+  it("maps heading lines past frontmatter and preserved comments", () => {
+    const markdown = "<!-- marker -->\n---\ntitle: example\n---\n\n# Heading\n";
+    const body = extractFrontmatter(markdown).body;
+    const heading = render(body).headings[0];
+    expect(sourceLineMapper(markdown, body)(heading.line)).toBe(6);
   });
 
   it("renders alerts, video links, and external links", () => {

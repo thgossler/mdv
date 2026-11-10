@@ -33,11 +33,15 @@ export async function renderMermaid(root: HTMLElement, dark: boolean): Promise<v
       const { svg } = await mermaidMod.render(id, source);
       const wrap = document.createElement("div");
       wrap.className = "mermaid-diagram";
+      if (host.dataset.sourceLine) wrap.dataset.sourceLine = host.dataset.sourceLine;
+      if (host.dataset.sourceEndLine) wrap.dataset.sourceEndLine = host.dataset.sourceEndLine;
       wrap.innerHTML = svg;
       host.replaceWith(wrap);
     } catch (e) {
       const err = document.createElement("div");
       err.className = "mermaid-error";
+      if (host.dataset.sourceLine) err.dataset.sourceLine = host.dataset.sourceLine;
+      if (host.dataset.sourceEndLine) err.dataset.sourceEndLine = host.dataset.sourceEndLine;
       err.textContent = "Mermaid error: " + (e instanceof Error ? e.message : String(e));
       host.replaceWith(err);
     }

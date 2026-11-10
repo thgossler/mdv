@@ -1,12 +1,32 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/thgossler/mdv/internal/core"
 )
+
+func TestControlRequestReply(t *testing.T) {
+	bridge := &Bridge{}
+	bridge.emit = func(name string, data any) {
+		if name != "control:request" {
+			t.Fatalf("unexpected event %s", name)
+		}
+		message := data.(map[string]any)
+		bridge.ControlReply(message["id"].(uint64), `{"result":{"ok":true}}`)
+	}
+	result, rpcErr := bridge.controlRequest(context.Background(), "ui.get", json.RawMessage(`{}`))
+	if rpcErr != nil || string(result.(json.RawMessage)) != `{"ok":true}` {
+		t.Fatalf("unexpected reply: %s %v", result, rpcErr)
+	}
+	if len(bridge.controlPending) != 0 {
+		t.Fatal("reply was not removed")
+	}
+}
 
 // TestReadDocumentUsesInputDirForStdinTemp verifies that the initial document
 // resolves its relative links and images against the directory mdv was launched

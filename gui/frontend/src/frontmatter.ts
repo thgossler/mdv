@@ -26,6 +26,15 @@ export function extractFrontmatter(markdown: string): Frontmatter {
   }
 }
 
+export function sourceLineMapper(markdown: string, body: string): (line: number) => number {
+  if (markdown === body) return (line) => line;
+  const match = markdown.match(FM_RE);
+  if (!match) return (line) => line;
+  const prefixLines = match[1].split("\n").length - 1;
+  const removedLines = match[0].slice(match[1].length).split("\n").length - 1;
+  return (line) => line > prefixLines ? line + removedLines : line;
+}
+
 // A stable palette so each tag keeps a consistent colour within a session.
 const TAG_COLORS = [
   "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",

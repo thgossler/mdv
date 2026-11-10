@@ -16,7 +16,15 @@ export function sourceLinesPlugin(md: MarkdownIt): void {
       if (token.hidden) continue;
       // token.map is [startLine, endLine) with 0-based line numbers.
       token.attrSet("data-source-line", String(token.map[0] + 1));
+      token.attrSet("data-source-end-line", String(token.map[1]));
     }
     return true;
   });
+  const fence = md.renderer.rules.fence!;
+  md.renderer.rules.fence = (tokens, index, options, env, self) => {
+    const html = fence(tokens, index, options, env, self);
+    const map = tokens[index].map;
+    if (!map) return html;
+    return html.replace(/^(\s*<[a-zA-Z][\w-]*)/, `$1 data-source-line="${map[0] + 1}" data-source-end-line="${map[1]}"`);
+  };
 }

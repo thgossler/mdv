@@ -154,7 +154,7 @@ const ALLOWED_TAGS_EXTRA = [
 ];
 const ALLOWED_ATTR_EXTRA = [
   "class", "id", "data-slug", "data-lang", "data-wikilink", "data-external",
-  "data-ado-toc", "data-source-line", "align", "controls", "preload",
+  "data-ado-toc", "data-source-line", "data-source-end-line", "align", "controls", "preload",
   "allowfullscreen", "loading", "type", "checked", "disabled", "colspan", "rowspan",
 ];
 // Tags that must never survive sanitisation, even if some plugin or future

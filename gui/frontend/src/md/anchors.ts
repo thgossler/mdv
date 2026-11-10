@@ -6,6 +6,7 @@ export interface HeadingInfo {
   level: number;
   text: string;
   slug: string;
+  line: number;
 }
 
 // anchorsPlugin assigns GitHub-compatible slugs to every heading and records
@@ -27,7 +28,7 @@ export function anchorsPlugin(md: MarkdownIt): void {
       tokens[i].attrSet("data-slug", slug);
 
       const level = Number(tokens[i].tag.slice(1));
-      env.headings!.push({ level, text, slug });
+      env.headings!.push({ level, text, slug, line: (tokens[i].map?.[0] ?? 0) + 1 });
     }
     return true;
   });

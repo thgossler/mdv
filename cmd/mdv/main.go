@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/thgossler/mdv/internal/console"
+	"github.com/thgossler/mdv/internal/control"
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/launcher"
 	"github.com/thgossler/mdv/internal/pdf"
@@ -43,6 +44,7 @@ func run() int {
 		flagRemote    = flag.Bool("remote", false, "allow downloading remote (http/https) images and assets (console, TUI, GUI and --pdf)")
 		flagIgnore    = flag.String("ignore", "", "comma-separated .gitignore-style patterns to exclude from the document list (runtime only, not saved)")
 		flagSidePanel = flag.Bool("sidepanel", false, "force the document navigator panel to start visible (GUI and TUI)")
+		flagAPI       = flag.Bool("api", false, "enable the local control API")
 	)
 	flag.Usage = usage
 	// Accept flags on either side of the positional input argument. Go's flag
@@ -134,6 +136,13 @@ func run() int {
 		ForceConsole: *flagConsole || *flagC,
 	}
 	mode := launcher.DetectMode(pref)
+	if *flagAPI {
+		if mode == launcher.ModeConsole || *flagPDF != "" {
+			fmt.Fprintln(os.Stderr, "error: --api requires an interactive GUI or TUI")
+			return 1
+		}
+		os.Setenv(control.Env, "1")
+	}
 
 	// Resolve input. A positional argument names a file or folder; with no
 	// argument but markdown piped on stdin, read that content into memory.
@@ -197,6 +206,10 @@ func run() int {
 			// No interactive terminal (e.g. stdin and stdout both piped): the
 			// TUI cannot run, so render to the console instead.
 			if errors.Is(err, tui.ErrNoTerminal) {
+				if *flagAPI {
+					fmt.Fprintln(os.Stderr, "error: --api requires an interactive GUI or TUI")
+					return 1
+				}
 				return runConsole(cfg, in, updCh, *flagNoColor)
 			}
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -322,6 +335,10 @@ func runFallback(cfg core.Defaults, in core.Input, updCh <-chan core.UpdateInfo,
 			return 1
 		}
 		return 0
+	}
+	if os.Getenv(control.Env) == "1" {
+		fmt.Fprintln(os.Stderr, "error: --api requires an interactive GUI or TUI")
+		return 1
 	}
 	return runConsole(cfg, in, updCh, noColor)
 }
@@ -465,6 +482,7 @@ func usage() {
 	fmt.Fprintf(w, "  --remote       allow downloading remote (http/https) images/assets in any viewer\n")
 	fmt.Fprintf(w, "  --ignore LIST  comma-separated .gitignore-style patterns to exclude from the document list (runtime only, not saved)\n")
 	fmt.Fprintf(w, "  --sidepanel    force the document navigator panel to start visible (GUI and TUI)\n")
+	fmt.Fprintf(w, "  --api          enable the local control API\n")
 	fmt.Fprintf(w, "  --init-config  write a default settings.jsonc and exit\n")
 	fmt.Fprintf(w, "  --version      print version and exit\n\n")
 	fmt.Fprintf(w, "Without a graphical environment, mdv automatically uses the terminal UI\n")

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/thgossler/mdv/internal/control"
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -109,6 +110,7 @@ func runGUI() error {
 
 	st := LoadLayoutState()
 	store := NewLayoutStore(st)
+	app.OnShutdown(store.Flush)
 	bridge.layout = store
 	bridge.initExcludes()
 	// --ignore (propagated via MDV_IGNORE) overrides the persisted navigator
@@ -193,6 +195,14 @@ func runGUI() error {
 	// Wire the event emitter so the bridge can stream search results and other
 	// notifications to the frontend.
 	bridge.emit = func(name string, data any) { app.Event.Emit(name, data) }
+	if os.Getenv(control.Env) == "1" {
+		instance, err := control.StartInstance("gui", bridge.controlRequest, app.Quit)
+		if err != nil {
+			return err
+		}
+		defer instance.Close()
+		app.OnShutdown(instance.Close)
+	}
 
 	// Restore the maximized state and persist subsequent geometry changes. The
 	// store debounces writes so a drag or resize burst becomes one file write.

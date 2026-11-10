@@ -73,10 +73,14 @@ func init() {
 		}
 	}
 	if !inRedirected {
-		if f, err := os.OpenFile("CONIN$", os.O_RDONLY, 0); err == nil {
+		if f, err := openConsoleInput(); err == nil {
 			os.Stdin = f
 		}
 	}
+}
+
+func openConsoleInput() (*os.File, error) {
+	return os.OpenFile("CONIN$", os.O_RDWR, 0)
 }
 
 // stdHandleValid reports whether the given standard handle is already bound to a

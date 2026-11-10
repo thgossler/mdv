@@ -1,4 +1,4 @@
-import { Events, Window } from "@wailsio/runtime";
+import { Call, Events, Window } from "@wailsio/runtime";
 import "katex/dist/katex.min.css";
 import "./styles/themes.css";
 import "./styles/app.css";
@@ -7,7 +7,7 @@ import "./styles/alerts.css";
 import "./styles/code.css";
 import { api, type InitInfo, type DocFileDTO, type ContentMatch, type RecentItem } from "./bridge";
 import { render } from "./render";
-import { extractFrontmatter, renderFrontmatter } from "./frontmatter";
+import { extractFrontmatter, renderFrontmatter, sourceLineMapper } from "./frontmatter";
 import { renderMermaid, renderMermaidSource } from "./mermaidRunner";
 import { initTheme, toggleTheme, setTheme, isDark, onThemeChange, type ThemeMode } from "./theme";
 import { initZoom, zoomIn, zoomOut, zoomReset, refreshZoom } from "./zoom";
@@ -15,6 +15,7 @@ import { initSearch, showSearch, clearSearch, jumpToContentMatch } from "./searc
 import { buildTOC, trackActiveHeading } from "./toc";
 import { initFocusZones } from "./focuszones";
 import { fuzzyPhraseMatch } from "./fuzzy";
+import type { HeadingInfo } from "./md/anchors";
 
 // --- application state ------------------------------------------------------
 
@@ -36,6 +37,12 @@ let info: InitInfo;
 let workspace: DocFileDTO[] = [];
 let currentPath = "";
 let currentDir = "";
+let controlRevision = 0;
+let controlReady = false;
+let controlQueue = Promise.resolve();
+let controlLines: number[] = [];
+let controlBlocks: { element: HTMLElement; start: number; end: number }[] = [];
+let controlAnchors = new Map<string, number>();
 let history: HistoryEntry[] = [];
 let forward: HistoryEntry[] = [];
 let labelMode: "filename" | "title" = "filename";
@@ -208,6 +215,20 @@ async function boot(): Promise<void> {
   wireLiveReload();
   wireFileDrop();
 
+  Events.On("control:request", (event: { data: { id: number; method: string; params?: Record<string, unknown>; deadline: number } }) => {
+    const request = event.data;
+    controlQueue = controlQueue.then(async () => {
+      let reply: { result?: unknown; error?: { code: number; message: string } };
+      try {
+        if (Date.now() >= request.deadline) throw new ControlError(-32000, "request expired");
+        reply = { result: await controlRequest(request.method, request.params ?? {}) };
+      } catch (error) {
+        reply = { error: error instanceof ControlError ? { code: error.code, message: error.message } : { code: -32000, message: String(error) } };
+      }
+      await Call.ByName("main.Bridge.ControlReply", request.id, JSON.stringify(reply));
+    }).catch((error) => console.error("mdv control:", error));
+  });
+
   if (info.update?.available) {
     els.statusMid.innerHTML = `New version ${escapeHtml(info.update.latest)}, run <code>mdv update</code>`;
   }
@@ -220,6 +241,7 @@ async function boot(): Promise<void> {
   } else {
     showEmpty();
   }
+  controlReady = true;
 }
 
 // --- rendering --------------------------------------------------------------
@@ -262,12 +284,15 @@ async function openDocument(
 
 async function renderInto(markdown: string, name: string, path: string): Promise<void> {
   clearSearch();
+  const generation = ++controlRevision;
+  controlReady = false;
   lastRendered = { markdown, name, path };
 
   // Raw-Markdown view shows the verbatim source for copy & paste; it replaces
   // both the rendered output and the mermaid path below.
   if (rawMode) {
     renderRaw(markdown, name);
+    finishControlRender(generation, markdown);
     return;
   }
 
@@ -278,12 +303,24 @@ async function renderInto(markdown: string, name: string, path: string): Promise
     currentDocTitle = name;
     applyDocTitle();
     refreshZoom();
+    finishControlRender(generation, markdown);
     return;
   }
 
   const fm = extractFrontmatter(markdown);
   const result = render(fm.body, extendedSyntax);
+  const sourceLine = sourceLineMapper(markdown, fm.body);
+  controlAnchors = new Map(result.headings.map((heading) => [heading.slug, sourceLine(heading.line)]));
   els.content.innerHTML = renderFrontmatter(fm.data) + result.html;
+
+  if (markdown !== fm.body) {
+    els.content.querySelectorAll<HTMLElement>("[data-source-line]").forEach((element) => {
+      const line = Number(element.dataset.sourceLine);
+      element.dataset.sourceLine = String(sourceLine(line));
+      const endLine = Number(element.dataset.sourceEndLine);
+      if (endLine) element.dataset.sourceEndLine = String(sourceLine(endLine));
+    });
+  }
 
   currentDocName = name;
   currentDocTitle = chooseTitle(name, result.headings[0]?.text, fm.data);
@@ -297,6 +334,19 @@ async function renderInto(markdown: string, name: string, path: string): Promise
   } catch (err) {
     console.error("mdv: post-processing failed", err);
   }
+  finishControlRender(generation, markdown);
+}
+
+function finishControlRender(generation: number, markdown: string): void {
+  if (generation !== controlRevision) return;
+  controlLines = [0];
+  for (let index = 0; index < markdown.length; index++) {
+    if (markdown[index] === "\n") controlLines.push(index + 1);
+  }
+  controlBlocks = Array.from(els.content.querySelectorAll<HTMLElement>("[data-source-line]"), (element) => ({
+    element, start: Number(element.dataset.sourceLine), end: Number(element.dataset.sourceEndLine),
+  })).filter((block) => Number.isFinite(block.start) && block.start > 0).sort((left, right) => left.start - right.start);
+  controlReady = true;
 }
 
 // renderRaw shows the document's raw Markdown source as read-only, wrapping
@@ -313,6 +363,9 @@ function renderRaw(markdown: string, name: string): void {
   els.content.replaceChildren(pre);
 
   const fm = extractFrontmatter(markdown);
+  const headings = render(fm.body, extendedSyntax).headings;
+  const sourceLine = sourceLineMapper(markdown, fm.body);
+  controlAnchors = new Map(headings.map((heading) => [heading.slug, sourceLine(heading.line)]));
   currentDocName = name;
   currentDocTitle = chooseTitle(name, undefined, fm.data);
   applyDocTitle();
@@ -322,7 +375,7 @@ function renderRaw(markdown: string, name: string): void {
   refreshZoom();
 }
 
-async function postProcess(headings: { level: number; text: string; slug: string }[]): Promise<void> {
+async function postProcess(headings: HeadingInfo[]): Promise<void> {
   injectHeadingAnchors();
   resolveWikilinks();
   void resolveAssets();
@@ -1213,6 +1266,137 @@ async function updateOpenExternalButton(path: string): Promise<void> {
   // Guard against a stale async result after a quick navigation to another type.
   if (currentPath !== path) return;
   els.btnOpenExternal.classList.toggle("hidden", isDefault);
+}
+
+class ControlError extends Error {
+  constructor(readonly code: number, message: string) { super(message); }
+}
+
+async function controlRequest(method: string, params: Record<string, unknown>): Promise<unknown> {
+  if (!controlReady) throw new ControlError(-32000, "UI not ready");
+  const revision = String(controlRevision);
+  if ((params.document !== undefined && params.document !== currentPath) ||
+      (params.revision !== undefined && params.revision !== revision)) {
+    throw new ControlError(-32002, "stale document or revision");
+  }
+  const state = () => ({ mode: "gui", document: currentPath, revision: String(controlRevision),
+    viewport: { percentage: els.contentWrap.scrollHeight > els.contentWrap.clientHeight ? 100 * els.contentWrap.scrollTop / (els.contentWrap.scrollHeight - els.contentWrap.clientHeight) : 0 },
+    sidebar: !els.sidebar.classList.contains("collapsed"), toc: !els.toc.classList.contains("hidden"),
+    watch: watchEnabled, extended: extendedSyntax, remoteImages: remoteImagesEnabled,
+    raw: rawMode, monospace: document.body.classList.contains("mono"),
+    fullWidth: document.body.classList.contains("full-width"), theme: isDark() ? "dark" : "light",
+    labels: labelMode });
+  if (method === "instance.quit") return { quitting: true };
+  if (method === "instance.info" || method === "ui.get") return state();
+  if (method === "ui.capabilities") return {
+    methods: ["instance.info", "instance.quit", "ui.capabilities", "ui.get", "viewport.set", "document.gotoAnchor", "document.reload", "document.open", "ui.set", "ui.execute"],
+    settings: ["sidebar", "toc", "watch", "extended", "remoteImages", "raw", "monospace", "fullWidth", "theme", "labels"],
+    actions: ["back", "forward", "reload", "history", "recent", "exportPdf", "openExternal", "zoomIn", "zoomOut", "zoomReset", "resetLayout", "contentSearch", "find"]
+  };
+  if (method === "viewport.set") {
+    const line = params.line;
+    const percentage = params.percentage;
+    if ((line === undefined) === (percentage === undefined)) throw new ControlError(-32602, "provide one line or percentage");
+    if (percentage !== undefined) {
+      if (typeof percentage !== "number" || !Number.isFinite(percentage) || percentage < 0 || percentage > 100) throw new ControlError(-32602, "percentage out of range");
+      els.contentWrap.scrollTop = (els.contentWrap.scrollHeight - els.contentWrap.clientHeight) * percentage / 100;
+    } else {
+      if (typeof line !== "number" || !Number.isInteger(line) || line < 1 || !lastRendered || line > controlLines.length) throw new ControlError(-32602, "line out of range");
+      if (rawMode) {
+        const node = els.content.querySelector("pre")?.firstChild;
+        if (!node) throw new ControlError(-32005, "source line unavailable");
+        const offset = controlLines[line - 1];
+        const range = document.createRange();
+        range.setStart(node, Math.min(offset, node.textContent?.length ?? 0));
+        range.setEnd(node, Math.min(offset + 1, node.textContent?.length ?? 0));
+        els.contentWrap.scrollTop += range.getBoundingClientRect().top - els.contentWrap.getBoundingClientRect().top;
+      } else {
+        let low = 0, high = controlBlocks.length;
+        while (low < high) {
+          const middle = Math.floor((low + high) / 2);
+          if (controlBlocks[middle].start <= line) low = middle + 1;
+          else high = middle;
+        }
+        const block = controlBlocks[low - 1];
+        if (!block && controlBlocks.length) { els.contentWrap.scrollTop = 0; return state(); }
+        if (!block) throw new ControlError(-32005, "source line unavailable");
+        const bounds = block.element.getBoundingClientRect();
+        const start = block.start;
+        const end = block.end || start;
+        const fraction = end > start ? Math.min(1, (line - start) / (end - start + 1)) : 0;
+        els.contentWrap.scrollTop += bounds.top - els.contentWrap.getBoundingClientRect().top + bounds.height * fraction;
+      }
+    }
+    return state();
+  }
+  if (method === "document.gotoAnchor") {
+    if (typeof params.anchor !== "string") throw new ControlError(-32602, "anchor required");
+    const anchor = params.anchor.replace(/^#/, "");
+    if (rawMode) {
+      const line = controlAnchors.get(anchor);
+      if (line === undefined) throw new ControlError(-32004, "anchor not found");
+      return controlRequest("viewport.set", { line });
+    }
+    const target = els.content.querySelector<HTMLElement>(`[id="${cssEscape(anchor)}"]`);
+    if (!target) throw new ControlError(-32004, "anchor not found");
+    els.contentWrap.scrollTop += target.getBoundingClientRect().top - els.contentWrap.getBoundingClientRect().top;
+    return state();
+  }
+  if (method === "document.reload") {
+    if (!currentPath) throw new ControlError(-32003, "no file to reload");
+    await reloadAll();
+    return state();
+  }
+  if (method === "document.open") {
+    if (typeof params.path !== "string" || !params.path) throw new ControlError(-32602, "path required");
+    await openDocument(params.path, true);
+    if (currentPath !== params.path) throw new ControlError(-32003, "cannot open document");
+    return state();
+  }
+  if (method === "ui.set") {
+    const { name, value } = params;
+    if (name === "theme") {
+      if (value !== "light" && value !== "dark" && value !== "system") throw new ControlError(-32602, "invalid theme");
+      setTheme(value);
+    } else if (name === "labels") {
+      if (value !== "title" && value !== "filename") throw new ControlError(-32602, "invalid labels");
+      if (labelMode !== value) toggleLabels();
+    } else {
+      if (typeof value !== "boolean") throw new ControlError(-32602, "value must be boolean");
+      switch (name) {
+        case "sidebar": if (!els.sidebar.classList.contains("collapsed") !== value) els.sidebar.classList.toggle("collapsed"); break;
+        case "toc": if (!els.toc.classList.contains("hidden") !== value) { els.toc.classList.toggle("hidden"); $("toc-resizer").classList.toggle("hidden"); } break;
+        case "watch": if (watchEnabled !== value) await toggleWatch(); if (watchEnabled !== value) throw new ControlError(-32005, "watch unavailable"); break;
+        case "extended": if (extendedSyntax !== value) await toggleExtendedSyntax(); break;
+        case "remoteImages": if (remoteImagesEnabled !== value) toggleRemoteImages(); break;
+        case "raw": if (rawMode !== value) await toggleRawMarkdown(); break;
+        case "monospace": document.body.classList.toggle("mono", value); break;
+        case "fullWidth": if (document.body.classList.contains("full-width") !== value) toggleContentWidth(); break;
+        default: throw new ControlError(-32005, "unsupported setting");
+      }
+    }
+    return state();
+  }
+  if (method === "ui.execute") {
+    switch (params.name) {
+      case "back": goBack(); break;
+      case "forward": goForward(); break;
+      case "reload": await reloadAll(); break;
+      case "history": toggleHistoryMenu(); break;
+      case "recent": toggleRecentMenu(); break;
+      case "exportPdf": void exportPdf(); break;
+      case "openExternal": if (currentPath) void api.openExternal(currentPath); break;
+      case "zoomIn": zoomIn(); break;
+      case "zoomOut": zoomOut(); break;
+      case "zoomReset": zoomReset(); break;
+      case "resetLayout": await resetLayout(); break;
+      case "contentSearch": toggleContentSearch(); break;
+      case "find": showSearch(els.searchBar, els.searchInput); break;
+      default: throw new ControlError(-32005, "unsupported action");
+    }
+    return state();
+  }
+  throw new ControlError(-32601, "method not found");
 }
 
 function wireToolbar(): void {

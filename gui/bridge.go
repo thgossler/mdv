@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"mime"
 	"net/http"
 	"net/url"
@@ -11,8 +12,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/thgossler/mdv/internal/control"
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/pdf"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -32,7 +35,10 @@ type Bridge struct {
 
 	// emit dispatches a named application event with structured data to the
 	// frontend. It is wired in main.go after the app is created.
-	emit func(name string, data any)
+	emit           func(name string, data any)
+	controlMu      sync.Mutex
+	controlSeq     atomic.Uint64
+	controlPending map[uint64]chan controlReply
 
 	// searchMu guards searchGen and searchCancel.
 	searchMu     sync.Mutex
@@ -65,6 +71,46 @@ type Bridge struct {
 	// layoutDTO so the frontend sidebar reflects the CLI value without the
 	// patterns ever being written to state.jsonc.
 	cliExcludeText string
+}
+
+type controlReply struct {
+	Result json.RawMessage `json:"result"`
+	Error  *control.Error  `json:"error"`
+}
+
+func (b *Bridge) controlRequest(ctx context.Context, method string, params json.RawMessage) (any, *control.Error) {
+	id := b.controlSeq.Add(1)
+	reply := make(chan controlReply, 1)
+	b.controlMu.Lock()
+	if b.controlPending == nil {
+		b.controlPending = make(map[uint64]chan controlReply)
+	}
+	b.controlPending[id] = reply
+	b.controlMu.Unlock()
+	defer func() { b.controlMu.Lock(); delete(b.controlPending, id); b.controlMu.Unlock() }()
+	deadline, _ := ctx.Deadline()
+	b.emit("control:request", map[string]any{"id": id, "method": method, "params": params, "deadline": deadline.UnixMilli()})
+	select {
+	case result := <-reply:
+		return result.Result, result.Error
+	case <-ctx.Done():
+		return nil, &control.Error{Code: -32000, Message: "UI unavailable"}
+	}
+}
+
+func (b *Bridge) ControlReply(id uint64, result string) {
+	var reply controlReply
+	if json.Unmarshal([]byte(result), &reply) != nil {
+		return
+	}
+	b.controlMu.Lock()
+	defer b.controlMu.Unlock()
+	if pending := b.controlPending[id]; pending != nil {
+		select {
+		case pending <- reply:
+		default:
+		}
+	}
 }
 
 // NewBridge builds a Bridge for the given input and configuration.

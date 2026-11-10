@@ -172,6 +172,7 @@ mdv --init-config        # write a default settings.jsonc
 | `--max-width N`   | Cap the render width to N columns                        |
 | `--images MODE`   | Image rendering: `auto`, `graphics`, `blocks`, `off`     |
 | `--sidepanel`     | Force the document navigator panel to start visible (GUI and TUI) |
+| `--api`           | Enable the local control API for this GUI or TUI instance |
 | `--version`       | Print version and exit                                   |
 | `--init-config`   | Write a default settings file and exit                   |
 
@@ -272,6 +273,105 @@ The same smart matching powers the navigator's **filename/title filter** (when
 content search is off), so filtering documents by name behaves just like
 searching their content. Only documents with a filename or content match remain
 in the list. The search runs entirely in-memory with no external dependencies.
+
+## Local control API
+
+Start an interactive instance with `mdv --api README.md`. Each instance writes a
+private JSON discovery record to `~/.config/mdv/api/` (or `$XDG_CONFIG_HOME/mdv/api/`).
+It contains its `address`, `token`, `pid`, and `mode`; select the record for the
+desired instance and keep the token private. Records are removed on normal exit;
+after a crash, discard records whose instance is no longer reachable. The API
+binds only to IPv4 loopback and is unavailable in console and PDF modes.
+
+Use a persistent TCP connection and send one UTF-8 JSON-RPC 2.0 request per line,
+including the discovery record's `token` as a top-level field. Responses are also
+newline-delimited. `instance.info` returns the active `document` and `revision`;
+include both with scroll requests to reject stale updates. `viewport.set` accepts
+either a 1-based `line` in the Markdown source or a `percentage` from 0 to 100 of
+the scrollable viewport. Source-line placement is approximate, especially for
+wrapped text, tables, diagrams, and terminal rendering. Some content, including
+standalone diagrams, may not support source-line positioning.
+
+The following generic Python client reads source-line numbers from its standard
+input, as another process scrolls, and sends them to the selected instance:
+
+```python
+import json
+import socket
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as file:
+  instance = json.load(file)
+host, port = instance["address"].rsplit(":", 1)
+with socket.create_connection((host, int(port))) as connection:
+  stream = connection.makefile("rwb")
+  def request(method, params):
+    message = {"jsonrpc": "2.0", "id": 1, "token": instance["token"],
+           "method": method, "params": params}
+    stream.write((json.dumps(message) + "\n").encode())
+    stream.flush()
+    response = json.loads(stream.readline())
+    if "error" in response:
+      raise RuntimeError(response["error"])
+    return response["result"]
+
+  document = request("instance.info", {})
+  for line in sys.stdin:
+    request("viewport.set", {"document": document["document"],
+                 "revision": document["revision"],
+                 "line": int(line)})
+```
+
+To scroll the active document without checking its identity or revision, send
+this minimal request (formatted for readability; send it as one line):
+
+```text
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "token": "<instance token>",
+  "method": "viewport.set",
+  "params": {
+    "line": 120
+  }
+}
+```
+
+To reject a delayed request if the active document or its revision has changed,
+include both values returned by `instance.info`:
+
+```text
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "token": "<instance token>",
+  "method": "viewport.set",
+  "params": {
+    "document": "/path/to/README.md",
+    "revision": "<document revision>",
+    "line": 120
+  }
+}
+```
+
+The revision is an opaque identifier for the viewer's current document state. 
+Both `document` and `revision` are optional; when supplied, a mismatch returns 
+error `-32002` instead of scrolling the wrong state.
+
+Pass the discovery record path as the first argument and pipe line numbers to
+the client. For high-frequency updates, coalesce pending positions to the most
+recent one; reconnect and refresh `instance.info` after a document change.
+Re-rendering can also change the revision: on a stale-document error, refresh
+the state and retry only if it still identifies the intended document.
+
+Other methods include `document.gotoAnchor` (`anchor`), `document.open` (`path`),
+`document.reload`, `ui.get`, `ui.set` (`name`, `value`), and `ui.execute` (`name`).
+To exit the current instance cleanly, send `instance.quit` with empty parameters;
+its response is `{"quitting":true}` before the instance closes.
+Call `ui.capabilities` for the settings and actions available in the current mode;
+unsupported operations return an error. Dialog-based actions may return before
+the user completes the dialog. API state changes have the same persistence and
+security effects as using the corresponding UI controls.
 
 ## PDF export
 

@@ -100,6 +100,13 @@ func TestE2EVersion(t *testing.T) {
 	}
 }
 
+func TestE2EAPIRequiresInteractiveMode(t *testing.T) {
+	out, code := runMDVStdin(t, "# test\n", nil, "--console", "--api")
+	if code == 0 || !strings.Contains(out, "--api requires an interactive") {
+		t.Fatalf("expected API mode error, got exit %d: %s", code, out)
+	}
+}
+
 func TestE2ENoArgShowsUsageWithExit2(t *testing.T) {
 	out, code := runMDV(t, nil)
 	if code != 2 {

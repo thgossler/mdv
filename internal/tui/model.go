@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/thgossler/mdv/internal/control"
 	"github.com/thgossler/mdv/internal/core"
 	"github.com/thgossler/mdv/internal/mdfmt"
 	"github.com/thgossler/mdv/internal/termimg"
@@ -148,9 +149,13 @@ type Model struct {
 	// preference (state.jsonc) for the GUI; the TUI render output is unaffected.
 	extendedSyntax bool
 
-	width  int
-	height int
-	ready  bool
+	width       int
+	height      int
+	ready       bool
+	apiLines    []int
+	apiRevision string
+	apiSource   string
+	apiRendered string
 }
 
 // imagesReadyMsg signals that a background prefetch has finished decoding a
@@ -522,6 +527,13 @@ func Run(cfg core.Defaults, in core.Input, upd core.UpdateInfo) error {
 		}
 	}
 	p := tea.NewProgram(m, opts...)
+	if os.Getenv(control.Env) == "1" {
+		instance, err := control.StartInstance("tui", tuiHandler(p), p.Quit)
+		if err != nil {
+			return fmt.Errorf("control API: %w", err)
+		}
+		defer instance.Close()
+	}
 	_, err := p.Run()
 	return err
 }
@@ -571,6 +583,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // routeMsg dispatches a single message to the relevant handler.
 func (m Model) routeMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case controlMessage:
+		if msg.ctx.Err() != nil {
+			return m, nil
+		}
+		result, rpcErr, cmd := m.handleControl(msg.method, msg.params)
+		msg.reply <- controlResult{result, rpcErr}
+		return m, cmd
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -1107,6 +1126,7 @@ func (m *Model) openPath(path string, pushHistory bool) tea.Cmd {
 		m.forward = nil
 	}
 	m.currentPath = path
+	m.stdin = false
 	m.currentDir = filepath.Dir(path)
 	m.rawMarkdown = string(data)
 	m.renderCache = nil
@@ -1592,6 +1612,12 @@ func (m *Model) frontmatterBlock(width int) string {
 
 func (m *Model) rerender() {
 	content := m.renderedRaw()
+	if os.Getenv(control.Env) == "1" && (m.apiLines == nil || m.apiSource != m.rawMarkdown || m.apiRendered != content) {
+		m.apiLines = sourceRows(m.rawMarkdown, stripANSI(content))
+		m.apiRevision = controlRevision(m.rawMarkdown)
+		m.apiSource = m.rawMarkdown
+		m.apiRendered = content
+	}
 	if len(content) <= maxHighlightBytes {
 		curLine, curCol := -1, -1
 		if len(m.matches) > 0 {
