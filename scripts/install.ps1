@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-  Cross-platform mdv installer (PowerShell 7+). Downloads the latest
+    Cross-platform mdv installer. Downloads the latest
   self-contained mdv binary for the current OS/architecture from GitHub
   Releases and installs it to a directory on your PATH.
 
-  Works on Windows, macOS, and Linux as long as PowerShell 7+ is installed.
+    Works with Windows PowerShell 5.1 or PowerShell 7+ on Windows, macOS, and Linux.
 
 .EXAMPLE
   # Windows
@@ -33,11 +33,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-# PowerShell 5.1 (Windows PowerShell) lacks the $IsWindows/$IsMacOS/$IsLinux
-# automatic variables. Require PowerShell 7+ for reliable cross-platform behavior.
-if ($PSVersionTable.PSVersion.Major -lt 6) {
-    throw "This installer requires PowerShell 7 or newer. Download it from https://aka.ms/powershell"
-}
+$mdvIsWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
 
 $Repo = "thgossler/mdv"
 $Version = if ($env:MDV_VERSION) { $env:MDV_VERSION } else { "latest" }
@@ -53,7 +49,7 @@ function Get-Arch {
     }
 }
 
-if ($IsWindows) {
+if ($mdvIsWindows) {
     $arch = Get-Arch
     if ($arch -notin @("x64", "arm64")) { throw "No Windows build available for architecture '$arch'." }
     $Asset = "mdv-windows-$arch.zip"
@@ -87,7 +83,7 @@ if ($Version -eq "latest") {
 if ($env:MDV_INSTALL) {
     $InstallDir = $env:MDV_INSTALL
 }
-elseif ($IsWindows) {
+elseif ($mdvIsWindows) {
     $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\mdv"
 }
 else {
@@ -100,7 +96,7 @@ $Dest = Join-Path $InstallDir $BinaryName
 
 # --- Download ----------------------------------------------------------------
 
-$platformLabel = if ($IsWindows) { "windows-$arch" } elseif ($IsMacOS) { "macos-darwin-universal" } else { "linux-$arch" }
+$platformLabel = if ($mdvIsWindows) { "windows-$arch" } elseif ($IsMacOS) { "macos-darwin-universal" } else { "linux-$arch" }
 Write-Host "Downloading mdv ($platformLabel, $Version)…"
 
 if ($IsArchive) {
@@ -131,7 +127,7 @@ else {
 }
 
 # Ensure the binary is executable on Unix-like systems.
-if (-not $IsWindows) {
+if (-not $mdvIsWindows) {
     & chmod +x $Dest
 }
 
@@ -139,7 +135,7 @@ Write-Host "Installed: $Dest"
 
 # --- Make sure the install dir is on PATH ------------------------------------
 
-if ($IsWindows) {
+if ($mdvIsWindows) {
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if (($userPath -split ';') -notcontains $InstallDir) {
         [Environment]::SetEnvironmentVariable("Path", "$userPath;$InstallDir", "User")
@@ -209,7 +205,7 @@ function Set-MdvMarkdownAssociation {
     Write-Host "or right-click a .md file > Open with > Choose another app > mdv > Always."
 }
 
-if ($IsWindows) {
+if ($mdvIsWindows) {
     $doAssoc = $false
     if ($AssociateMdFileExtension -or ($env:MDV_ASSOCIATE_MD -match '^(1|y|yes|true)$')) {
         $doAssoc = $true
