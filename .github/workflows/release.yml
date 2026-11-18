@@ -52,16 +52,16 @@ jobs:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
       HAS_WINDOWS_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -186,7 +186,7 @@ jobs:
           [ -d build/mdv.app ] && items+=(mdv.app)
           tar -C build -czf "dist/mdv-${{ matrix.target }}.tar.gz" "${items[@]}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mdv-${{ matrix.target }}
           path: dist/*
@@ -196,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true

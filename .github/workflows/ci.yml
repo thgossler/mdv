@@ -40,11 +40,11 @@ jobs:
     name: test (quality gate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
           cache-dependency-path: go.sum
@@ -71,7 +71,7 @@ jobs:
         run: go tool cover -func=coverage.out | tail -1
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
@@ -98,16 +98,16 @@ jobs:
             target: linux-arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -141,7 +141,7 @@ jobs:
         run: pwsh scripts/build.ps1 -Version "$env:GITHUB_REF_NAME" -Arch "${{ matrix.arch }}"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mdv-${{ matrix.target }}
           path: |
