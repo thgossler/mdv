@@ -45,6 +45,10 @@ export function ClearRecent(): $CancellablePromise<$models.RecentItem[] | null> 
     return $Call.ByID(3389475587);
 }
 
+export function ControlReply(id: number, result: string): $CancellablePromise<void> {
+    return $Call.ByID(2665575020, id, result);
+}
+
 /**
  * ExportPDF writes a PDF produced in the webview (the html2pdf.js fallback,
  * passed as base64) to a user-chosen location and opens it. It is used when the

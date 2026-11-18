@@ -1,5 +1,6 @@
 # Temp/local directories
 temp/
+tmp/
 
 # Build artifacts
 /build/

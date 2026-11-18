@@ -122,7 +122,14 @@ function isExternalHref(href: string): boolean {
 // blocks for their dedicated handlers.
 function highlightCode(code: string, lang: string): string {
   const language = (lang || "").toLowerCase();
-  if (language === "mermaid" || language === "csv" || language === "tsv") {
+  if (language === "mermaid") {
+    return (
+      `<pre><code class="language-mermaid" data-mermaid-source="${escapeAttr(
+        encodeURIComponent(code)
+      )}">${escapeHtml(code)}</code></pre>`
+    );
+  }
+  if (language === "csv" || language === "tsv") {
     return ""; // handled by custom fence renderers / post-processing
   }
   const inner =

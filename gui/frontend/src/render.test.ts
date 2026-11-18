@@ -59,6 +59,16 @@ describe("render resilience", () => {
     expect(res.html).toContain("After");
   });
 
+  it("preserves raw Mermaid source through HTML escaping", () => {
+    const source = 'flowchart LR\n A["<a href=\"https://example.com/?q=&quot;x&quot;&amp;y=1\">Link</a>"]\n';
+    const result = render(`\`\`\`mermaid\n${source}\`\`\`\n`);
+    const root = document.createElement("div");
+    root.innerHTML = result.html;
+    const code = root.querySelector<HTMLElement>("code.language-mermaid");
+    expect(code?.dataset.mermaidSource).toBeDefined();
+    expect(decodeURIComponent(code?.dataset.mermaidSource || "")).toBe(source);
+  });
+
   it("renders a massive table without throwing", () => {
     let md = "| A | B | C |\n| - | - | - |\n";
     for (let i = 0; i < 3000; i++) md += `| ${i} | val | x |\n`;

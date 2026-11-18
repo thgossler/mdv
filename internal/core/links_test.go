@@ -1,6 +1,7 @@
 package core
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,6 +52,58 @@ func TestResolveLinkKinds(t *testing.T) {
 	// Fragment extraction.
 	if got := ResolveLink("other.md#features", dir, dir, cfg, nil); got.Fragment != "features" {
 		t.Errorf("fragment = %q, want %q", got.Fragment, "features")
+	}
+}
+
+func TestResolveFileURLs(t *testing.T) {
+	dir := t.TempDir()
+	cfg := DefaultSettings()
+
+	mdPath := filepath.Join(dir, "résumé & guide.md")
+	if err := os.WriteFile(mdPath, []byte("# Guide\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	txtPath := filepath.Join(dir, "notes file.txt")
+	if err := os.WriteFile(txtPath, []byte("notes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mdURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(mdPath), Fragment: "Setup"}).String()
+	got := ResolveLink(mdURL, dir, dir, cfg, nil)
+	if got.Kind != LinkMarkdown || got.Resolved != mdPath || got.Fragment != "Setup" {
+		t.Errorf("markdown file URL: %+v", got)
+	}
+
+	txtURL := (&url.URL{Scheme: "file", Host: "localhost", Path: filepath.ToSlash(txtPath)}).String()
+	got = ResolveLink(txtURL, dir, dir, cfg, nil)
+	if got.Kind != LinkExternalFile || got.Resolved != txtPath {
+		t.Errorf("localhost file URL: %+v", got)
+	}
+
+	brokenURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(dir, "missing.md"))}).String()
+	if got := ResolveLink(brokenURL, dir, dir, cfg, nil); got.Kind != LinkBroken {
+		t.Errorf("missing file URL kind = %v, want broken", got.Kind)
+	}
+
+	remoteURL := (&url.URL{Scheme: "file", Host: "server", Path: filepath.ToSlash(mdPath)}).String()
+	if got := ResolveLink(remoteURL, dir, dir, cfg, nil); got.Kind != LinkBroken {
+		t.Errorf("remote file URL kind = %v, want broken", got.Kind)
+	}
+	if got := ResolveLink("file://localhost:123/tmp/guide.md", dir, dir, cfg, nil); got.Kind != LinkBroken {
+		t.Errorf("file URL with port kind = %v, want broken", got.Kind)
+	}
+
+	if got := ResolveLink("file:///tmp/bad%ZZ.md", dir, dir, cfg, nil); got.Kind != LinkBroken {
+		t.Errorf("malformed file URL kind = %v, want broken", got.Kind)
+	}
+
+	percentPath := filepath.Join(dir, "literal%20name.md")
+	if err := os.WriteFile(percentPath, []byte("# Percent"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	percentURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(percentPath)}).String()
+	if got := ResolveLink(percentURL, dir, dir, cfg, nil); got.Kind != LinkMarkdown || got.Resolved != percentPath {
+		t.Errorf("literal percent file URL: %+v", got)
 	}
 }
 

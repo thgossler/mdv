@@ -321,6 +321,37 @@
 .mermaid-diagram.standalone {
   margin-top: 24px;
 }
+.mermaid-diagram a[data-mdv-href] {
+  color: var(--accent);
+  cursor: pointer;
+}
+.mermaid-diagram a[data-mdv-href] .nodeLabel,
+.mermaid-diagram a[data-mdv-href] text,
+.mermaid-diagram a[data-mdv-href] tspan,
+.mermaid-diagram .nodeLabel a[data-mdv-href],
+.mermaid-diagram .nodeLabel a[data-mdv-href] * {
+  color: var(--accent) !important;
+  fill: var(--accent) !important;
+  text-decoration: underline !important;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+.mermaid-diagram a[data-mdv-href]:hover .nodeLabel,
+.mermaid-diagram a[data-mdv-href]:hover text,
+.mermaid-diagram a[data-mdv-href]:hover tspan,
+.mermaid-diagram a[data-mdv-href]:focus-visible .nodeLabel,
+.mermaid-diagram a[data-mdv-href]:focus-visible text,
+.mermaid-diagram a[data-mdv-href]:focus-visible tspan {
+  text-decoration-thickness: 0.14em;
+}
+.mermaid-diagram a[data-mdv-href]:focus-visible path,
+.mermaid-diagram a[data-mdv-href]:focus-visible rect,
+.mermaid-diagram a[data-mdv-href]:focus-visible circle,
+.mermaid-diagram a[data-mdv-href]:focus-visible ellipse,
+.mermaid-diagram a[data-mdv-href]:focus-visible polygon {
+  stroke: var(--accent) !important;
+  stroke-width: 3px !important;
+}
 .mermaid-diagram svg {
   max-width: 100%;
   height: auto;

@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -50,10 +51,7 @@ func ResolveLink(raw, currentDir, rootDir string, cfg Defaults, workspace []DocF
 			t.Resolved = href
 			t.Display = href
 		case "file":
-			if u, err := url.Parse(href); err == nil {
-				return resolveFilePath(u.Path, "", currentDir, rootDir, cfg, raw)
-			}
-			t.Kind = LinkUnknown
+			return resolveFileURL(href, currentDir, rootDir, cfg, raw)
 		default:
 			// ftp, vscode, custom schemes: let the OS handle it.
 			t.Kind = LinkHTTP
@@ -76,6 +74,26 @@ func ResolveLink(raw, currentDir, rootDir string, cfg Defaults, workspace []DocF
 	return resolveFilePath(path, frag, currentDir, rootDir, cfg, raw)
 }
 
+// resolveFileURL parses a file URL and resolves its local path. Only an empty
+// host or localhost is accepted; other authorities could refer to a network
+// resource and must not be opened as a coincidentally matching local path.
+func resolveFileURL(href, currentDir, rootDir string, cfg Defaults, raw string) LinkTarget {
+	u, err := url.Parse(href)
+	if err != nil || u.User != nil || u.RawQuery != "" || u.Port() != "" ||
+		(u.Host != "" && !strings.EqualFold(u.Hostname(), "localhost")) {
+		return LinkTarget{Kind: LinkBroken, Raw: raw, Display: raw}
+	}
+
+	path := u.Path
+	if u.Opaque != "" {
+		path = u.Opaque
+	}
+	if runtime.GOOS == "windows" && len(path) >= 3 && path[0] == '/' && path[2] == ':' {
+		path = path[1:]
+	}
+	return resolveDecodedFilePath(path, u.Fragment, currentDir, rootDir, cfg, raw)
+}
+
 // resolveFilePath resolves a (possibly relative) filesystem path to a markdown,
 // external-file, or broken target.
 //
@@ -84,10 +102,13 @@ func ResolveLink(raw, currentDir, rootDir string, cfg Defaults, workspace []DocF
 // filesystem path; if nothing is found there, it is resolved relative to the
 // workspace root instead. rootDir may be empty to disable that fallback.
 func resolveFilePath(path, frag, currentDir, rootDir string, cfg Defaults, raw string) LinkTarget {
+	return resolveDecodedFilePath(decodePath(path), frag, currentDir, rootDir, cfg, raw)
+}
+
+func resolveDecodedFilePath(path, frag, currentDir, rootDir string, cfg Defaults, raw string) LinkTarget {
 	t := LinkTarget{Raw: raw, Fragment: frag, Display: raw}
 
-	decoded := decodePath(path)
-	decoded = expandHome(decoded)
+	decoded := expandHome(path)
 	decoded = filepath.FromSlash(decoded)
 
 	// Anchor-only after splitting (e.g. "#foo" already handled, but "./#foo").

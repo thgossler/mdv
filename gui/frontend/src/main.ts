@@ -8,7 +8,7 @@ import "./styles/code.css";
 import { api, type InitInfo, type DocFileDTO, type ContentMatch, type RecentItem } from "./bridge";
 import { render } from "./render";
 import { extractFrontmatter, renderFrontmatter, sourceLineMapper } from "./frontmatter";
-import { renderMermaid, renderMermaidSource } from "./mermaidRunner";
+import { getLinkDestination, renderMermaid, renderMermaidSource } from "./mermaidRunner";
 import { initTheme, toggleTheme, setTheme, isDark, onThemeChange, type ThemeMode } from "./theme";
 import { initZoom, zoomIn, zoomOut, zoomReset, refreshZoom } from "./zoom";
 import { initSearch, showSearch, clearSearch, jumpToContentMatch } from "./search";
@@ -677,7 +677,7 @@ els.content.addEventListener("click", async (e) => {
     return;
   }
 
-  const href = a.getAttribute("href") || "";
+  const href = getLinkDestination(a);
   if (!href) return;
 
   if (href.startsWith("#")) {
@@ -715,7 +715,7 @@ els.content.addEventListener("mouseover", async (e) => {
     els.statusLeft.textContent = a.title || a.getAttribute("data-wikilink") || "";
     return;
   }
-  const href = a.getAttribute("href") || "";
+  const href = getLinkDestination(a);
   if (href.startsWith("#")) {
     els.statusLeft.textContent = href;
     return;
