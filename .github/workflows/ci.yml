@@ -49,15 +49,11 @@ jobs:
           go-version: "1.26"
           cache-dependency-path: go.sum
 
-      - name: Install Linux WebKitGTK (build-time only)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-
       - name: go vet
-        # Install the Linux webview toolchain here so the quality gate exercises
-        # the same GUI packages that local builds and the platform matrix use.
-        run: go vet ./...
+        # The quality gate covers the pure-Go launcher and shared packages. The
+        # gui package is compiled and tested in the platform matrix, whose Linux
+        # jobs install the required webview toolchain.
+        run: go vet $(go list ./... | grep -v '/gui$')
 
       - name: Check gofmt
         run: |
@@ -69,7 +65,7 @@ jobs:
           fi
 
       - name: Run unit + e2e tests (race + coverage)
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/gui$')
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
@@ -121,7 +117,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+          sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: Install Wails v3 CLI (Windows only)
         # scripts/build.ps1 calls wails3 directly; scripts/build.sh tolerates a
