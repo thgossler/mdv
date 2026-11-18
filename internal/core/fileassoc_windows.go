@@ -8,39 +8,55 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// registerFileAssociations adds an "Open with mdv" verb to the right-click menu
-// of Markdown files in File Explorer. It writes per-user keys under
-// HKCU\Software\Classes\SystemFileAssociations\<ext>\shell, which augments the
-// context menu without changing the file's default program, and needs no admin
-// rights. The entry is per extension so .md, .mdx and .markdown each get it.
+// registerFileAssociations adds an "Open with mdv" verb to Markdown files and
+// folders in File Explorer. It writes per-user keys under HKCU\Software\Classes,
+// which augments the context menus without changing default programs and needs
+// no admin rights.
 func registerFileAssociations(exe string) error {
-	command := fmt.Sprintf("\"%s\" --gui \"%%1\"", exe)
 	icon := fmt.Sprintf("\"%s\",0", exe)
-
-	for _, ext := range markdownExtensions {
-		verb := `Software\Classes\SystemFileAssociations\` + ext + `\shell\mdv`
-
-		k, _, err := registry.CreateKey(registry.CURRENT_USER, verb, registry.SET_VALUE)
-		if err != nil {
+	for _, registration := range windowsShellRegistrations() {
+		if err := registerWindowsShellVerb(registration.verb, exe, registration.argument, icon); err != nil {
 			return err
 		}
-		if err := k.SetStringValue("", "Open with mdv"); err != nil {
-			k.Close()
-			return err
-		}
-		// Best-effort menu icon; ignore failures (the verb still works).
-		_ = k.SetStringValue("Icon", icon)
-		k.Close()
-
-		ck, _, err := registry.CreateKey(registry.CURRENT_USER, verb+`\command`, registry.SET_VALUE)
-		if err != nil {
-			return err
-		}
-		if err := ck.SetStringValue("", command); err != nil {
-			ck.Close()
-			return err
-		}
-		ck.Close()
 	}
 	return nil
+}
+
+type windowsShellRegistration struct {
+	verb     string
+	argument string
+}
+
+func windowsShellRegistrations() []windowsShellRegistration {
+	registrations := make([]windowsShellRegistration, 0, len(markdownExtensions)+2)
+	for _, ext := range markdownExtensions {
+		registrations = append(registrations, windowsShellRegistration{
+			verb:     `Software\Classes\SystemFileAssociations\` + ext + `\shell\mdv`,
+			argument: "%1",
+		})
+	}
+	return append(registrations,
+		windowsShellRegistration{verb: `Software\Classes\Directory\shell\mdv`, argument: "%1"},
+		windowsShellRegistration{verb: `Software\Classes\Directory\Background\shell\mdv`, argument: "%V"},
+	)
+}
+
+func registerWindowsShellVerb(verb, exe, argument, icon string) error {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, verb, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	if err := k.SetStringValue("", "Open with mdv"); err != nil {
+		k.Close()
+		return err
+	}
+	_ = k.SetStringValue("Icon", icon)
+	k.Close()
+
+	command, _, err := registry.CreateKey(registry.CURRENT_USER, verb+`\command`, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer command.Close()
+	return command.SetStringValue("", fmt.Sprintf("\"%s\" --gui \"%s\"", exe, argument))
 }

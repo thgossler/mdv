@@ -7,11 +7,11 @@ import (
 )
 
 // FileAssocSchemeVersion is the version of mdv's OS file-manager integration -
-// the "Open with mdv" entry shown for Markdown files (a context-menu verb on
-// Windows, the Finder "Open With" submenu on macOS). Bump it whenever the
-// registration scheme changes (e.g. a new extension or a different command) so
-// existing installs re-register on their next launch.
-const FileAssocSchemeVersion = 1
+// the "Open with mdv" entry shown for Markdown files and folders (a context-menu
+// verb on Windows, the Finder "Open With" submenu on macOS). Bump it whenever
+// the registration scheme changes (e.g. a new extension or a different command)
+// so existing installs re-register on their next launch.
+const FileAssocSchemeVersion = 2
 
 // fileAssocStateKey is the state.jsonc key that records the scheme version last
 // registered, so registration runs once rather than on every startup.
@@ -35,10 +35,10 @@ func statePath() (string, error) {
 }
 
 // EnsureFileAssociations registers an "Open with mdv" entry in the OS file
-// manager for Markdown files, unless a previous run already did so for the
-// current scheme version (recorded in state.jsonc for fast startup). It is
-// best-effort: a returned error should be surfaced as a warning, not treated as
-// fatal. Unsupported platforms - and layouts where mdv cannot be registered,
+// manager for Markdown files and folders, unless a previous run already did so
+// for the current scheme version (recorded in state.jsonc for fast startup). It
+// is best-effort: a returned error should be surfaced as a warning, not treated
+// as fatal. Unsupported platforms - and layouts where mdv cannot be registered,
 // such as a bare binary install on macOS - are silent no-ops.
 func EnsureFileAssociations() error {
 	if fileAssocVersionFromState() >= FileAssocSchemeVersion {

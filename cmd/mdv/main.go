@@ -71,8 +71,8 @@ func run() int {
 	}
 
 	// Best-effort, once per install: add an "Open with mdv" entry to the OS file
-	// manager for Markdown files. A marker in state.jsonc keeps later launches
-	// fast by skipping the work after the first successful registration.
+	// manager for Markdown files and folders. A marker in state.jsonc keeps later
+	// launches fast by skipping the work after the first successful registration.
 	if err := core.EnsureFileAssociations(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: file association setup: %v\n", err)
 	}

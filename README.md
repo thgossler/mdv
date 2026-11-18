@@ -214,14 +214,14 @@ type README.md | mdv --console           # Windows (cmd.exe)
 > macOS/Linux, passing a file path (`mdv --console README.md`), and redirecting
 > to a file in `cmd.exe` all work without the extra step.
 
-### Open Markdown files from File Manager
+### Open Markdown files and folders from File Manager
 
-mdv can register itself as a handler for `.md` files so you can open Markdown by
-double-clicking it in your file manager - the document opens in the mdv GUI. The
-installer script sets this up for you when you opt in (it asks during an interactive
-install, or pass `--associate-md-file-extension` / `-AssociateMdFileExtension`,
-or set `MDV_ASSOCIATE_MD=1`). Either way, the plain `mdv` command stays the way
-to use mdv from the terminal.
+mdv can register itself as a handler for `.md` files and folders, so you can open
+individual Markdown documents or browse an entire folder in the mdv GUI from your
+file manager. The installer script sets this up for you when you opt in (it asks
+during an interactive install, or pass `--associate-md-file-extension` /
+`-AssociateMdFileExtension`, or set `MDV_ASSOCIATE_MD=1`). Either way, the plain
+`mdv` command stays the way to use mdv from the terminal.
 
 Two platform specifics are worth knowing:
 
@@ -234,12 +234,13 @@ Two platform specifics are worth knowing:
   file's **Get Info → Open with → Change All…**, or run
   `duti -s de.thomas-gossler.apps.mdv net.daringfireball.markdown all`. The
   wrapper runs as a background agent, so only the mdv GUI icon appears in the
-  Dock.
+  Dock. The same app appears under **Open With** when you select a folder.
 - **Linux** - automatic `.md` association is **not** performed; set up your
   desktop environment's file association manually if you want it.
 
-On **Windows** the installer registers a per-user handler (no admin rights
-needed), so association works out of the box once you opt in.
+On **Windows** the installer registers per-user context menu entries (no admin
+rights needed) for Markdown files, selected folders, and folder backgrounds, so
+association works out of the box once you opt in.
 
 ### Document content search
 

@@ -135,8 +135,8 @@ else
 fi
 macos_sign "build/mdv${HELPER_EXT}"
 
-# macOS: also produce mdv.app, a Finder-friendly bundle that lets users
-# associate Markdown files with mdv (Open With / set as default app). It embeds
+# macOS: also produce mdv.app, a Finder-friendly bundle that lets users open
+# Markdown files and folders with mdv (Open With / set as default app). It embeds
 # the universal launcher just built above and is signed with the same identity.
 if [ "$GOOS" = "darwin" ]; then
   echo "==> Building macOS app bundle (mdv.app)"

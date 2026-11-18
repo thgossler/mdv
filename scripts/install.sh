@@ -147,7 +147,7 @@ else
   echo "To use mdv now in the current shell, run:  export PATH=\"$bindir:\$PATH\""
 fi
 
-# --- optional: associate .md files with the mdv app (macOS) -----------------
+# --- optional: install the mdv app for Markdown files and folders (macOS) ---
 # The macOS release archive bundles mdv.app, the only thing Finder/LaunchServices
 # can use as a handler for a file type (a bare CLI binary can never be a default
 # app). Offer to install and register it. Set MDV_ASSOCIATE_MD=1 to associate
@@ -196,7 +196,7 @@ if [ "$os" = "Darwin" ] && [ -d "$tmp/mdv.app" ]; then
   elif [ -n "${MDV_ASSOCIATE_MD:-}" ]; then
     case "$MDV_ASSOCIATE_MD" in 1|y|Y|yes|YES|true|TRUE) associate=yes ;; esac
   elif [ "$silent" != yes ] && [ -r /dev/tty ]; then
-    printf 'Associate Markdown (.md) files with mdv? [y/N] ' > /dev/tty
+    printf 'Add mdv to Finder for Markdown files and folders? [y/N] ' > /dev/tty
     read -r reply < /dev/tty || reply=""
     case "$reply" in y|Y|yes|YES) associate=yes ;; esac
   fi

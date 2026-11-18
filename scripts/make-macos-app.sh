@@ -17,8 +17,8 @@
 #   universal `mdv` launcher is embedded at Contents/MacOS/mdv so the bundle is
 #   self-contained and works from anywhere (e.g. /Applications).
 #
-# The bundle declares the Markdown document type so it can be set as the default
-# handler for .md/.markdown files, and uses images/icon.png as its app icon.
+# The bundle declares Markdown document and folder types so Finder can offer it
+# for both .md/.markdown files and directories, and uses images/icon.png as its app icon.
 #
 # Code signing / hardened runtime is applied when MDV_MACOS_SIGN_IDENTITY is set
 # (a no-op otherwise, matching scripts/build.sh).
@@ -59,7 +59,7 @@ rm -rf "$APP"
 SCRIPT_TMP="$(mktemp -t mdv-applet).applescript"
 trap 'rm -f "$SCRIPT_TMP"' EXIT
 cat > "$SCRIPT_TMP" <<'APPLESCRIPT'
--- mdv launcher applet: forwards opened Markdown files to the embedded launcher.
+-- mdv launcher applet: forwards opened files and folders to the embedded launcher.
 on run
 	launchWith({})
 end run
@@ -104,7 +104,7 @@ rm -rf "$(dirname "$ICONSET")"
 # Drop the default droplet icon assets so Finder uses AppIcon.icns unambiguously.
 rm -f "$APP/Contents/Resources/droplet.icns" "$APP/Contents/Resources/Assets.car"
 
-# --- 4. Write the Info.plist (declares the Markdown document type) -----------
+# --- 4. Write the Info.plist (declares Markdown documents and folders) ------
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -167,6 +167,18 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 			<key>CFBundleTypeExtensions</key>
 			<array>
 				<string>mdx</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Folder</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.folder</string>
 			</array>
 		</dict>
 	</array>

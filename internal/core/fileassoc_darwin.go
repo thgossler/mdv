@@ -14,10 +14,10 @@ const lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/" +
 	"Frameworks/LaunchServices.framework/Support/lsregister"
 
 // registerFileAssociations makes mdv appear in Finder's "Open With" submenu for
-// Markdown files. macOS has no per-item context-menu verb API the way Windows
-// does; the supported equivalent is the "Open With" entry, populated by Launch
-// Services from the app bundle's declared document types (see the Info.plist
-// built by scripts/make-macos-app.sh, which covers .md, .mdx and .markdown).
+// Markdown files and folders. macOS has no per-item context-menu verb API the
+// way Windows does; the supported equivalent is the "Open With" entry,
+// populated by Launch Services from the app bundle's declared document types
+// (see the Info.plist built by scripts/make-macos-app.sh).
 // Here we force-register that bundle so the entry appears without waiting for a
 // background re-scan. When mdv runs as a bare binary (e.g. installed to
 // /usr/local/bin) there is no bundle to register, so this is a no-op.
