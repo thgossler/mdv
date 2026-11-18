@@ -48,6 +48,10 @@ const ignoreEnv = "MDV_IGNORE"
 // launcher.MDVSidePanelEnv.
 const sidePanelEnv = "MDV_SIDEPANEL"
 
+// noUpdateEnv disables all automatic update work for this GUI session. It must
+// match launcher.MDVNoUpdateEnv.
+const noUpdateEnv = "MDV_NO_UPDATE_CHECK"
+
 func main() {
 	if err := runGUI(); err != nil {
 		log.Fatal(err)
@@ -69,6 +73,9 @@ func windowBackground(theme string) application.RGBA {
 
 func runGUI() error {
 	cfg, _ := core.LoadConfig()
+	if os.Getenv(noUpdateEnv) == "1" {
+		cfg.CheckForUpdates = false
+	}
 
 	in := resolveInput(cfg)
 

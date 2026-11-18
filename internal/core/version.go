@@ -14,12 +14,13 @@ import (
 
 // UpdateInfo describes the result of a version check.
 type UpdateInfo struct {
-	Available   bool   `json:"-"`
-	Current     string `json:"current"`
-	Latest      string `json:"latest"`
-	DownloadURL string `json:"downloadUrl"`
-	ReleaseURL  string `json:"releaseUrl"`
-	CheckedAt   int64  `json:"checkedAt"` // unix seconds
+	Available       bool   `json:"-"`
+	Current         string `json:"current"`
+	Latest          string `json:"latest"`
+	DownloadURL     string `json:"downloadUrl"`
+	ReleaseURL      string `json:"releaseUrl"`
+	CheckedAt       int64  `json:"checkedAt"`       // unix seconds of the last successful check
+	LastAttemptedAt int64  `json:"lastAttemptedAt"` // unix seconds of the last automatic attempt
 }
 
 // updateCacheFile is where the last check result is cached to respect the
@@ -34,8 +35,9 @@ func updateCacheFile() (string, error) {
 
 // CheckForUpdate queries the GitHub Releases API for the latest release of the
 // configured repo and compares it to the current version. Results are cached
-// for cfg.UpdateCheckHours. A network failure is not fatal: it returns an
-// UpdateInfo with Available=false and a non-nil error.
+// for cfg.UpdateCheckHours, including failed attempts. A network failure is not
+// fatal to the application: it returns the last cached result and a non-nil
+// error for callers that want to distinguish the failed refresh.
 func CheckForUpdate(ctx context.Context, cfg Defaults) (UpdateInfo, error) {
 	info := UpdateInfo{Current: Version}
 
@@ -50,6 +52,9 @@ func CheckForUpdate(ctx context.Context, cfg Defaults) (UpdateInfo, error) {
 
 	latest, dl, rel, err := fetchLatestRelease(ctx, cfg.UpdateRepo)
 	if err != nil {
+		info = CachedUpdate(cfg)
+		info.LastAttemptedAt = time.Now().Unix()
+		writeUpdateCache(info)
 		return info, err
 	}
 
@@ -57,6 +62,7 @@ func CheckForUpdate(ctx context.Context, cfg Defaults) (UpdateInfo, error) {
 	info.DownloadURL = dl
 	info.ReleaseURL = rel
 	info.CheckedAt = time.Now().Unix()
+	info.LastAttemptedAt = info.CheckedAt
 	info.Available = VersionLess(Version, latest)
 
 	writeUpdateCache(info)
@@ -82,13 +88,43 @@ func CheckForUpdateNow(ctx context.Context, cfg Defaults) (UpdateInfo, error) {
 	info.DownloadURL = dl
 	info.ReleaseURL = rel
 	info.CheckedAt = time.Now().Unix()
+	info.LastAttemptedAt = info.CheckedAt
 	info.Available = VersionLess(Version, latest)
 
 	writeUpdateCache(info)
 	return info, nil
 }
 
+// CachedUpdate returns the last successful result without performing any I/O
+// beyond reading the local cache. It is safe to call during startup.
+func CachedUpdate(cfg Defaults) UpdateInfo {
+	if !cfg.CheckForUpdates || cfg.UpdateRepo == "" {
+		return UpdateInfo{Current: Version}
+	}
+	info, ok := readUpdateCacheFile()
+	if !ok {
+		return UpdateInfo{Current: Version}
+	}
+	return info
+}
+
 func readUpdateCache(cfg Defaults) (UpdateInfo, bool) {
+	info, ok := readUpdateCacheFile()
+	if !ok {
+		return UpdateInfo{}, false
+	}
+	attemptedAt := info.LastAttemptedAt
+	if attemptedAt == 0 {
+		attemptedAt = info.CheckedAt
+	}
+	age := time.Since(time.Unix(attemptedAt, 0))
+	if age > time.Duration(cfg.UpdateCheckHours)*time.Hour {
+		return UpdateInfo{}, false
+	}
+	return info, true
+}
+
+func readUpdateCacheFile() (UpdateInfo, bool) {
 	path, err := updateCacheFile()
 	if err != nil {
 		return UpdateInfo{}, false
@@ -99,10 +135,6 @@ func readUpdateCache(cfg Defaults) (UpdateInfo, bool) {
 	}
 	var info UpdateInfo
 	if json.Unmarshal(raw, &info) != nil {
-		return UpdateInfo{}, false
-	}
-	age := time.Since(time.Unix(info.CheckedAt, 0))
-	if age > time.Duration(cfg.UpdateCheckHours)*time.Hour {
 		return UpdateInfo{}, false
 	}
 	info.Current = Version

@@ -48,6 +48,10 @@ const MDVIgnoreEnv = "MDV_IGNORE"
 // navigator panel visible for this session even when a single file is opened.
 const MDVSidePanelEnv = "MDV_SIDEPANEL"
 
+// MDVNoUpdateEnv disables all automatic update work in the spawned GUI helper
+// for the current session.
+const MDVNoUpdateEnv = "MDV_NO_UPDATE_CHECK"
+
 // SpawnGUIPicker launches the embedded GUI helper with no input path, signalling
 // it (via MDVPickEnv) to present a native file/folder picker on startup. It
 // returns ErrNoEmbeddedGUI when no helper is bundled. The environment variable

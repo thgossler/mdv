@@ -44,6 +44,7 @@ type Bridge struct {
 	searchMu     sync.Mutex
 	searchGen    uint64
 	searchCancel context.CancelFunc
+	updateOnce   sync.Once
 
 	// excludeMu guards the navigator exclusion state below.
 	excludeMu       sync.Mutex
@@ -796,9 +797,23 @@ func (b *Bridge) OpenInNewWindow(path string, fragment string) string {
 }
 
 func (b *Bridge) checkUpdate() UpdateDTO {
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
-	defer cancel()
-	info, _ := core.CheckForUpdate(ctx, b.cfg)
+	info := core.CachedUpdate(b.cfg)
+	if b.cfg.CheckForUpdates {
+		b.updateOnce.Do(func() {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+				defer cancel()
+				fresh, _ := core.CheckForUpdate(ctx, b.cfg)
+				if fresh.Available && b.emit != nil {
+					b.emit("update:available", UpdateDTO{
+						Available:   true,
+						Latest:      fresh.Latest,
+						DownloadURL: fresh.DownloadURL,
+					})
+				}
+			}()
+		})
+	}
 	return UpdateDTO{Available: info.Available, Latest: info.Latest, DownloadURL: info.DownloadURL}
 }
 

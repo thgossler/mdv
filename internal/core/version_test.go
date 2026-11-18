@@ -162,13 +162,58 @@ func TestReadUpdateCacheExpired(t *testing.T) {
 	cfg.UpdateCheckHours = 1
 
 	stale := UpdateInfo{
-		Latest:    "v9.9.9",
-		CheckedAt: time.Now().Add(-2 * time.Hour).Unix(),
+		Latest:          "v9.9.9",
+		CheckedAt:       time.Now().Add(-2 * time.Hour).Unix(),
+		LastAttemptedAt: time.Now().Add(-2 * time.Hour).Unix(),
 	}
 	writeUpdateCache(stale)
 
 	if _, ok := readUpdateCache(cfg); ok {
 		t.Error("expired cache returned ok=true, want false")
+	}
+	if got := CachedUpdate(cfg); got.Latest != stale.Latest {
+		t.Errorf("CachedUpdate Latest = %q, want stale cached %q", got.Latest, stale.Latest)
+	}
+}
+
+func TestFailedUpdateAttemptStartsCooldownAndPreservesResult(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := DefaultSettings()
+	cached := UpdateInfo{
+		Latest:          "v9.9.9",
+		DownloadURL:     "https://example.com/download",
+		CheckedAt:       time.Now().Add(-5 * time.Hour).Unix(),
+		LastAttemptedAt: time.Now().Add(-5 * time.Hour).Unix(),
+	}
+	writeUpdateCache(cached)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	info, err := CheckForUpdate(ctx, cfg)
+	if err == nil {
+		t.Fatal("CheckForUpdate with canceled context returned nil error")
+	}
+	if info.Latest != cached.Latest || info.LastAttemptedAt == 0 {
+		t.Fatalf("failed attempt info = %+v, want preserved result with attempt time", info)
+	}
+
+	// A fresh attempt timestamp must suppress another request, even while the
+	// last successful release result is older than the refresh interval.
+	if info, err := CheckForUpdate(context.Background(), cfg); err != nil {
+		t.Fatalf("second CheckForUpdate during cooldown = %v", err)
+	} else if info.Latest != cached.Latest {
+		t.Errorf("second CheckForUpdate Latest = %q, want %q", info.Latest, cached.Latest)
+	}
+}
+
+func TestCachedUpdateHonorsDisabledChecks(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := DefaultSettings()
+	writeUpdateCache(UpdateInfo{Latest: "v9.9.9", CheckedAt: time.Now().Unix()})
+	cfg.CheckForUpdates = false
+
+	if got := CachedUpdate(cfg); got.Available || got.Latest != "" {
+		t.Errorf("CachedUpdate with checks disabled = %+v, want empty result", got)
 	}
 }
 

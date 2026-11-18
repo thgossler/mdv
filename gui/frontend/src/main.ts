@@ -150,6 +150,11 @@ const els = {
 // --- bootstrap --------------------------------------------------------------
 
 async function boot(): Promise<void> {
+  Events.On("update:available", (event: { data: { available: boolean; latest: string; downloadUrl: string } }) => {
+    if (event.data?.available) {
+      els.statusMid.innerHTML = `New version ${escapeHtml(event.data.latest)}, run <code>mdv update</code>`;
+    }
+  });
   info = await api.init();
   workspace = info.workspace ?? [];
   labelMode = info.config.navLabelMode === "title" ? "title" : "filename";

@@ -65,6 +65,22 @@ func TestStatusBarRendersRequestedRows(t *testing.T) {
 	}
 }
 
+func TestUpdateMessageAppearsWithoutRestart(t *testing.T) {
+	m := Model{width: 120, focus: focusContent}
+	next, cmd := m.Update(updateAvailableMsg{info: core.UpdateInfo{
+		Available: true,
+		Latest:    "v9.9.9",
+	}})
+	if cmd != nil {
+		t.Fatal("update message returned an unexpected command")
+	}
+	updated := next.(Model)
+	_, status, _, _ := updated.statusParts()
+	if !strings.Contains(status, "v9.9.9") {
+		t.Errorf("status after update message = %q, want release version", status)
+	}
+}
+
 // TestViewFillsTerminalHeight ensures the full view (header + body + focus bar +
 // status bar) occupies exactly the terminal height in both the one-line and the
 // wrapped two-line status-bar cases, so the altscreen does not jitter.

@@ -472,7 +472,20 @@ Notes:
 - Zoom (Cmd/Ctrl + wheel / +/-), light/dark/system themes, configurable fonts
 - History navigation, link target preview in the status bar
 - "Open in new window"
-- Automatic update checks
+- Automatic update checks (cached and refreshed in the background)
+
+## Update checks
+
+`mdv` checks for new releases at most once every four hours. Failed or offline
+attempts use the same cooldown and never produce an automatic-check error. A
+cached update notice is available immediately on startup; GUI and TUI sessions
+receive fresh results asynchronously. Console output finishes rendering before
+waiting briefly for a due check to populate the cache, so the next invocation
+can show the notice.
+
+Use `--no-update-check` to disable cache reads, network checks, background work,
+and automatic notifications for one invocation. The explicit `mdv update`
+command still performs a check and install request.
 
 ## Configuration
 

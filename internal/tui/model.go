@@ -130,6 +130,7 @@ type Model struct {
 
 	statusMsg string
 	update    core.UpdateInfo
+	updateCh  <-chan core.UpdateInfo
 
 	// watcher delivers debounced filesystem events (active-document content
 	// changes and workspace tree changes) so the viewer can live-reload and keep
@@ -170,6 +171,10 @@ type imagesReadyMsg struct {
 // Bubble Tea update loop.
 type watchEventMsg struct {
 	ev watch.Event
+}
+
+type updateAvailableMsg struct {
+	info core.UpdateInfo
 }
 
 // statusExpireMsg clears a transient status message once its display time has
@@ -462,7 +467,22 @@ func resolveStyle(theme string) string {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return waitForWatch(m.watchCh) }
+func (m Model) Init() tea.Cmd {
+	return tea.Batch(waitForWatch(m.watchCh), waitForUpdate(m.updateCh))
+}
+
+func waitForUpdate(ch <-chan core.UpdateInfo) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		info, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return updateAvailableMsg{info: info}
+	}
+}
 
 // waitForWatch returns a command that blocks until the next filesystem event is
 // available on ch and delivers it as a watchEventMsg. It returns nil when live
@@ -487,7 +507,18 @@ var ErrNoTerminal = errors.New("no interactive terminal available")
 
 // Run starts the program and blocks until the user quits.
 func Run(cfg core.Defaults, in core.Input, upd core.UpdateInfo) error {
-	m := New(cfg, in, upd)
+	return runModel(New(cfg, in, upd))
+}
+
+// RunWithUpdateCheck starts immediately with cached update information and
+// receives the result of a background refresh through updCh.
+func RunWithUpdateCheck(cfg core.Defaults, in core.Input, updCh <-chan core.UpdateInfo) error {
+	m := New(cfg, in, core.CachedUpdate(cfg))
+	m.updateCh = updCh
+	return runModel(m)
+}
+
+func runModel(m Model) error {
 	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion()}
 	// When markdown is piped on stdin, os.Stdin carries the document, not the
 	// keyboard, so reopen the controlling terminal for interactive use. We
@@ -619,6 +650,10 @@ func (m Model) routeMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.renderCache = nil
 			m.rerender()
 		}
+		return m, nil
+
+	case updateAvailableMsg:
+		m.update = msg.info
 		return m, nil
 
 	case watchEventMsg:

@@ -37,6 +37,7 @@ func run() int {
 		flagVersion   = flag.Bool("version", false, "print version and exit")
 		flagInit      = flag.Bool("init-config", false, "write a default settings.jsonc and exit")
 		flagNoColor   = flag.Bool("no-color", false, "disable ANSI colors in console output")
+		flagNoUpdate  = flag.Bool("no-update-check", false, "disable automatic update checking for this run")
 		flagMaxWidth  = flag.Int("max-width", 0, "cap the render width in columns (0 = full width)")
 		flagImages    = flag.String("images", "", "image rendering: auto|graphics|blocks|off")
 		flagPDF       = flag.String("pdf", "", "render the input to a PDF at the given file or folder path and exit")
@@ -61,6 +62,10 @@ func run() int {
 	cfg, cfgErr := core.LoadConfig()
 	if cfgErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", cfgErr)
+	}
+	if *flagNoUpdate {
+		cfg.CheckForUpdates = false
+		os.Setenv(launcher.MDVNoUpdateEnv, "1")
 	}
 
 	// The "update" subcommand checks GitHub Releases and, when a newer version
@@ -189,20 +194,17 @@ func run() int {
 		return 2
 	}
 
-	// Begin an asynchronous update check; results are consumed best-effort.
-	updCh := startUpdateCheck(cfg)
-
 	switch mode {
 	case launcher.ModeGUI:
 		if err := spawnGUIForInput(in); err != nil {
 			// GUI unavailable in this build/environment: fall back.
-			return runFallback(cfg, in, updCh, *flagNoColor)
+			return runFallback(cfg, in, *flagNoColor)
 		}
 		return 0
 
 	case launcher.ModeTUI:
-		upd := waitUpdate(updCh, 1500*time.Millisecond)
-		if err := tui.Run(cfg, in, upd); err != nil {
+		updCh := startUpdateCheck(cfg)
+		if err := tui.RunWithUpdateCheck(cfg, in, updCh); err != nil {
 			// No interactive terminal (e.g. stdin and stdout both piped): the
 			// TUI cannot run, so render to the console instead.
 			if errors.Is(err, tui.ErrNoTerminal) {
@@ -218,7 +220,7 @@ func run() int {
 		return 0
 
 	default: // ModeConsole
-		return runConsole(cfg, in, updCh, *flagNoColor)
+		return runConsole(cfg, in, startUpdateCheck(cfg), *flagNoColor)
 	}
 }
 
@@ -327,10 +329,10 @@ func spawnGUIForInput(in core.Input) error {
 }
 
 // runFallback chooses TUI when a terminal is attached, otherwise console.
-func runFallback(cfg core.Defaults, in core.Input, updCh <-chan core.UpdateInfo, noColor bool) int {
+func runFallback(cfg core.Defaults, in core.Input, noColor bool) int {
+	updCh := startUpdateCheck(cfg)
 	if console.StdoutIsTTY() && console.StdinIsTTY() {
-		upd := waitUpdate(updCh, 1500*time.Millisecond)
-		if err := tui.Run(cfg, in, upd); err != nil {
+		if err := tui.RunWithUpdateCheck(cfg, in, updCh); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			return 1
 		}
@@ -373,7 +375,7 @@ func runConsole(cfg core.Defaults, in core.Input, updCh <-chan core.UpdateInfo, 
 		fmt.Printf("\nOpen one with: %s <file>\n", core.AppName)
 	}
 
-	if upd := waitUpdate(updCh, 200*time.Millisecond); upd.Available {
+	if upd := waitUpdate(updCh, 9*time.Second); upd.Available {
 		fmt.Fprintf(os.Stderr, "\n→ New version %s, run `mdv update`\n", upd.Latest)
 	}
 	return 0
@@ -410,6 +412,10 @@ func runUpdate(cfg core.Defaults) int {
 // startUpdateCheck runs the version check in the background.
 func startUpdateCheck(cfg core.Defaults) <-chan core.UpdateInfo {
 	ch := make(chan core.UpdateInfo, 1)
+	if !cfg.CheckForUpdates || cfg.UpdateRepo == "" {
+		ch <- core.UpdateInfo{Current: core.Version}
+		return ch
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
@@ -475,6 +481,7 @@ func usage() {
 	fmt.Fprintf(w, "  --gui          force the graphical UI\n")
 	fmt.Fprintf(w, "  -c, --console  render to stdout and exit (headless-friendly)\n")
 	fmt.Fprintf(w, "  --no-color     disable ANSI colors in console output\n")
+	fmt.Fprintf(w, "  --no-update-check  disable automatic update checking for this run\n")
 	fmt.Fprintf(w, "  --max-width N  cap the render width to N columns\n")
 	fmt.Fprintf(w, "  --images MODE  image rendering: auto|graphics|blocks|off\n")
 	fmt.Fprintf(w, "  --pdf PATH     render the input to a PDF at PATH (file or folder) and exit\n")
