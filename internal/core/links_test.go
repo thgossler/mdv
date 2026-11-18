@@ -55,6 +55,41 @@ func TestResolveLinkKinds(t *testing.T) {
 	}
 }
 
+func TestLocalFileURLPathWindowsDriveAuthority(t *testing.T) {
+	for _, c := range []struct {
+		raw  string
+		want string
+	}{
+		{"file://C:/Users/runner/guide.md", "C:/Users/runner/guide.md"},
+		{"file:///C:/Users/runner/guide.md", "C:/Users/runner/guide.md"},
+		{"file://localhost/C:/Users/runner/guide.md", "C:/Users/runner/guide.md"},
+	} {
+		u, err := url.Parse(c.raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, ok := localFileURLPath(u, "windows")
+		if !ok || got != c.want {
+			t.Errorf("localFileURLPath(%q, windows) = %q, %v, want %q, true", c.raw, got, ok, c.want)
+		}
+	}
+
+	for _, raw := range []string{
+		"file://server/share/guide.md",
+		"file://C:123/guide.md",
+		"file://user@C:/guide.md",
+		"file://C:/guide.md?download=1",
+	} {
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, ok := localFileURLPath(u, "windows"); ok {
+			t.Errorf("localFileURLPath(%q, windows) = %q, true, want rejection", raw, got)
+		}
+	}
+}
+
 func TestResolveFileURLs(t *testing.T) {
 	dir := t.TempDir()
 	cfg := DefaultSettings()

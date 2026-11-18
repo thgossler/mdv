@@ -79,19 +79,37 @@ func ResolveLink(raw, currentDir, rootDir string, cfg Defaults, workspace []DocF
 // resource and must not be opened as a coincidentally matching local path.
 func resolveFileURL(href, currentDir, rootDir string, cfg Defaults, raw string) LinkTarget {
 	u, err := url.Parse(href)
-	if err != nil || u.User != nil || u.RawQuery != "" || u.Port() != "" ||
-		(u.Host != "" && !strings.EqualFold(u.Hostname(), "localhost")) {
+	if err != nil {
 		return LinkTarget{Kind: LinkBroken, Raw: raw, Display: raw}
+	}
+	path, ok := localFileURLPath(u, runtime.GOOS)
+	if !ok {
+		return LinkTarget{Kind: LinkBroken, Raw: raw, Display: raw}
+	}
+	return resolveDecodedFilePath(path, u.Fragment, currentDir, rootDir, cfg, raw)
+}
+
+func localFileURLPath(u *url.URL, goos string) (string, bool) {
+	if u.User != nil || u.RawQuery != "" || u.Port() != "" {
+		return "", false
 	}
 
 	path := u.Path
 	if u.Opaque != "" {
 		path = u.Opaque
 	}
-	if runtime.GOOS == "windows" && len(path) >= 3 && path[0] == '/' && path[2] == ':' {
+
+	if u.Host != "" && !strings.EqualFold(u.Hostname(), "localhost") {
+		if goos != "windows" || len(u.Host) != 2 || u.Host[1] != ':' ||
+			!((u.Host[0] >= 'A' && u.Host[0] <= 'Z') || (u.Host[0] >= 'a' && u.Host[0] <= 'z')) {
+			return "", false
+		}
+		path = u.Host + path
+	}
+	if goos == "windows" && len(path) >= 3 && path[0] == '/' && path[2] == ':' {
 		path = path[1:]
 	}
-	return resolveDecodedFilePath(path, u.Fragment, currentDir, rootDir, cfg, raw)
+	return path, true
 }
 
 // resolveFilePath resolves a (possibly relative) filesystem path to a markdown,
