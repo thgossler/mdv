@@ -19,6 +19,26 @@ const (
 	defaultTocWidth     = 260
 )
 
+// Bounds for a plausible persisted window geometry. Windows parks a minimized
+// window far off-screen (around -32000, or -16000 after DPI scaling) with a
+// caption-only size of roughly 160x25 px. If such a geometry is saved and
+// restored, mdv opens as a bare title bar with no visible content. Real window
+// sizes never fall below the window's MinWidth/MinHeight, and real
+// multi-monitor coordinates stay far inside offscreenLimit.
+const (
+	minPlausibleWidth  = 200
+	minPlausibleHeight = 150
+	offscreenLimit     = 10000
+)
+
+// plausibleGeometry reports whether a window position/size is one a normal,
+// visible window can have (as opposed to a minimized or collapsed window).
+func plausibleGeometry(x, y, w, h int) bool {
+	return w >= minPlausibleWidth && h >= minPlausibleHeight &&
+		x > -offscreenLimit && x < offscreenLimit &&
+		y > -offscreenLimit && y < offscreenLimit
+}
+
 // saveDebounce collapses bursts of window move/resize (or panel drag) updates
 // into a single file write, firing this long after the last change.
 const saveDebounce = 500 * time.Millisecond
@@ -99,7 +119,17 @@ func LoadLayoutState() LayoutState {
 	if json.Unmarshal(core.StripJSONC(raw), &st) != nil {
 		return LayoutState{}
 	}
+	st.sanitizeGeometry()
 	return st
+}
+
+// sanitizeGeometry drops a persisted window position/size that no visible
+// window can have (e.g. one saved while the window was minimized), so the
+// defaults apply instead. Panel widths, recents and other settings are kept.
+func (st *LayoutState) sanitizeGeometry() {
+	if !plausibleGeometry(st.X, st.Y, st.Width, st.Height) {
+		st.X, st.Y, st.Width, st.Height = 0, 0, 0, 0
+	}
 }
 
 // layoutStateHeader is prepended to the persisted file so it reads as JSONC,
@@ -141,13 +171,18 @@ func (s *LayoutStore) Get() LayoutState {
 }
 
 // UpdateGeometry records new window position/size and schedules a save. While
-// maximized the normal geometry is preserved so un-maximizing restores it.
+// maximized the normal geometry is preserved so un-maximizing restores it. An
+// implausible geometry (a minimized or collapsed window) is ignored so the last
+// normal geometry survives.
 func (s *LayoutStore) UpdateGeometry(x, y, w, h int, maximized bool) {
 	s.mu.Lock()
 	if maximized {
 		s.st.Maximized = true
-	} else {
+	} else if plausibleGeometry(x, y, w, h) {
 		s.st.X, s.st.Y, s.st.Width, s.st.Height, s.st.Maximized = x, y, w, h, false
+	} else {
+		s.mu.Unlock()
+		return
 	}
 	s.scheduleLocked()
 	s.mu.Unlock()
