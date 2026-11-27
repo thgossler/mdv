@@ -186,13 +186,11 @@ func runGUI() error {
 			Backdrop:                application.MacBackdropNormal,
 		},
 	}
-	if st.Valid {
-		if st.Width > 0 {
-			opts.Width = st.Width
-		}
-		if st.Height > 0 {
-			opts.Height = st.Height
-		}
+	// LoadLayoutState zeroes an implausible geometry, so a zero size here means
+	// "no usable saved geometry": keep the default size and position.
+	if st.Valid && st.Width > 0 && st.Height > 0 {
+		opts.Width = st.Width
+		opts.Height = st.Height
 		opts.X = st.X
 		opts.Y = st.Y
 	}
@@ -219,6 +217,11 @@ func runGUI() error {
 		}
 	})
 	saveGeometry := func() {
+		// Minimizing moves the window off-screen and shrinks it to its caption;
+		// persisting that would make every later start show only a title bar.
+		if win.IsMinimised() {
+			return
+		}
 		if win.IsMaximised() {
 			store.UpdateGeometry(0, 0, 0, 0, true)
 			return
